@@ -1,99 +1,126 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Trade Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+本项目是一个基于 NestJS 的后端服务，使用 AWS CDK进行部署。
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## 项目结构
 
-## Description
+- `src/`: NestJS 应用程序源代码。
+  - `lambda.ts`: Lambda 函数的入口点。
+- `cdk/`: AWS CDK 代码，用于定义和部署 AWS 资源。
+  - `bin/cdk.ts`: CDK 应用程序的入口点。
+  - `lib/cdk-stack.ts`: 定义主要的 CDK 堆栈。
+  - `lib/lambda.ts`: 定义 Lambda 函数相关的 CDK 构造。
+- `webpack.config.js`: Webpack 配置文件，用于打包 Lambda 函数。
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 环境准备
 
-## Project setup
+在开始之前，请确保您已安装以下工具：
+
+- Node.js (推荐最新 LTS 版本)
+- Yarn (推荐最新版本)
+- AWS CLI (已配置好您的 AWS 账户凭证和默认区域)
+- AWS CDK Toolkit (全局安装: `npm install -g aws-cdk`)
+
+## 安装依赖
+
+在项目根目录和 `cdk` 目录分别执行以下命令安装依赖：
 
 ```bash
-$ yarn install
+# 项目根目录
+yarn install
+
+# cdk 目录
+cd cdk
+yarn install
+cd ..
 ```
 
-## Compile and run the project
+## 构建 Lambda 函数
+
+要构建用于部署的 Lambda 函数代码，请在项目根目录运行：
 
 ```bash
-# development
-$ yarn run start
-
-# watch mode
-$ yarn run start:dev
-
-# production mode
-$ yarn run start:prod
+yarn build:lambda
 ```
+此命令会清除 `dist` 目录，并使用 `webpack.config.js` 配置来构建和打包 Lambda 函数。
 
-## Run tests
+## CDK 部署
+
+我们使用 AWS CDK 来部署应用程序。CDK 代码位于 `cdk/` 目录下。
+
+### 首次部署 CDK (引导环境)
+
+如果您是首次在特定 AWS 账户和区域使用 CDK，您可能需要引导 (bootstrap) CDK 环境。在 `cdk` 目录下运行：
 
 ```bash
-# unit tests
-$ yarn run test
-
-# e2e tests
-$ yarn run test:e2e
-
-# test coverage
-$ yarn run test:cov
+npx cdk bootstrap
 ```
+更多关于 CDK bootstrap 的信息，请参考 [AWS CDK 文档](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping.html)。
 
-## Deployment
+### 部署到开发环境 (dev)
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+要将应用程序部署到开发环境，请在项目根目录运行：
 
 ```bash
-$ yarn install -g mau
-$ mau deploy
+yarn deploy:dev
+```
+此命令会首先执行 `yarn build:lambda` 来构建最新的 Lambda 代码，然后进入 `cdk` 目录并执行 `yarn deploy:dev` (即 `cdk deploy --context env=dev`)。
+
+### 部署到生产环境 (prod)
+
+要将应用程序部署到生产环境，请在项目根目录运行：
+
+```bash
+yarn deploy:prod
+```
+此命令会首先执行 `yarn build:lambda` 来构建最新的 Lambda 代码，然后进入 `cdk` 目录并执行 `yarn deploy:prod` (即 `cdk deploy --context env=prod`)。
+
+## CDK 销毁资源
+
+如果您需要删除已部署的 AWS 资源，可以使用以下命令。
+
+### 销毁开发环境资源
+
+```bash
+yarn destroy:dev
+```
+此命令会进入 `cdk` 目录并执行 `yarn destroy:dev` (即 `cdk destroy --context env=dev`)。
+
+### 销毁生产环境资源
+
+```bash
+yarn destroy:prod
+```
+此命令会进入 `cdk` 目录并执行 `yarn destroy:prod` (即 `cdk destroy --context env=prod`)。
+
+## 本地开发与测试 (NestJS 标准命令)
+
+除了 Lambda 部署相关的命令，您仍然可以使用标准的 NestJS 命令进行本地开发和测试。
+
+### 运行开发服务器
+
+```bash
+# 启动开发服务器
+yarn start
+
+# 启动开发服务器 (watch 模式)
+yarn start:dev
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### 运行测试
 
-## Resources
+```bash
+# 单元测试
+yarn test
 
-Check out a few resources that may come in handy when working with NestJS:
+# e2e 测试
+yarn test:e2e
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+# 测试覆盖率
+yarn test:cov
+```
 
-## Support
+## 注意事项
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- 确保您的 AWS CLI 已正确配置，并且具有部署所需资源的权限。
+- CDK 部署命令中的 `--context env=dev` 或 `--context env=prod` 用于向 CDK 应用程序传递当前环境的上下文信息，您可以在 CDK 代码中（例如 [`cdk/bin/cdk.ts`](trade-backend/cdk/bin/cdk.ts:1) 或 [`cdk/lib/cdk-stack.ts`](trade-backend/cdk/lib/cdk-stack.ts:1)）中获取此值以进行环境特定的配置。
