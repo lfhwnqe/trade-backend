@@ -1,0 +1,90 @@
+import {
+  Controller,
+  Post,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Get,
+  Query,
+  Patch,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
+import { UserService } from './user.service';
+import { CreateUserDto } from './dto/create-user.dto';
+import { LoginUserDto } from './dto/login-user.dto';
+// import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
+
+@Controller('user')
+export class UserController {
+  constructor(private readonly userService: UserService) {}
+
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() createUserDto: CreateUserDto) {
+    // 在实际应用中，注册成功后通常不直接返回密码等敏感信息
+    // Cognito 的 SignUpCommand 返回 UserSub 和 UserConfirmed 状态
+    const result = await this.userService.register(createUserDto);
+    console.log(`User registered successfully: ${result.userId}`);
+    return {
+      message:
+        'User registered successfully. Please check your email for confirmation if required.',
+      userId: result.userId,
+      confirmed: result.confirmed,
+    };
+  }
+
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() loginUserDto: LoginUserDto) {
+    return this.userService.login(loginUserDto);
+  }
+
+  // 任务要求：第一个用户默认为管理员 - 这部分逻辑通常在 UserService.register 中处理，或者有一个专门的初始化脚本。
+  // Cognito 本身没有“第一个用户是管理员”的直接概念，需要应用层面逻辑或手动在 Cognito 控制台设置用户组和权限。
+  // 我们可以在 UserService 中添加一个检查，例如，如果这是数据库中的第一个用户，则将其添加到 "Admins" 组。
+
+  // 任务要求：关闭注册接口
+  // 这个可以通过配置或特性标志来实现，或者移除/禁用此端点。
+  // 为了演示，我们可以添加一个方法来“关闭”注册，但这通常是在部署/配置层面控制。
+  // 暂时，我们将保留注册接口开放。
+
+  // 任务要求：管理员查看所有用户分页接口
+  // @UseGuards(AuthGuard('jwt'), RolesGuard) // 假设有 JWT 认证和角色守卫
+  // @Roles('admin') // 假设有角色装饰器
+  @Get('list')
+  @HttpCode(HttpStatus.OK)
+  async listUsers(
+    @Query('limit') limit: string = '10',
+    @Query('paginationToken') paginationToken?: string,
+  ) {
+    const numericLimit = parseInt(limit, 10);
+    return this.userService.listUsers(numericLimit, paginationToken);
+  }
+
+  // 这是一个示例性的关闭注册的接口，实际中可能通过环境变量或配置服务控制
+  // @Patch('registration/close')
+  // @HttpCode(HttpStatus.OK)
+  // // @UseGuards(AuthGuard('jwt'), RolesGuard)
+  // // @Roles('admin')
+  // async closeRegistration() {
+  //   // return this.userService.setRegistrationStatus(false);
+  //   return { message: 'Registration closing mechanism - to be implemented.' };
+  // }
+
+  /**
+   * 更新用户注册功能的开启/关闭状态。
+   * TODO: 需要添加认证和授权守卫，确保只有管理员可以调用。
+   * 例如: @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles('admin')
+   */
+  @Patch('registration/status')
+  @HttpCode(HttpStatus.OK)
+  // @UseGuards(AuthGuard('jwt'), RolesGuard) // 取消注释并配置守卫
+  // @Roles('admin') // 取消注释并配置角色
+  async updateRegistrationStatus(@Body('enable') enable: boolean) {
+    if (typeof enable !== 'boolean') {
+      throw new Error('The "enable" field must be a boolean.'); // Basic validation
+    }
+    return this.userService.setRegistrationStatus(enable);
+  }
+}

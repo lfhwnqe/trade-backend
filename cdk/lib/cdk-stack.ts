@@ -19,13 +19,16 @@ export interface TradingStackProps extends cdk.StackProps {
    * The name of the application (e.g., 'trading', 'user-service')
    */
   readonly appName: string;
+  readonly region: string;
 }
 
 export class TradingStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: TradingStackProps) {
     super(scope, id, props);
 
-    const { envName, appName } = props;
+    const { envName, appName, region } = props;
+
+    console.log(`TradingStack Props:`, props);
 
     const functionName = `${appName}-lambda-${envName}`;
     const apiName = `${appName}-api-${envName}`;
@@ -112,8 +115,21 @@ export class TradingStack extends cdk.Stack {
       {
         userPool,
         userPoolClientName: `${appName}-user-pool-client-${envName.toLowerCase()}`,
+        authFlows: {
+          userPassword: true,
+          adminUserPassword: true,
+        },
       },
     );
+
+    // Create Cognito User Group "Admins"
+    const adminGroupName = 'Admins'; // Define the group name
+    new cognito.CfnUserPoolGroup(this, `${appName}AdminGroup${envName}`, {
+      groupName: adminGroupName,
+      userPoolId: userPool.userPoolId,
+      description: 'Administrator group',
+      // precedence: 0, // Optional: set precedence if you have multiple groups
+    });
 
     const fn = new lambda.Function(
       this,
@@ -131,6 +147,7 @@ export class TradingStack extends cdk.Stack {
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
+          COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
         },
       },
     );
@@ -153,34 +170,38 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
-    new cdk.CfnOutput(this, 'ApiEndpointUrl', {
+    new cdk.CfnOutput(this, 'API_ENDPOINT_URL', {
       value: endpoint.url,
       description: `The URL of the API Gateway endpoint for ${appName} ${envName}`,
     });
 
-    new cdk.CfnOutput(this, 'ImageBucketName', {
+    new cdk.CfnOutput(this, 'IMAGE_BUCKET_NAME', {
       value: imageBucket.bucketName,
       description: `Name of the S3 bucket for images in ${appName} ${envName}`,
     });
 
-    new cdk.CfnOutput(this, 'CloudFrontDomainName', {
+    new cdk.CfnOutput(this, 'CLOUDFRONT_DOMAIN_NAME', {
       value: distribution.distributionDomainName,
       description: `Domain name of the CloudFront distribution for ${appName} ${envName}`,
     });
 
-    new cdk.CfnOutput(this, 'TransactionsTableName', {
+    new cdk.CfnOutput(this, 'TRANSACTIONS_TABLE_NAME', {
       value: transactionsTable.tableName,
       description: `Name of the DynamoDB table for transactions in ${appName} ${envName}`,
     });
 
-    new cdk.CfnOutput(this, 'UserPoolId', {
+    new cdk.CfnOutput(this, 'USER_POOL_ID', {
       value: userPool.userPoolId,
       description: `ID of the Cognito User Pool for ${appName} ${envName}`,
     });
 
-    new cdk.CfnOutput(this, 'UserPoolClientId', {
+    new cdk.CfnOutput(this, 'USER_POOL_CLIENT_ID', {
       value: userPoolClient.userPoolClientId,
       description: `Client ID of the Cognito User Pool Client for ${appName} ${envName}`,
+    });
+    new cdk.CfnOutput(this, 'AWS_REGION', {
+      value: region,
+      description: `AWS Region for ${appName} ${envName}`,
     });
   }
 }

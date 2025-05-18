@@ -32,6 +32,7 @@ const stackName = `${appName}-${envName}-stack`;
 new TradingStack(app, stackName, {
   appName: appName,
   envName: envName,
+  region,
   env: {
     account: account,
     region: region,
