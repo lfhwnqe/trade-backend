@@ -13,6 +13,7 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
+import { ConfirmUserDto } from './dto/confirm-user.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
 
 @Controller('user')
@@ -32,6 +33,16 @@ export class UserController {
       userId: result.userId,
       confirmed: result.confirmed,
     };
+  }
+
+  /**
+   * 邮箱注册确认接口：用户收到验证码后，用邮箱和验证码进行二次确认
+   */
+  @Post('confirm')
+  @HttpCode(HttpStatus.OK)
+  async confirmUser(@Body() dto: ConfirmUserDto) {
+    await this.userService.confirmUser(dto.username, dto.code);
+    return { message: '账号已成功确认，现在可以登录。' };
   }
 
   @Post('login')

@@ -20,6 +20,7 @@ import {
   AttributeType,
   AdminAddUserToGroupCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
+import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
 export class UserService {
@@ -54,6 +55,36 @@ export class UserService {
     this.cognitoClient = new CognitoIdentityProviderClient({
       region: region,
     });
+  }
+
+  /**
+   * 确认用户注册邮箱验证码
+   * @param email 邮箱
+   * @param code 验证码
+   */
+  async confirmUser(username: string, code: string): Promise<void> {
+    try {
+      await this.cognitoClient.send(
+        new ConfirmSignUpCommand({
+          ClientId: this.clientId,
+          Username: username,
+          ConfirmationCode: code,
+        }),
+      );
+      this.logger.log(`用户[${username}] 验证码注册确认成功。`);
+    } catch (err) {
+      this.logger.error(`注册验证码验证失败: ${err}`);
+      if (err.name === 'CodeMismatchException') {
+        throw new ForbiddenException('验证码错误，请检查邮件中的验证码。');
+      }
+      if (err.name === 'ExpiredCodeException') {
+        throw new ForbiddenException('验证码已过期，请重新注册或请求新的验证码。');
+      }
+      if (err.name === 'UserNotFoundException') {
+        throw new NotFoundException('未找到该用户，请检查用户名是否正确。');
+      }
+      throw new InternalServerErrorException('验证码验证失败，请稍后重试。');
+    }
   }
 
   async register(
