@@ -3,7 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 import { UserModule } from './user/user.module';
-import { authMiddleware } from './common/auth.middleware';
+import { AuthMiddleware } from './common/auth.middleware';
 
 @Module({
   imports: [CommonModule, UserModule],
@@ -13,7 +13,12 @@ import { authMiddleware } from './common/auth.middleware';
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
-      .apply(authMiddleware)
+      .apply(AuthMiddleware)
+      .exclude(
+        '/user/login',
+        '/user/register',
+        '/user/confirm',
+      )
       .forRoutes('*');
   }
 }
