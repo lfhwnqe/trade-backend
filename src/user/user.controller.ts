@@ -98,4 +98,12 @@ export class UserController {
     }
     return this.userService.setRegistrationStatus(enable);
   }
+  /**
+   * 查询当前用户注册功能是否开启
+   */
+  @Get('registration/status')
+  @HttpCode(HttpStatus.OK)
+  async getRegistrationStatus() {
+    return this.userService.getRegistrationStatus();
+  }
 }

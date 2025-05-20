@@ -288,4 +288,7 @@ export class UserService {
     this.logger.log(`User registration status set to: ${enable}`);
     return { status: this.registrationGloballyEnabled };
   }
+  getRegistrationStatus(): { enable: boolean } {
+    return { enable: this.registrationGloballyEnabled };
+  }
 }
