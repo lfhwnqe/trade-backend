@@ -3,10 +3,11 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { CommonModule } from './common/common.module';
 import { UserModule } from './user/user.module';
+import { TradeModule } from './trade/trade.module';
 import { AuthMiddleware } from './common/auth.middleware';
 
 @Module({
-  imports: [CommonModule, UserModule],
+  imports: [CommonModule, UserModule, TradeModule],
   controllers: [AppController],
   providers: [AppService],
 })

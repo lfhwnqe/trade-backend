@@ -12,13 +12,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import {
   CognitoIdentityProviderClient,
   SignUpCommand,
-  InitiateAuthCommand,
-  AdminGetUserCommand,
-  ListUsersCommand,
-  AdminDisableUserCommand,
-  AdminEnableUserCommand,
-  AttributeType,
-  AdminAddUserToGroupCommand,
+  InitiateAuthCommand, ListUsersCommand, AdminAddUserToGroupCommand
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
 
@@ -78,7 +72,9 @@ export class UserService {
         throw new ForbiddenException('验证码错误，请检查邮件中的验证码。');
       }
       if (err.name === 'ExpiredCodeException') {
-        throw new ForbiddenException('验证码已过期，请重新注册或请求新的验证码。');
+        throw new ForbiddenException(
+          '验证码已过期，请重新注册或请求新的验证码。',
+        );
       }
       if (err.name === 'UserNotFoundException') {
         throw new NotFoundException('未找到该用户，请检查用户名是否正确。');
