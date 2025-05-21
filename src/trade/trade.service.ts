@@ -7,7 +7,7 @@ import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
-import { DynamoDB, DynamoDBClientConfig } from '@aws-sdk/client-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from 'src/common/config.service';
 
@@ -18,10 +18,13 @@ export class TradeService {
 
   constructor(private readonly configService: ConfigService) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
-    console.log('[TradeService] 使用 DynamoDB 表:', tableName);
+    const region = this.configService.getOrThrow('AWS_REGION');
+    console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
     this.tableName = tableName;
-    this.db = DynamoDBDocument.from(new DynamoDB());
-    // this.db = DynamoDBDocument.from(new DynamoDB(options));
+    // this.db = DynamoDBDocument.from(new DynamoDB());
+    console.log('[TradeService] db:', this.db); // 打印 db 对象
+    // 显式指定区域
+    this.db = DynamoDBDocument.from(new DynamoDB({ region }));
   }
 
   async createTrade(userId: string, dto: CreateTradeDto) {
