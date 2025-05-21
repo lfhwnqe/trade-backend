@@ -1,34 +1,27 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamoDB, DynamoDBClientConfig } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { ConfigService } from 'src/common/config.service';
 
 @Injectable()
 export class TradeService {
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
 
-  constructor() {
-    // 可通过 NODE_ENV 自动切表名，不再依赖ConfigService，同时支持老环境变量
-    const stage =
-      process.env.NODE_ENV && process.env.NODE_ENV.startsWith('dev')
-        ? 'dev'
-        : 'prod';
-
-    this.tableName =
-      process.env.TRANSACTIONS_TABLE_NAME ||
-      `trading-app-transactions-${stage}`;
-
-    // DynamoDB 客户端按 AWS_REGION 自动配置，如果无则默认 AWS SDK 行为
-    const options: DynamoDBClientConfig = {};
-    if (process.env.AWS_REGION) {
-      options.region = process.env.AWS_REGION;
-    }
-    this.db = DynamoDBDocument.from(new DynamoDB(options));
-    console.log('[TradeService] 使用 DynamoDB 表:', this.tableName, '| region:', process.env.AWS_REGION);
+  constructor(private readonly configService: ConfigService) {
+    const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
+    console.log('[TradeService] 使用 DynamoDB 表:', tableName);
+    this.tableName = tableName;
+    this.db = DynamoDBDocument.from(new DynamoDB());
+    // this.db = DynamoDBDocument.from(new DynamoDB(options));
   }
 
   async createTrade(userId: string, dto: CreateTradeDto) {
@@ -96,7 +89,7 @@ export class TradeService {
       return {
         success: true,
         data: {
-          items: result.Items as Trade[] || [],
+          items: (result.Items as Trade[]) || [],
           total,
           page,
           pageSize,
@@ -104,7 +97,11 @@ export class TradeService {
         },
       };
     } catch (error) {
-      console.error('[TradeService] findByUserId error:', error);
+      console.error(
+        '[TradeService] findByUserId error:',
+        JSON.stringify(error),
+      );
+      // console.error('[TradeService] findByUserId error:', error);
       throw new Error('交易列表获取失败');
     }
   }
@@ -136,7 +133,11 @@ export class TradeService {
     }
   }
 
-  async updateTrade(userId: string, transactionId: string, dto: UpdateTradeDto) {
+  async updateTrade(
+    userId: string,
+    transactionId: string,
+    dto: UpdateTradeDto,
+  ) {
     try {
       const oldRes = await this.getTrade(userId, transactionId);
       if (!oldRes.success) throw new NotFoundException('交易记录不存在');

@@ -15,8 +15,6 @@ export class AuthMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
-      console.log('[AuthMiddleware] 请求originalUrl:', req.originalUrl);
-      console.log('[AuthMiddleware] headers.cookie:', req.headers.cookie);
       if (whitelist.some((pattern) => req.path.startsWith(pattern))) {
         console.log('[AuthMiddleware] 命中白名单，放行');
         return next();
@@ -28,7 +26,6 @@ export class AuthMiddleware implements NestMiddleware {
         .find((item) => item.startsWith('token='))
         ?.split('=')[1];
 
-      console.log('[AuthMiddleware] 解析到 token:', token);
 
       if (!token) {
         console.log('[AuthMiddleware] 缺少 token');
@@ -40,9 +37,6 @@ export class AuthMiddleware implements NestMiddleware {
       } catch (err) {
         console.log('[AuthMiddleware] verifyAccessToken抛出异常:', err?.message || err);
       }
-      console.log('[AuthMiddleware] user:', user);
-      const url = req.originalUrl;
-      console.log('[AuthMiddleware] url:', url);
       if (!user) {
         console.log('[AuthMiddleware] token校验失败');
         return res.status(401).json({ message: 'token 校验失败' });

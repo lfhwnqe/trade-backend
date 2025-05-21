@@ -17,7 +17,6 @@ export class CognitoService {
       const userPoolId = this.configService.getOrThrow('USER_POOL_ID');
       const clientId = this.configService.getOrThrow('USER_POOL_CLIENT_ID');
       // 可保留日志
-      console.log('Cognito 校验参数:', { region, userPoolId, clientId });
 
       this.verifier = CognitoJwtVerifier.create({
         userPoolId,
