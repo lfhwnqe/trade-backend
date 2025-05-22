@@ -30,10 +30,53 @@ export class TradeService {
   async createTrade(userId: string, dto: CreateTradeDto) {
     const now = new Date().toISOString();
     const transactionId = uuidv4();
+    /**
+     * 创建一个新的 Trade 实例。
+     * 
+     * @param transactionId - 交易的唯一标识符。
+     * @param userId - 发起交易的用户标识。
+     * @param dateTimeRange - 交易发生的时间范围。
+     * @param marketStructure - 市场结构。
+     * @param signalType - 信号类型。
+     * @param vah - 价值区上沿价格。
+     * @param val - 价值区下沿价格。
+     * @param poc - 成交量中枢价位。
+     * @param entryDirection - 入场方向，可能为 'Long' 或 'Short'。
+     * @param entryPrice - 入场价格。
+     * @param stopLossPrice - 止损价格。
+     * @param targetPrice - 止盈目标价格。
+     * @param volumeProfileImage - 体积轮廓图像。
+     * @param hypothesisPaths - 假设路径列表。
+     * @param actualPath - 实际路径。
+     * @param profitLoss - 盈亏。
+     * @param rr - 风险回报率。
+     * @param analysisError - 分析错误。
+     * @param executionMindsetScore - 执行心态评分。
+     * @param improvement - 改进措施。
+     * @param createdAt - 创建时间。
+     * @param updatedAt - 更新时间。
+     */
     const newTrade: Trade = {
       transactionId,
       userId,
-      ...dto,
+      dateTimeRange: dto.dateTimeRange,
+      marketStructure: dto.marketStructure,
+      signalType: dto.signalType,
+      vah: dto.vah,
+      val: dto.val,
+      poc: dto.poc,
+      entryDirection: dto.entryDirection as 'Long' | 'Short',
+      entryPrice: dto.entry, // DTO中的entry对应实体的entryPrice
+      stopLossPrice: dto.stopLoss, // DTO中的stopLoss对应实体的stopLossPrice
+      targetPrice: dto.target, // DTO中的target对应实体的targetPrice
+      volumeProfileImage: dto.volumeProfileImage,
+      hypothesisPaths: dto.hypothesisPaths,
+      actualPath: dto.actualPath,
+      profitLoss: dto.profitLoss,
+      rr: dto.rr,
+      analysisError: dto.analysisError,
+      executionMindsetScore: dto.executionMindsetScore,
+      improvement: dto.improvement,
       createdAt: now,
       updatedAt: now,
     };
@@ -144,9 +187,40 @@ export class TradeService {
     try {
       const oldRes = await this.getTrade(userId, transactionId);
       if (!oldRes.success) throw new NotFoundException('交易记录不存在');
+      // 确保从 dto 更新的属性类型正确
+      const existingTrade = oldRes.data as Trade;
+      const updatedTradeData: Partial<Trade> = {};
+
+      // 创建 dto 的一个可修改副本，以便我们可以安全地删除属性
+      const dtoCopy = { ...dto };
+
+      if (dtoCopy.entry !== undefined) {
+        updatedTradeData.entryPrice = dtoCopy.entry;
+        delete dtoCopy.entry; // 从副本中删除，避免后续被错误地直接拷贝
+      }
+      if (dtoCopy.stopLoss !== undefined) {
+        updatedTradeData.stopLossPrice = dtoCopy.stopLoss;
+        delete dtoCopy.stopLoss;
+      }
+      if (dtoCopy.target !== undefined) {
+        updatedTradeData.targetPrice = dtoCopy.target;
+        delete dtoCopy.target;
+      }
+
+      // 拷贝剩余的、名称一致的属性
+      for (const key in dtoCopy) {
+        if (Object.prototype.hasOwnProperty.call(dtoCopy, key)) {
+          if (key === 'entryDirection' && dtoCopy.entryDirection !== undefined) {
+            updatedTradeData.entryDirection = dtoCopy.entryDirection as 'Long' | 'Short';
+          } else {
+            updatedTradeData[key] = dtoCopy[key];
+          }
+        }
+      }
+
       const updated: Trade = {
-        ...(oldRes.data as Trade),
-        ...dto,
+        ...existingTrade,
+        ...updatedTradeData, // updatedTradeData 现在包含了正确映射的属性
         updatedAt: new Date().toISOString(),
       };
       await this.db.put({

@@ -1,4 +1,4 @@
-import { IsString, IsArray, IsNumber, IsOptional, ArrayMaxSize, Min, Max } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, ArrayMaxSize, Min, Max, IsIn, IsEnum } from 'class-validator';
 
 export class UpdateTradeDto {
   @IsOptional()
@@ -14,28 +14,33 @@ export class UpdateTradeDto {
   signalType?: string;
 
   @IsOptional()
-  @IsString()
-  vah?: string;
+  @IsNumber()
+  vah?: number;
+
+  @IsOptional()
+  @IsNumber()
+  val?: number;
+
+  @IsOptional()
+  @IsNumber()
+  poc?: number;
 
   @IsOptional()
   @IsString()
-  val?: string;
+  @IsIn(['Long', 'Short'])
+  entryDirection?: string;
 
   @IsOptional()
-  @IsString()
-  poc?: string;
+  @IsNumber()
+  entry?: number;
 
   @IsOptional()
-  @IsString()
-  entry?: string;
+  @IsNumber()
+  stopLoss?: number;
 
   @IsOptional()
-  @IsString()
-  stopLoss?: string;
-
-  @IsOptional()
-  @IsString()
-  target?: string;
+  @IsNumber()
+  target?: number;
 
   @IsOptional()
   @IsString()
@@ -52,8 +57,8 @@ export class UpdateTradeDto {
   actualPath?: string;
 
   @IsOptional()
-  @IsString()
-  profitLoss?: string;
+  @IsNumber()
+  profitLoss?: number;
 
   @IsOptional()
   @IsString()

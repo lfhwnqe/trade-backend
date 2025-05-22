@@ -1,4 +1,5 @@
-import { IsString, IsArray, IsNumber, IsOptional, IsIn, ArrayMaxSize, Min, Max } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, IsIn, ArrayMaxSize, Min, Max, IsEnum } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateTradeDto {
   @IsString()
@@ -10,23 +11,33 @@ export class CreateTradeDto {
   @IsString()
   signalType: string; // 信号类型
 
-  @IsString()
-  vah: string;
+  @IsNumber()
+  @Type(() => Number)
+  vah: number; // 价值区上沿价格
+
+  @IsNumber()
+  @Type(() => Number)
+  val: number; // 价值区下沿价格
+
+  @IsNumber()
+  @Type(() => Number)
+  poc: number; // 成交量中枢价位
 
   @IsString()
-  val: string;
+  @IsIn(['Long', 'Short'])
+  entryDirection: string; // 多空方向
 
-  @IsString()
-  poc: string;
+  @IsNumber()
+  @Type(() => Number)
+  entry: number; // 入场价格 (对应 README 中的 EntryPrice)
 
-  @IsString()
-  entry: string;
+  @IsNumber()
+  @Type(() => Number)
+  stopLoss: number; // 止损价格 (对应 README 中的 StopLossPrice)
 
-  @IsString()
-  stopLoss: string;
-
-  @IsString()
-  target: string;
+  @IsNumber()
+  @Type(() => Number)
+  target: number; // 止盈目标价格 (对应 README 中的 TargetPrice)
 
   @IsString()
   volumeProfileImage: string;
@@ -39,8 +50,9 @@ export class CreateTradeDto {
   @IsString()
   actualPath: string;
 
-  @IsString()
-  profitLoss: string;
+  @IsNumber()
+  @Type(() => Number)
+  profitLoss: number; // 盈亏百分比 (对应 README 中的 PnLPercent)
 
   @IsString()
   rr: string;
