@@ -12,7 +12,9 @@ import { LoginUserDto } from './dto/login-user.dto';
 import {
   CognitoIdentityProviderClient,
   SignUpCommand,
-  InitiateAuthCommand, ListUsersCommand, AdminAddUserToGroupCommand
+  InitiateAuthCommand,
+  ListUsersCommand,
+  AdminAddUserToGroupCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
 

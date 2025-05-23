@@ -26,7 +26,6 @@ export class AuthMiddleware implements NestMiddleware {
         .find((item) => item.startsWith('token='))
         ?.split('=')[1];
 
-
       if (!token) {
         console.log('[AuthMiddleware] 缺少 token');
         return res.status(401).json({ message: '缺少 token，请登录' });
@@ -35,7 +34,10 @@ export class AuthMiddleware implements NestMiddleware {
       try {
         user = await this.cognitoService.verifyAccessToken(token);
       } catch (err) {
-        console.log('[AuthMiddleware] verifyAccessToken抛出异常:', err?.message || err);
+        console.log(
+          '[AuthMiddleware] verifyAccessToken抛出异常:',
+          err?.message || err,
+        );
       }
       if (!user) {
         console.log('[AuthMiddleware] token校验失败');

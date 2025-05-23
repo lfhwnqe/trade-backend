@@ -30,15 +30,16 @@ export class CognitoService {
 
   /**
    * 验证并解析 accessToken。校验失败抛异常，成功返回用户 claim（含sub, username, email等attribute）。
-   * @param token 
-   * @returns 
+   * @param token
+   * @returns
    */
   async verifyAccessToken(token: string) {
     try {
       return await this.getVerifier().verify(token);
     } catch (e: any) {
       throw new Error(
-        'Token 校验失败: ' + (e?.message || 'Cognito accessToken verify failed')
+        'Token 校验失败: ' +
+          (e?.message || 'Cognito accessToken verify failed'),
       );
     }
   }

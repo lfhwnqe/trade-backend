@@ -1,10 +1,10 @@
 export const ALLOWED_IMAGE_TYPES: string[] = [
   'image/jpeg', // JPG/JPEG
-  'image/png',  // PNG
-  'image/gif',  // GIF
+  'image/png', // PNG
+  'image/gif', // GIF
   'image/webp', // WEBP
   'image/svg+xml', // SVG
-  'image/bmp',  // BMP
+  'image/bmp', // BMP
   'image/tiff', // TIFF
 ];
 
@@ -29,4 +29,4 @@ export interface ImageUrlResponse {
   data: {
     url: string;
   };
-} 
+}

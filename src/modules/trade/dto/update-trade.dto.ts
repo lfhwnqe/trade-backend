@@ -1,6 +1,20 @@
-import { IsString, IsArray, IsNumber, IsOptional, ArrayMaxSize, Min, Max, IsIn, IsEnum, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsArray,
+  IsNumber,
+  IsOptional,
+  ArrayMaxSize,
+  Min,
+  Max,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
-import { MarketStructure, EntryDirection, ImageResource } from './create-trade.dto';
+import {
+  MarketStructure,
+  EntryDirection,
+  ImageResource,
+} from './create-trade.dto';
 
 export class UpdateTradeDto {
   @IsOptional()

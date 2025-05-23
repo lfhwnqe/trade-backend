@@ -14,7 +14,14 @@ import { ImageService } from './image.service';
 import { Request } from 'express';
 import { ALLOWED_IMAGE_TYPES, UploadImageRequest } from './types/image.types';
 import { HttpExceptionFilter } from 'src/base/filters/http-exception.filter';
-import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiBody,
+  ApiBearerAuth,
+  ApiResponse,
+} from '@nestjs/swagger';
 
 @ApiTags('图片管理')
 @ApiBearerAuth()
@@ -24,7 +31,15 @@ export class ImageController {
   constructor(private readonly imageService: ImageService) {}
 
   @ApiOperation({ summary: '获取图片上传URL' })
-  @ApiBody({ schema: { properties: { fileName: { type: 'string', example: 'image.jpg' }, fileType: { type: 'string', example: 'image/jpeg' }, date: { type: 'string', example: '2023-05-23' } } } })
+  @ApiBody({
+    schema: {
+      properties: {
+        fileName: { type: 'string', example: 'image.jpg' },
+        fileType: { type: 'string', example: 'image/jpeg' },
+        date: { type: 'string', example: '2023-05-23' },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: '返回上传URL和其他相关信息' })
   @ApiResponse({ status: 400, description: '不支持的文件类型' })
   @ApiResponse({ status: 401, description: '用户未认证' })

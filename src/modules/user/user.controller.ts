@@ -7,15 +7,20 @@ import {
   Get,
   Query,
   Patch,
-  Param,
-  UseGuards,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ConfirmUserDto } from './dto/confirm-user.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
-import { ApiTags, ApiOperation, ApiBody, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBody,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 
 @ApiTags('用户管理')
 @Controller('user')
@@ -75,8 +80,18 @@ export class UserController {
   // @UseGuards(AuthGuard('jwt'), RolesGuard) // 假设有 JWT 认证和角色守卫
   // @Roles('admin') // 假设有角色装饰器
   @ApiOperation({ summary: '查看所有用户（管理员）' })
-  @ApiQuery({ name: 'limit', description: '每页显示数量', required: false, type: 'string' })
-  @ApiQuery({ name: 'paginationToken', description: '分页标记', required: false, type: 'string' })
+  @ApiQuery({
+    name: 'limit',
+    description: '每页显示数量',
+    required: false,
+    type: 'string',
+  })
+  @ApiQuery({
+    name: 'paginationToken',
+    description: '分页标记',
+    required: false,
+    type: 'string',
+  })
   @ApiResponse({ status: HttpStatus.OK, description: '获取用户列表成功' })
   @ApiBearerAuth()
   @Get('list')
@@ -105,7 +120,13 @@ export class UserController {
    * 例如: @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles('admin')
    */
   @ApiOperation({ summary: '更新用户注册功能状态（管理员）' })
-  @ApiBody({ schema: { properties: { enable: { type: 'boolean', example: true } } } })
+  @ApiBody({
+    schema: {
+      properties: {
+        enable: { type: 'boolean', example: true },
+      },
+    },
+  })
   @ApiResponse({ status: HttpStatus.OK, description: '更新注册功能状态成功' })
   @ApiBearerAuth()
   @Patch('registration/status')
