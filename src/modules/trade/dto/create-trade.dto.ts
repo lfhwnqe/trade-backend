@@ -1,5 +1,6 @@
 import { IsString, IsArray, IsNumber, IsOptional, IsIn, ArrayMaxSize, Min, Max, IsEnum, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 
 // 市场结构枚举
 export enum MarketStructure {
@@ -16,84 +17,104 @@ export enum EntryDirection {
 
 // 图片资源接口
 export class ImageResource {
+  @ApiProperty({ description: 'AWS CloudFront 资源 ID/键值，用于删除资源', example: 'images/2023-05-23/user123/image1.jpg' })
   @IsString()
-  key: string; // AWS CloudFront 资源 ID/键值，用于删除资源
+  key: string;
   
+  @ApiProperty({ description: '图片完整 URL', example: 'https://example.com/images/image1.jpg' })
   @IsString()
-  url: string; // 图片完整 URL
+  url: string;
 }
 
 export class CreateTradeDto {
+  @ApiProperty({ description: '日期/时间段', example: '2023-05-23 09:30-16:00' })
   @IsString()
-  dateTimeRange: string; // 日期/时间段
+  dateTimeRange: string;
 
+  @ApiProperty({ description: '市场结构判断', enum: MarketStructure, example: MarketStructure.BALANCED })
   @IsEnum(MarketStructure)
-  marketStructure: MarketStructure; // 市场结构判断 枚举： 平衡/失衡/未见过
+  marketStructure: MarketStructure;
 
   // signalType 字段已删除，不再需要
 
+  @ApiProperty({ description: '价值区上沿价格', example: 150.5 })
   @IsNumber()
   @Type(() => Number)
-  vah: number; // 价值区上沿价格
+  vah: number;
 
+  @ApiProperty({ description: '价值区下沿价格', example: 145.2 })
   @IsNumber()
   @Type(() => Number)
-  val: number; // 价值区下沿价格
+  val: number;
 
+  @ApiProperty({ description: '成交量中枛价位', example: 147.8 })
   @IsNumber()
   @Type(() => Number)
-  poc: number; // 成交量中枢价位
+  poc: number;
 
+  @ApiProperty({ description: '入场多空方向', enum: EntryDirection, example: EntryDirection.LONG })
   @IsEnum(EntryDirection)
-  entryDirection: EntryDirection; // 入场多空方向 枚举：多/空
+  entryDirection: EntryDirection;
 
+  @ApiProperty({ description: '入场价格', example: 146.5 })
   @IsNumber()
   @Type(() => Number)
-  entry: number; // 入场价格 (对应 README 中的 EntryPrice)
+  entry: number;
 
+  @ApiProperty({ description: '止损价格', example: 145.0 })
   @IsNumber()
   @Type(() => Number)
-  stopLoss: number; // 止损价格 (对应 README 中的 StopLossPrice)
+  stopLoss: number;
   
+  @ApiProperty({ description: '止盈目标价格', example: 149.5 })
   @IsNumber()
   @Type(() => Number)
-  target: number; // 止盈目标价格 (对应 README 中的 TargetPrice)
+  target: number;
   
+  @ApiProperty({ description: '离场价格', example: 148.7 })
   @IsNumber()
   @Type(() => Number)
-  exit: number; // 离场价格 (对应 README 中的 ExitPrice)
+  exit: number;
 
+  @ApiProperty({ description: '成交量分布图，多张图', type: [ImageResource] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  volumeProfileImage: ImageResource[]; // 成交量分布图，多张图，包含aws cloudfront的资源id，方便后续删除
+  volumeProfileImage: ImageResource[];
 
+  @ApiProperty({ description: '假设路径 A/B/C，最多3张图', type: [ImageResource], maxItems: 3 })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
   @ArrayMaxSize(3)
-  hypothesisPaths: ImageResource[]; // 假设路径 A/B/C，多张图，包含aws cloudfront的资源id
+  hypothesisPaths: ImageResource[];
 
+  @ApiProperty({ description: '实际路径，多张图', type: [ImageResource] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  actualPath: ImageResource[]; // 实际路径，多张图，包含aws cloudfront的资源id，方便后续删除
+  actualPath: ImageResource[];
 
+  @ApiProperty({ description: '盈亏百分比', example: 2.5 })
   @IsNumber()
   @Type(() => Number)
-  profitLoss: number; // 盈亏百分比 (对应 README 中的 PnLPercent)
+  profitLoss: number;
 
+  @ApiProperty({ description: '风险回报比', example: '1:3' })
   @IsString()
-  rr: string; // 风险回报比
+  rr: string;
 
+  @ApiProperty({ description: '分析结果', example: '市场在空头压力下回调，符合预期' })
   @IsString()
-  analysisResult: string; // 分析结果
+  analysisResult: string;
 
+  @ApiProperty({ description: '执行思维评分', minimum: 1, maximum: 5, example: 4 })
   @IsNumber()
   @Min(1)
   @Max(5)
   executionMindsetScore: number;
 
+  @ApiProperty({ description: '改进措施', example: '应该更早离场，减少回撤风险' })
   @IsString()
-  improvement: string; // 改进措施
+  improvement: string;
 }

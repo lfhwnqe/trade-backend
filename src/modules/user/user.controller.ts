@@ -15,11 +15,16 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ConfirmUserDto } from './dto/confirm-user.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
+import { ApiTags, ApiOperation, ApiBody, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('用户管理')
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
+  @ApiOperation({ summary: '用户注册' })
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: HttpStatus.CREATED, description: '用户注册成功' })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() createUserDto: CreateUserDto) {
@@ -38,6 +43,9 @@ export class UserController {
   /**
    * 邮箱注册确认接口：用户收到验证码后，用邮箱和验证码进行二次确认
    */
+  @ApiOperation({ summary: '邮箱注册确认' })
+  @ApiBody({ type: ConfirmUserDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '账号确认成功' })
   @Post('confirm')
   @HttpCode(HttpStatus.OK)
   async confirmUser(@Body() dto: ConfirmUserDto) {
@@ -45,6 +53,9 @@ export class UserController {
     return { message: '账号已成功确认，现在可以登录。' };
   }
 
+  @ApiOperation({ summary: '用户登录' })
+  @ApiBody({ type: LoginUserDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '登录成功，返回token' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() loginUserDto: LoginUserDto) {
@@ -63,6 +74,11 @@ export class UserController {
   // 任务要求：管理员查看所有用户分页接口
   // @UseGuards(AuthGuard('jwt'), RolesGuard) // 假设有 JWT 认证和角色守卫
   // @Roles('admin') // 假设有角色装饰器
+  @ApiOperation({ summary: '查看所有用户（管理员）' })
+  @ApiQuery({ name: 'limit', description: '每页显示数量', required: false, type: 'string' })
+  @ApiQuery({ name: 'paginationToken', description: '分页标记', required: false, type: 'string' })
+  @ApiResponse({ status: HttpStatus.OK, description: '获取用户列表成功' })
+  @ApiBearerAuth()
   @Get('list')
   @HttpCode(HttpStatus.OK)
   async listUsers(
@@ -88,6 +104,10 @@ export class UserController {
    * TODO: 需要添加认证和授权守卫，确保只有管理员可以调用。
    * 例如: @UseGuards(AuthGuard('jwt'), RolesGuard) @Roles('admin')
    */
+  @ApiOperation({ summary: '更新用户注册功能状态（管理员）' })
+  @ApiBody({ schema: { properties: { enable: { type: 'boolean', example: true } } } })
+  @ApiResponse({ status: HttpStatus.OK, description: '更新注册功能状态成功' })
+  @ApiBearerAuth()
   @Patch('registration/status')
   @HttpCode(HttpStatus.OK)
   // @UseGuards(AuthGuard('jwt'), RolesGuard) // 取消注释并配置守卫
@@ -101,6 +121,8 @@ export class UserController {
   /**
    * 查询当前用户注册功能是否开启
    */
+  @ApiOperation({ summary: '查询用户注册功能状态' })
+  @ApiResponse({ status: HttpStatus.OK, description: '返回注册功能状态' })
   @Get('registration/status')
   @HttpCode(HttpStatus.OK)
   async getRegistrationStatus() {
