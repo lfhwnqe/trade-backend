@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TradeController } from './trade.controller';
 import { TradeService } from './trade.service';
-import { ConfigService } from '../common/config.service';
+import { CommonModule } from '../common/common.module';
 
 @Module({
+  imports: [CommonModule],
   controllers: [TradeController],
-  providers: [TradeService, ConfigService],
+  providers: [TradeService],
 })
 export class TradeModule {}

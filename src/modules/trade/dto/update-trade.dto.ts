@@ -62,6 +62,10 @@ export class UpdateTradeDto {
 
   @IsOptional()
   @IsNumber()
+  exit?: number;
+
+  @IsOptional()
+  @IsNumber()
   profitLoss?: number;
 
   @IsOptional()
@@ -70,7 +74,7 @@ export class UpdateTradeDto {
 
   @IsOptional()
   @IsString()
-  analysisError?: string;
+  analysisResult?: string;
 
   @IsOptional()
   @IsNumber()

@@ -3,13 +3,13 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { CreateTradeDto } from './dto/create-trade.dto';
+import { CreateTradeDto, EntryDirection } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
-import { ConfigService } from 'src/common/config.service';
+import { ConfigService } from 'src/modules/common/config.service';
 
 @Injectable()
 export class TradeService {
@@ -32,7 +32,7 @@ export class TradeService {
     const transactionId = uuidv4();
     /**
      * 创建一个新的 Trade 实例。
-     * 
+     *
      * @param transactionId - 交易的唯一标识符。
      * @param userId - 发起交易的用户标识。
      * @param dateTimeRange - 交易发生的时间范围。
@@ -61,20 +61,20 @@ export class TradeService {
       userId,
       dateTimeRange: dto.dateTimeRange,
       marketStructure: dto.marketStructure,
-      signalType: dto.signalType,
       vah: dto.vah,
       val: dto.val,
       poc: dto.poc,
-      entryDirection: dto.entryDirection as 'Long' | 'Short',
+      entryDirection: dto.entryDirection,
       entryPrice: dto.entry, // DTO中的entry对应实体的entryPrice
       stopLossPrice: dto.stopLoss, // DTO中的stopLoss对应实体的stopLossPrice
       targetPrice: dto.target, // DTO中的target对应实体的targetPrice
+      exitPrice: dto.exit, // DTO中的exit对应实体的exitPrice
       volumeProfileImage: dto.volumeProfileImage,
       hypothesisPaths: dto.hypothesisPaths,
       actualPath: dto.actualPath,
       profitLoss: dto.profitLoss,
       rr: dto.rr,
-      analysisError: dto.analysisError,
+      analysisError: dto.analysisResult, // DTO中的analysisResult对应实体的analysisError
       executionMindsetScore: dto.executionMindsetScore,
       improvement: dto.improvement,
       createdAt: now,
@@ -206,12 +206,24 @@ export class TradeService {
         updatedTradeData.targetPrice = dtoCopy.target;
         delete dtoCopy.target;
       }
+      if (dtoCopy.exit !== undefined) {
+        updatedTradeData.exitPrice = dtoCopy.exit;
+        delete dtoCopy.exit;
+      }
 
       // 拷贝剩余的、名称一致的属性
       for (const key in dtoCopy) {
         if (Object.prototype.hasOwnProperty.call(dtoCopy, key)) {
-          if (key === 'entryDirection' && dtoCopy.entryDirection !== undefined) {
-            updatedTradeData.entryDirection = dtoCopy.entryDirection as 'Long' | 'Short';
+          if (
+            key === 'entryDirection' &&
+            dtoCopy.entryDirection !== undefined
+          ) {
+            updatedTradeData.entryDirection = dtoCopy.entryDirection;
+          } else if (
+            key === 'analysisResult' &&
+            dtoCopy.analysisResult !== undefined
+          ) {
+            updatedTradeData.analysisError = dtoCopy.analysisResult;
           } else {
             updatedTradeData[key] = dtoCopy[key];
           }

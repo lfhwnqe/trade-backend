@@ -17,6 +17,7 @@ export interface Trade {
   entryPrice: number;            // 入场价格，如 2478.0
   stopLossPrice: number;         // 止损价格，如 2450.0
   targetPrice: number;           // 止盈目标价格，如 2520.0
+  exitPrice: number;             // 实际离场价格，如 2510.0
   volumeProfileImage: ImageResource[];  // 成交量分布图，多张图，包含aws cloudfront的资源id
   hypothesisPaths: ImageResource[];    // 价格演变假设列表，多张图，包含aws cloudfront的资源id，最多3项
   actualPath: ImageResource[];         // 实际路径，多张图，包含aws cloudfront的资源id
