@@ -1,4 +1,6 @@
-import { IsString, IsArray, IsNumber, IsOptional, ArrayMaxSize, Min, Max, IsIn, IsEnum } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsOptional, ArrayMaxSize, Min, Max, IsIn, IsEnum, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { MarketStructure, EntryDirection, ImageResource } from './create-trade.dto';
 
 export class UpdateTradeDto {
   @IsOptional()
@@ -6,12 +8,10 @@ export class UpdateTradeDto {
   dateTimeRange?: string;
 
   @IsOptional()
-  @IsString()
-  marketStructure?: string;
+  @IsEnum(MarketStructure)
+  marketStructure?: MarketStructure;
 
-  @IsOptional()
-  @IsString()
-  signalType?: string;
+  // signalType 字段已删除，不再需要
 
   @IsOptional()
   @IsNumber()
@@ -26,9 +26,8 @@ export class UpdateTradeDto {
   poc?: number;
 
   @IsOptional()
-  @IsString()
-  @IsIn(['Long', 'Short'])
-  entryDirection?: string;
+  @IsEnum(EntryDirection)
+  entryDirection?: EntryDirection;
 
   @IsOptional()
   @IsNumber()
@@ -43,18 +42,23 @@ export class UpdateTradeDto {
   target?: number;
 
   @IsOptional()
-  @IsString()
-  volumeProfileImage?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImageResource)
+  volumeProfileImage?: ImageResource[];
 
   @IsOptional()
   @IsArray()
-  @IsString({ each: true })
+  @ValidateNested({ each: true })
+  @Type(() => ImageResource)
   @ArrayMaxSize(3)
-  hypothesisPaths?: string[];
+  hypothesisPaths?: ImageResource[];
 
   @IsOptional()
-  @IsString()
-  actualPath?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImageResource)
+  actualPath?: ImageResource[];
 
   @IsOptional()
   @IsNumber()
