@@ -13,11 +13,4 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
-
-  @Get('config-logs') // New endpoint
-  getConfigLogs(): string {
-    const dotEnvConfigs = this.configService.getDotEnvEntries();
-    console.log('.env Configurations:', JSON.stringify(dotEnvConfigs, null, 2));
-    return 'config logs';
-  }
 }
