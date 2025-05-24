@@ -36,10 +36,34 @@ export class TradingStack extends cdk.Stack {
     // S3 Bucket for images
     const imageBucket = new s3.Bucket(this, `${appName}ImageBucket${envName}`, {
       bucketName: `${appName}-image-bucket-${envName.toLowerCase()}`,
-      removalPolicy: cdk.RemovalPolicy.DESTROY, // DESTROY for dev, RETAIN for prod
-      autoDeleteObjects: true, // For non-production environments
+      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: envName !== 'prod', // Only for non-production environments
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      versioned: true,
+      cors: [
+        {
+          allowedMethods: [
+            s3.HttpMethods.GET,
+            s3.HttpMethods.PUT,
+            s3.HttpMethods.POST,
+          ],
+          allowedOrigins: [
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'https://*.maomaocong.site',
+            'https://en.maomaocong.site',
+          ],
+          allowedHeaders: ['*'],
+          exposedHeaders: [
+            'ETag',
+            'x-amz-server-side-encryption',
+            'x-amz-request-id',
+            'x-amz-id-2',
+          ],
+        },
+      ],
     });
 
     // CloudFront Origin Access Identity
@@ -63,11 +87,17 @@ export class TradingStack extends cdk.Stack {
           }),
           viewerProtocolPolicy:
             cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
+          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
         },
         comment: `CloudFront distribution for ${appName} images in ${envName}`,
-        priceClass: cloudfront.PriceClass.PRICE_CLASS_200, // Choose appropriate price class
+        priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
+        enableLogging: true,
+        httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+        minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
       },
     );
 
