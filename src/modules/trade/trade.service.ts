@@ -21,10 +21,13 @@ export class TradeService {
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
     this.tableName = tableName;
-    // this.db = DynamoDBDocument.from(new DynamoDB());
+    // 配置 DynamoDBDocument，添加转换选项
+    this.db = DynamoDBDocument.from(new DynamoDB({ region }), {
+      marshallOptions: {
+        convertClassInstanceToMap: true,
+      },
+    });
     console.log('[TradeService] db:', this.db); // 打印 db 对象
-    // 显式指定区域
-    this.db = DynamoDBDocument.from(new DynamoDB({ region }));
   }
 
   async createTrade(userId: string, dto: CreateTradeDto) {
@@ -80,7 +83,7 @@ export class TradeService {
       createdAt: now,
       updatedAt: now,
     };
-
+    console.log('[TradeService] createTrade userId:', userId);
     try {
       await this.db.put({
         TableName: this.tableName,
