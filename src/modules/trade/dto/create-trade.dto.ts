@@ -44,7 +44,7 @@ export class ImageResource {
 export class CreateTradeDto {
   @ApiProperty({
     description: '日期/时间段',
-    example: '2023-05-23 09:30-16:00',
+    example: '2025-05-23 09:30',
   })
   @IsString()
   dateTimeRange: string;
