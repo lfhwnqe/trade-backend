@@ -1,58 +1,152 @@
-1. 表概览
-表名（TableName）：TradingJournal
+# 交易日志系统字段说明
 
-用途：存储每次 ETH 日内模拟交易复盘的完整记录，供查询、统计与回顾使用。
+本文档详细介绍了交易日志系统中使用的数据字段，按照交易流程分为四个主要部分：交易状态、入场前分析、入场记录和离场后分析。
 
-2. 主键方案
-项目	名称	类型	说明
-分区键 (PK)	EntryID	String	本次复盘唯一标识：UUID。
-排序键 (SK)	Timestamp	String	ISO 8601 格式的训练开始时间（如 2025-05-18T10:00:00Z）。
+## 1. 系统概览
 
-以 EntryID + Timestamp 组成复合主键，确保全表唯一且按时间可排序。
+**表名**：TradingJournal
 
-3. 属性定义
-字段名	DynamoDB 类型	备注与示例
-DatePeriod	S	训练时段描述（例：2025-05-18 10:00–11:30）
-MarketStructure	S	市场结构判断：Range 或 Trend
-SignalType	S	触发信号类型：Reversal／Continuation／FailedReversal
-VAH	N	价值区上沿价格（如 2500.0）
-VAL	N	价值区下沿价格（如 2450.0）
-POC	N	成交量中枢价位（如 2475.0）
-EntryDirection	S	多空方向：Long 或 Short
-EntryPrice	N	入场价格（如 2478.0）
-StopLossPrice	N	止损价格（如 2450.0）
-TargetPrice	N	止盈目标价格（如 2520.0）
-VolumeProfileScreenshotKey	S	截图在 S3 的存储键（s3://bucket/path/to/screenshot.png）
-Hypotheses	L of S	价格演变假设列表（例：["A: to VAH", "B: back to POC"]）
-ActualPath	S	最终行情路径标签（如 符合路径 B）
-PnLPercent	N	盈亏百分比（例：1.2 表示 +1.2%）
-RiskRewardRatio	S	风险报酬比（例：1:2）
-AnalysisErrorAndCause	S	判断失误及原因（例：漏看二次测试失败）
-ExecutionMindsetScore	N	执行与心态评分（1–5 分）
-ImprovementActions	S	改进措施文本（例：关注 POC 处成交量变化）
-CreatedAt	S	记录创建时间（ISO 8601，例如 2025-05-18T11:30:00Z）
-UpdatedAt	S	记录最后更新时间，用于乐观锁或审计（同上格式）
+**用途**：记录完整的交易过程，包括交易前的分析、入场记录以及离场后的复盘，便于后续查询、统计与经验总结。
 
-4. 建议的全局二级索引（GSI）
-为了支持按日期范围与市场结构查询，可增加以下 GSI：
+## 2. 主键设计
 
-GSI1 – 按日期查询
+| 项目 | 名称 | 类型 | 说明 |
+|------|------|------|------|
+| 主键 | id | UUID | 交易记录的唯一标识 |
+| 创建时间 | createdAt | DateTime | 记录创建时间 |
+| 更新时间 | updatedAt | DateTime | 记录更新时间 |
 
-索引名：GSI_Date
+## 3. 字段详细说明
 
-分区键 (PK)：CreatedAt（取日期部分，如 2025-05-18）
+### 3.1 交易状态
 
-排序键 (SK)：Timestamp
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| status | enum | 交易状态 | 已分析/已入场/已离场 |
 
-用途：获取某天所有复盘记录，按时间排序。
+### 3.2 入场前分析
 
-GSI2 – 按市场结构查询
+### 3.1 入场前分析
 
-索引名：GSI_Structure
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| volumeProfileImages | ImageResource[] | 成交量分布图，最多5张 | [{key: "images/vol1.jpg", url: "https://..."}, ...] |
+| poc | number | 成交量分布图POC价格（Point of Control） | 147.8 |
+| val | number | 价值区下沿价格（Value Area Low） | 145.2 |
+| vah | number | 价值区上沿价格（Value Area High） | 150.5 |
+| keyPriceLevels | string | 其他关键价格点 | "日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2" |
+| marketStructure | enum | 市场结构判断 | 平衡/失衡/未见过 |
+| marketStructureAnalysis | string | 市场结构详细分析 | "市场处于平衡状态，价格在价值区内震荡..." |
+| expectedPathImages | ImageResource[] | 预计路径图片，最多5张 | [{key: "images/path1.jpg", url: "https://..."}, ...] |
+| expectedPathAnalysis | string | 预计路径分析 | "预计价格将在价值区内震荡，随后向上突破..." |
+| entryPlanA | EntryPlan | 入场计划A（非必填） | {entryReason: "...", entrySignal: "...", exitSignal: "..."} |
+| entryPlanB | EntryPlan | 入场计划B（非必填） | 同上 |
+| entryPlanC | EntryPlan | 入场计划C（非必填） | 同上 |
 
-分区键 (PK)：MarketStructure
+#### 3.1.1 入场计划（EntryPlan）结构
 
-排序键 (SK)：Timestamp
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| entryReason | string | 入场理由 | "价格回调至支撑位，成交量减少，预计反弹" |
+| entrySignal | string | 入场信号 | "价格突破前高，成交量放大" |
+| exitSignal | string | 退出信号 | "价格跌破支撑位，成交量放大" |
 
-用途：筛选所有 Range 或 Trend 类型记录，分析结构表现。
+### 3.2 入场记录
 
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| entryPrice | number | 入场价格 | 146.5 |
+| entryTime | DateTime | 入场时间 | "2025-05-23T09:30:00+08:00" |
+| entryDirection | enum | 入场方向 | 多/空 |
+| stopLoss | number | 止损点 | 145.0 |
+| takeProfit | number | 止盈点 | 149.5 |
+| mentalityNotes | string | 交易过程中心态记录 | "入场后价格快速下跌，感到紧张但坚持止损点..." |
+
+### 3.3 离场后分析
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| exitPrice | number | 离场价格 | 148.7 |
+| exitTime | DateTime | 离场时间 | "2025-05-23T14:30:00+08:00" |
+| tradeResult | enum | 交易结果 | 盈利/亏损/保本 |
+| followedPlan | boolean | 是否符合入场计划 | true |
+| actualPathImages | ImageResource[] | 实际行情路径图片，最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
+| actualPathAnalysis | string | 实际行情路径分析 | "价格如预期在价值区内震荡后向上突破..." |
+| remarks | string | 备注 | "这次交易整体执行较好，但离场时机可以更优化" |
+| lessonsLearned | string | 需要总结的经验 | "1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化..." |
+| analysisImages | ImageResource[] | 分析图，最多5张 | [{key: "images/analysis1.jpg", url: "https://..."}, ...] |
+
+### 3.4 计算字段
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| profitLossPercentage | number | 盈亏百分比 | 2.5 |
+| riskRewardRatio | string | 风险回报比 | "1:3" |
+
+## 4. 图片资源（ImageResource）结构
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| key | string | 图片资源ID/键值 | "images/2023-05-23/user123/image1.jpg" |
+| url | string | 图片完整URL | "https://example.com/images/image1.jpg" |
+
+## 5. 枚举类型
+
+### 5.1 交易状态（TradeStatus）
+
+- 已分析（ANALYZED）
+- 已入场（ENTERED）
+- 已离场（EXITED）
+
+### 5.2 市场结构（MarketStructure）
+
+- 震荡（BALANCED）
+- 趋势（IMBALANCED）
+- 暂无法判断（UNSEEN）
+
+### 5.3 入场方向（EntryDirection）
+
+- 多（LONG）
+- 空（SHORT）
+
+### 5.4 交易结果（TradeResult）
+
+- 盈利（PROFIT）
+- 亏损（LOSS）
+- 保本（BREAKEVEN）
+
+### 5.5 验证规则说明
+
+- 所有图片数组字段（volumeProfileImages, expectedPathImages, actualPathImages, analysisImages）最多5张
+- 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场或已离场时必填
+- 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场时必填
+- 所有数字类型字段均需进行类型验证和数值范围验证
+- 所有时间字段需符合ISO 8601格式
+- 所有枚举类型字段需严格匹配预定义值
+- 图片资源对象需包含key和url两个字段，且均为字符串类型
+
+### 5.1 市场结构（MarketStructure）
+
+- 平衡（BALANCED）
+- 失衡（IMBALANCED）
+- 未见过（UNSEEN）
+
+### 5.2 入场方向（EntryDirection）
+
+- 多（LONG）
+- 空（SHORT）
+
+### 5.3 交易结果（TradeResult）
+
+- 盈利（PROFIT）
+- 亏损（LOSS）
+- 保本（BREAKEVEN）
+
+## 6. 建议的查询索引
+
+为了支持高效查询，建议设置以下索引：
+
+1. **按交易结果查询**：tradeResult + entryTime
+2. **按市场结构查询**：marketStructure + entryTime
+3. **按入场方向查询**：entryDirection + entryTime
+4. **按时间范围查询**：entryTime（范围查询）

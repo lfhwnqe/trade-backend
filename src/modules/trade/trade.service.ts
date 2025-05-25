@@ -62,24 +62,41 @@ export class TradeService {
     const newTrade: Trade = {
       transactionId,
       userId,
-      dateTimeRange: dto.dateTimeRange,
-      marketStructure: dto.marketStructure,
-      vah: dto.vah,
-      val: dto.val,
+      // ===== 交易状态 =====
+      status: dto.status,
+      // ===== 入场前分析 =====
+      volumeProfileImages: dto.volumeProfileImages,
       poc: dto.poc,
+      val: dto.val,
+      vah: dto.vah,
+      keyPriceLevels: dto.keyPriceLevels,
+      marketStructure: dto.marketStructure,
+      marketStructureAnalysis: dto.marketStructureAnalysis,
+      expectedPathImages: dto.expectedPathImages,
+      expectedPathAnalysis: dto.expectedPathAnalysis,
+      entryPlanA: dto.entryPlanA,
+      entryPlanB: dto.entryPlanB,
+      entryPlanC: dto.entryPlanC,
+      // ===== 入场记录 =====
+      entryPrice: dto.entryPrice,
+      entryTime: dto.entryTime,
       entryDirection: dto.entryDirection,
-      entryPrice: dto.entry, // DTO中的entry对应实体的entryPrice
-      stopLossPrice: dto.stopLoss, // DTO中的stopLoss对应实体的stopLossPrice
-      targetPrice: dto.target, // DTO中的target对应实体的targetPrice
-      exitPrice: dto.exit, // DTO中的exit对应实体的exitPrice
-      volumeProfileImage: dto.volumeProfileImage,
-      hypothesisPaths: dto.hypothesisPaths,
-      actualPath: dto.actualPath,
-      profitLoss: dto.profitLoss,
-      rr: dto.rr,
-      analysisError: dto.analysisResult, // DTO中的analysisResult对应实体的analysisError
-      executionMindsetScore: dto.executionMindsetScore,
-      improvement: dto.improvement,
+      stopLoss: dto.stopLoss,
+      takeProfit: dto.takeProfit,
+      mentalityNotes: dto.mentalityNotes,
+      // ===== 离场后分析 =====
+      exitPrice: dto.exitPrice,
+      exitTime: dto.exitTime,
+      tradeResult: dto.tradeResult,
+      followedPlan: dto.followedPlan,
+      actualPathImages: dto.actualPathImages,
+      actualPathAnalysis: dto.actualPathAnalysis,
+      remarks: dto.remarks,
+      lessonsLearned: dto.lessonsLearned,
+      analysisImages: dto.analysisImages,
+      // 基础计算字段
+      profitLossPercentage: dto.profitLossPercentage,
+      riskRewardRatio: dto.riskRewardRatio,
       createdAt: now,
       updatedAt: now,
     };
@@ -135,14 +152,8 @@ export class TradeService {
         ScanIndexForward: false,
       });
 
-      // 将结果中的 entryPrice 映射回 entry
-      const mappedItems = (result.Items as Trade[]).map(item => ({
-        ...item,
-        entry: item.entryPrice,
-        stopLoss: item.stopLossPrice,
-        target: item.targetPrice,
-        exit: item.exitPrice,
-      }));
+      // 直接返回结果，不需要映射字段名称
+      const mappedItems = result.Items as Trade[];
 
       return {
         success: true,
@@ -201,46 +212,10 @@ export class TradeService {
       if (!oldRes.success) throw new NotFoundException('交易记录不存在');
       // 确保从 dto 更新的属性类型正确
       const existingTrade = oldRes.data as Trade;
-      const updatedTradeData: Partial<Trade> = {};
-
-      // 创建 dto 的一个可修改副本，以便我们可以安全地删除属性
-      const dtoCopy = { ...dto };
-
-      if (dtoCopy.entry !== undefined) {
-        updatedTradeData.entryPrice = dtoCopy.entry;
-        delete dtoCopy.entry; // 从副本中删除，避免后续被错误地直接拷贝
-      }
-      if (dtoCopy.stopLoss !== undefined) {
-        updatedTradeData.stopLossPrice = dtoCopy.stopLoss;
-        delete dtoCopy.stopLoss;
-      }
-      if (dtoCopy.target !== undefined) {
-        updatedTradeData.targetPrice = dtoCopy.target;
-        delete dtoCopy.target;
-      }
-      if (dtoCopy.exit !== undefined) {
-        updatedTradeData.exitPrice = dtoCopy.exit;
-        delete dtoCopy.exit;
-      }
-
-      // 拷贝剩余的、名称一致的属性
-      for (const key in dtoCopy) {
-        if (Object.prototype.hasOwnProperty.call(dtoCopy, key)) {
-          if (
-            key === 'entryDirection' &&
-            dtoCopy.entryDirection !== undefined
-          ) {
-            updatedTradeData.entryDirection = dtoCopy.entryDirection;
-          } else if (
-            key === 'analysisResult' &&
-            dtoCopy.analysisResult !== undefined
-          ) {
-            updatedTradeData.analysisError = dtoCopy.analysisResult;
-          } else {
-            updatedTradeData[key] = dtoCopy[key];
-          }
-        }
-      }
+      
+      // 直接将 dto 中的所有属性复制到 updatedTradeData 中
+      // 由于我们已经更新了 DTO 和实体，字段名称现在是一致的
+      const updatedTradeData: Partial<Trade> = { ...dto };
 
       const updated: Trade = {
         ...existingTrade,
