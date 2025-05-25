@@ -40,7 +40,6 @@ export class TradeService {
      * @param userId - 发起交易的用户标识。
      * @param dateTimeRange - 交易发生的时间范围。
      * @param marketStructure - 市场结构。
-     * @param signalType - 信号类型。
      * @param vah - 价值区上沿价格。
      * @param val - 价值区下沿价格。
      * @param poc - 成交量中枢价位。
