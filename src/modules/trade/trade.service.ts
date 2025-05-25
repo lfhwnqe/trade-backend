@@ -135,10 +135,19 @@ export class TradeService {
         ScanIndexForward: false,
       });
 
+      // 将结果中的 entryPrice 映射回 entry
+      const mappedItems = (result.Items as Trade[]).map(item => ({
+        ...item,
+        entry: item.entryPrice,
+        stopLoss: item.stopLossPrice,
+        target: item.targetPrice,
+        exit: item.exitPrice,
+      }));
+
       return {
         success: true,
         data: {
-          items: (result.Items as Trade[]) || [],
+          items: mappedItems,
           total,
           page,
           pageSize,
