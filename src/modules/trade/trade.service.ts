@@ -61,6 +61,7 @@ export class TradeService {
     const newTrade: Trade = {
       transactionId,
       userId,
+      analysisTime: dto.analysisTime, // 行情分析时间
       // ===== 交易状态 =====
       status: dto.status,
       // ===== 入场前分析 =====
@@ -214,7 +215,10 @@ export class TradeService {
       
       // 直接将 dto 中的所有属性复制到 updatedTradeData 中
       // 由于我们已经更新了 DTO 和实体，字段名称现在是一致的
-      const updatedTradeData: Partial<Trade> = { ...dto };
+      const updatedTradeData: Partial<Trade> = {
+        ...dto,
+        analysisTime: dto.analysisTime, // 行情分析时间
+      };
 
       const updated: Trade = {
         ...existingTrade,

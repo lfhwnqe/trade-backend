@@ -87,6 +87,14 @@ export class EntryPlan {
 }
 
 export class CreateTradeDto {
+  @ApiProperty({
+    description: '行情分析时间',
+    example: '2025-05-23T09:30:00+08:00',
+    required: true,
+  })
+  @IsDateString({ strict: true })
+  analysisTime: string;
+  
   // ===== 交易状态 =====
   @ApiProperty({ 
     description: '交易状态',

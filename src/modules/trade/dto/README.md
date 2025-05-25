@@ -30,6 +30,7 @@
 
 | 字段名 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
+| analysisTime | DateTime | 行情分析时间 | "2025-05-23T09:30:00+08:00" |
 | volumeProfileImages | ImageResource[] | 成交量分布图，最多5张 | [{key: "images/vol1.jpg", url: "https://..."}, ...] |
 | poc | number | 成交量分布图POC价格（Point of Control） | 147.8 |
 | val | number | 价值区下沿价格（Value Area Low） | 145.2 |
