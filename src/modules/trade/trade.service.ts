@@ -258,4 +258,144 @@ export class TradeService {
       throw new Error('交易删除失败');
     }
   }
+
+  /**
+   * 根据用户ID和过滤条件查询交易记录
+   * @param userId 用户ID
+   * @param page 页码
+   * @param pageSize 每页大小
+   * @param filters 过滤条件
+   */
+  async findByUserIdWithFilters(
+    userId: string, 
+    page = 1, 
+    pageSize = 20, 
+    filters: {
+      marketStructure?: string;
+      entryDirection?: string;
+      status?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      tradeResult?: string;
+    } = {}
+  ) {
+    try {
+      // 构建过滤表达式
+      let filterExpression = '';
+      const expressionAttributeValues: Record<string, any> = {
+        ':userId': userId
+      };
+      const expressionAttributeNames: Record<string, string> = {};
+      
+      // 添加市场结构过滤条件
+      if (filters.marketStructure && filters.marketStructure !== 'all') {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#marketStructure = :marketStructure';
+        expressionAttributeValues[':marketStructure'] = filters.marketStructure;
+        expressionAttributeNames['#marketStructure'] = 'marketStructure';
+      }
+      
+      // 添加入场方向过滤条件
+      if (filters.entryDirection && filters.entryDirection !== 'all') {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#entryDirection = :entryDirection';
+        expressionAttributeValues[':entryDirection'] = filters.entryDirection;
+        expressionAttributeNames['#entryDirection'] = 'entryDirection';
+      }
+      
+      // 添加交易状态过滤条件
+      if (filters.status && filters.status !== 'all') {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#status = :status';
+        expressionAttributeValues[':status'] = filters.status;
+        expressionAttributeNames['#status'] = 'status';
+      }
+      
+      // 添加交易结果过滤条件
+      if (filters.tradeResult && filters.tradeResult !== 'all') {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#tradeResult = :tradeResult';
+        expressionAttributeValues[':tradeResult'] = filters.tradeResult;
+        expressionAttributeNames['#tradeResult'] = 'tradeResult';
+      }
+      
+      // 添加日期范围过滤条件 (使用 createdAt 字段)
+      if (filters.dateFrom) {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#createdAt >= :dateFrom';
+        expressionAttributeValues[':dateFrom'] = filters.dateFrom;
+        expressionAttributeNames['#createdAt'] = 'createdAt';
+      }
+      
+      if (filters.dateTo) {
+        filterExpression += filterExpression ? ' AND ' : '';
+        filterExpression += '#createdAt <= :dateTo';
+        expressionAttributeValues[':dateTo'] = filters.dateTo + 'T23:59:59.999Z';  // 设置为当天结束时间
+        if (!expressionAttributeNames['#createdAt']) {
+          expressionAttributeNames['#createdAt'] = 'createdAt';
+        }
+      }
+
+      // 先获取总数
+      const countParams: any = {
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: expressionAttributeValues,
+        Select: 'COUNT',
+      };
+      
+      if (filterExpression) {
+        countParams.FilterExpression = filterExpression;
+        countParams.ExpressionAttributeNames = expressionAttributeNames;
+      }
+      
+      const countResult = await this.db.query(countParams);
+      const total = countResult.Count || 0;
+      const totalPages = Math.ceil(total / pageSize);
+
+      if (total === 0) {
+        return {
+          success: true,
+          data: {
+            items: [],
+            total,
+            page,
+            pageSize,
+            totalPages: 0,
+          },
+        };
+      }
+
+      // 查询带过滤条件的数据
+      const queryParams: any = {
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: expressionAttributeValues,
+        Limit: pageSize,
+        ScanIndexForward: false,  // 按时间倒序排序
+      };
+      
+      if (filterExpression) {
+        queryParams.FilterExpression = filterExpression;
+        queryParams.ExpressionAttributeNames = expressionAttributeNames;
+      }
+      
+      const result = await this.db.query(queryParams);
+      const mappedItems = result.Items as Trade[];
+
+      return {
+        success: true,
+        data: {
+          items: mappedItems,
+          total,
+          page,
+          pageSize,
+          totalPages,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] findByUserIdWithFilters error:', JSON.stringify(error));
+      throw new Error('交易列表获取失败');
+    }
+  }
 }

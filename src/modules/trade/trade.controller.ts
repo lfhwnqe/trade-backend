@@ -77,6 +77,12 @@ export class TradeController {
       properties: {
         page: { type: 'number', example: 1 },
         pageSize: { type: 'number', example: 20 },
+        marketStructure: { type: 'string', example: '震荡', description: '市场结构' },
+        entryDirection: { type: 'string', example: '多', description: '交易方向' },
+        tradeStatus: { type: 'string', example: '已离场', description: '交易状态' },
+        dateFrom: { type: 'string', example: '2025-01-01', description: '开始日期' },
+        dateTo: { type: 'string', example: '2025-05-29', description: '结束日期' },
+        tradeResult: { type: 'string', example: '盈利', description: '交易结果' }
       },
     },
   })
@@ -85,11 +91,46 @@ export class TradeController {
   async findAllPost(@Req() req: Request) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    const { page, pageSize } = req.body || {};
-    const p = page ? parseInt(page, 10) : 1;
-    const ps = pageSize ? parseInt(pageSize, 10) : 20;
-    const result = await this.tradeService.findByUserId(userId, p, ps);
-    return result;
+    
+    // 确保 req.body 存在，并提取查询参数
+    const body = req.body || {};
+    const { 
+      page, 
+      pageSize, 
+      marketStructure, 
+      entryDirection, 
+      tradeStatus, 
+      dateFrom, 
+      dateTo,
+      tradeResult 
+    } = body;
+    
+    const p = page ? parseInt(String(page), 10) : 1;
+    const ps = pageSize ? parseInt(String(pageSize), 10) : 20;
+    
+    try {
+      // 如果没有任何过滤条件，则使用基本查询方法
+      if (!marketStructure && !entryDirection && !tradeStatus && !dateFrom && !dateTo && !tradeResult) {
+        const result = await this.tradeService.findByUserId(userId, p, ps);
+        return result;
+      }
+      
+      // 构建查询条件
+      const queryParams = {
+        marketStructure,
+        entryDirection,
+        status: tradeStatus,
+        dateFrom,
+        dateTo,
+        tradeResult
+      };
+      
+      const result = await this.tradeService.findByUserIdWithFilters(userId, p, ps, queryParams);
+      return result;
+    } catch (error) {
+      console.error('[TradeController] findAllPost error:', error);
+      throw new Error('查询交易列表失败');
+    }
   }
 
   // 更新指定交易记录
