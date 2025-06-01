@@ -116,6 +116,55 @@ export class TradeService {
       throw new Error('交易创建失败');
     }
   }
+/**
+   * 获取本月已离场交易数与胜率统计
+   * @param userId 用户ID
+   * @returns { thisMonthClosedTradeCount, thisMonthWinRate }
+   */
+  async getThisMonthStats(userId: string) {
+    // 计算本月起止
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1); // 不含
+    const monthStartStr = monthStart.toISOString();
+    const monthEndStr = monthEnd.toISOString();
+
+    // 查询该用户所有 createdAt 在本月记录，后续用 JS 过滤已离场
+    // 注意 DynamoDB 分区键为 userId，createdAt 仅可做附加过滤
+    try {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        // createdAt 过滤更优时可用范围查询，这里用 JS 过滤保证通用
+      });
+      const items = (result.Items || []) as Trade[];
+      // 只取本月记录
+      const monthTrades = items.filter(
+        t =>
+          t.createdAt >= monthStartStr &&
+          t.createdAt < monthEndStr &&
+          t.status === '已离场'
+      );
+      const thisMonthClosedTradeCount = monthTrades.length;
+      const winCount = monthTrades.filter(
+        t => t.tradeResult === '盈利'
+      ).length;
+      // 避免分母为0
+      const thisMonthWinRate =
+        thisMonthClosedTradeCount === 0
+          ? 0
+          : Math.round((winCount / thisMonthClosedTradeCount) * 100);
+
+      return {
+        thisMonthClosedTradeCount,
+        thisMonthWinRate,
+      };
+    } catch (error) {
+      console.error('[TradeService] getThisMonthStats error:', error);
+      throw new Error('交易统计获取失败');
+    }
+  }
 
   async findByUserId(userId: string, page = 1, pageSize = 20) {
     try {

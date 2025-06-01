@@ -27,6 +27,16 @@ import {
 @Controller('trade')
 export class TradeController {
   constructor(private readonly tradeService: TradeService) {}
+// 首页统计 GET /trade/stats
+@ApiOperation({ summary: '获取本月已离场交易数和胜率' })
+@ApiResponse({ status: 200, description: '统计数据获取成功' })
+@Get('stats')
+async getStats(@Req() req: Request) {
+  const userId = (req as any).user?.sub;
+  if (!userId) throw new NotFoundException('用户信息异常');
+  const data = await this.tradeService.getThisMonthStats(userId);
+  return { success: true, data };
+}
 
   // 创建交易记录
   @ApiOperation({ summary: '创建交易记录' })
