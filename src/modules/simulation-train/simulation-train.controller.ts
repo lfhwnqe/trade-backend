@@ -52,16 +52,16 @@ export class SimulationTrainController {
 
   // 查询单条模拟记录
   @ApiOperation({ summary: '查询单条模拟交易记录' })
-  @ApiParam({ name: 'simulationTrainId', description: '模拟交易ID' })
+  @ApiParam({ name: 'transactionId', description: '模拟交易ID' })
   @ApiResponse({ status: 200, description: '查询成功' })
-  @Get(':simulationTrainId')
+  @Get(':transactionId')
   async findOne(
     @Req() req: Request,
-    @Param('simulationTrainId') simulationTrainId: string,
+    @Param('transactionId') transactionId: string,
   ) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    const result = await this.simulationTrainService.getSimulationTrain(userId, simulationTrainId);
+    const result = await this.simulationTrainService.getSimulationTrain(userId, transactionId);
     return result;
   }
 
@@ -145,20 +145,20 @@ export class SimulationTrainController {
 
   // 更新指定模拟交易记录
   @ApiOperation({ summary: '更新模拟交易记录' })
-  @ApiParam({ name: 'simulationTrainId', description: '模拟交易ID' })
+  @ApiParam({ name: 'transactionId', description: '模拟交易ID' })
   @ApiBody({ type: UpdateSimulationTrainDto })
   @ApiResponse({ status: 200, description: '更新成功' })
-  @Patch(':simulationTrainId')
+  @Patch(':transactionId')
   async update(
     @Req() req: Request,
-    @Param('simulationTrainId') simulationTrainId: string,
+    @Param('transactionId') transactionId: string,
     @Body() dto: UpdateSimulationTrainDto,
   ) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     const result = await this.simulationTrainService.updateSimulationTrain(
       userId,
-      simulationTrainId,
+      transactionId,
       dto,
     );
     return result;

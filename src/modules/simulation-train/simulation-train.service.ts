@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { CreateSimulationTrainDto } from './dto/create-simulation-train.dto';
-import { UpdateSimulationTrainDto } from './dto/update-simulation-train.dto'
+import { UpdateSimulationTrainDto } from './dto/update-simulation-train.dto';
 import { SimulationTrain } from './entities/simulation-train.entity';
 import { v4 as uuidv4 } from 'uuid';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
@@ -18,7 +18,9 @@ export class SimulationTrainService {
 
   constructor(private readonly configService: ConfigService) {
     // 推荐用 SIMULATION_TRAIN_TABLE_NAME 环境变量区分新表
-    const tableName = this.configService.getOrThrow('SIMULATION_TRAIN_TABLE_NAME');
+    const tableName = this.configService.getOrThrow(
+      'SIMULATION_TRAIN_TABLE_NAME',
+    );
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[SimulationTrainService] 使用 DynamoDB 表:', tableName);
     this.tableName = tableName;
@@ -32,13 +34,15 @@ export class SimulationTrainService {
 
   async createSimulationTrain(userId: string, dto: CreateSimulationTrainDto) {
     const now = new Date().toISOString();
-    const simulationTrainId = uuidv4();
+    const transactionId = uuidv4();
 
     const newSimulation: SimulationTrain = {
-      simulationTrainId,
+      transactionId,
       userId,
-      analysisTime: dto.analysisTime,
+      analysisTime: dto.analysisTime, // 行情分析时间
+      // ===== 交易状态 =====
       status: dto.status,
+      // ===== 入场前分析 =====
       volumeProfileImages: dto.volumeProfileImages,
       poc: dto.poc,
       val: dto.val,
@@ -51,12 +55,14 @@ export class SimulationTrainService {
       entryPlanA: dto.entryPlanA,
       entryPlanB: dto.entryPlanB,
       entryPlanC: dto.entryPlanC,
+      // ===== 入场记录 =====
       entryPrice: dto.entryPrice,
       entryTime: dto.entryTime,
       entryDirection: dto.entryDirection,
       stopLoss: dto.stopLoss,
       takeProfit: dto.takeProfit,
       mentalityNotes: dto.mentalityNotes,
+      // ===== 离场后分析 =====
       exitPrice: dto.exitPrice,
       exitTime: dto.exitTime,
       tradeResult: dto.tradeResult,
@@ -66,12 +72,16 @@ export class SimulationTrainService {
       remarks: dto.remarks,
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
+      // 基础计算字段
       profitLossPercentage: dto.profitLossPercentage,
       riskRewardRatio: dto.riskRewardRatio,
       createdAt: now,
       updatedAt: now,
     };
-    console.log('[SimulationTrainService] createSimulationTrain userId:', userId);
+    console.log(
+      '[SimulationTrainService] createSimulationTrain userId:',
+      userId,
+    );
     try {
       await this.db.put({
         TableName: this.tableName,
@@ -83,7 +93,10 @@ export class SimulationTrainService {
         data: newSimulation,
       };
     } catch (error) {
-      console.error('[SimulationTrainService] createSimulationTrain error:', error);
+      console.error(
+        '[SimulationTrainService] createSimulationTrain error:',
+        error,
+      );
       throw new Error('模拟交易创建失败');
     }
   }
@@ -103,14 +116,14 @@ export class SimulationTrainService {
       });
       const items = (result.Items || []) as SimulationTrain[];
       const monthTrains = items.filter(
-        t =>
+        (t) =>
           t.createdAt >= monthStartStr &&
           t.createdAt < monthEndStr &&
-          t.status === '已离场'
+          t.status === '已离场',
       );
       const thisMonthClosedSimulationCount = monthTrains.length;
       const winCount = monthTrains.filter(
-        t => t.tradeResult === '盈利'
+        (t) => t.tradeResult === '盈利',
       ).length;
       const thisMonthWinRate =
         thisMonthClosedSimulationCount === 0
@@ -181,11 +194,11 @@ export class SimulationTrainService {
     }
   }
 
-  async getSimulationTrain(userId: string, simulationTrainId: string) {
+  async getSimulationTrain(userId: string, transactionId: string) {
     try {
       const result = await this.db.get({
         TableName: this.tableName,
-        Key: { userId, simulationTrainId },
+        Key: { userId, transactionId },
       });
 
       if (!result.Item) {
@@ -202,18 +215,21 @@ export class SimulationTrainService {
         data: result.Item as SimulationTrain,
       };
     } catch (error) {
-      console.error('[SimulationTrainService] getSimulationTrain error:', error);
+      console.error(
+        '[SimulationTrainService] getSimulationTrain error:',
+        error,
+      );
       throw new Error('模拟交易记录获取失败');
     }
   }
 
   async updateSimulationTrain(
     userId: string,
-    simulationTrainId: string,
+    transactionId: string,
     dto: UpdateSimulationTrainDto,
   ) {
     try {
-      const oldRes = await this.getSimulationTrain(userId, simulationTrainId);
+      const oldRes = await this.getSimulationTrain(userId, transactionId);
       if (!oldRes.success) throw new NotFoundException('模拟交易记录不存在');
       const existingSimulation = oldRes.data as SimulationTrain;
       const updatedSimulationData: Partial<SimulationTrain> = {
@@ -236,25 +252,31 @@ export class SimulationTrainService {
         data: updated,
       };
     } catch (error) {
-      console.error('[SimulationTrainService] updateSimulationTrain error:', error);
+      console.error(
+        '[SimulationTrainService] updateSimulationTrain error:',
+        error,
+      );
       throw new Error('模拟交易更新失败');
     }
   }
 
-  async deleteSimulationTrain(userId: string, simulationTrainId: string) {
+  async deleteSimulationTrain(userId: string, transactionId: string) {
     try {
-      const oldRes = await this.getSimulationTrain(userId, simulationTrainId);
+      const oldRes = await this.getSimulationTrain(userId, transactionId);
       if (!oldRes.success) throw new NotFoundException('模拟交易记录不存在');
       await this.db.delete({
         TableName: this.tableName,
-        Key: { userId, simulationTrainId },
+        Key: { userId, transactionId },
       });
       return {
         success: true,
         message: '删除成功',
       };
     } catch (error) {
-      console.error('[SimulationTrainService] deleteSimulationTrain error:', error);
+      console.error(
+        '[SimulationTrainService] deleteSimulationTrain error:',
+        error,
+      );
       throw new Error('模拟交易删除失败');
     }
   }
@@ -317,7 +339,8 @@ export class SimulationTrainService {
       if (filters.dateTo) {
         filterExpression += filterExpression ? ' AND ' : '';
         filterExpression += '#createdAt <= :dateTo';
-        expressionAttributeValues[':dateTo'] = filters.dateTo + 'T23:59:59.999Z';
+        expressionAttributeValues[':dateTo'] =
+          filters.dateTo + 'T23:59:59.999Z';
         if (!expressionAttributeNames['#createdAt']) {
           expressionAttributeNames['#createdAt'] = 'createdAt';
         }
@@ -379,7 +402,10 @@ export class SimulationTrainService {
         },
       };
     } catch (error) {
-      console.error('[SimulationTrainService] findByUserIdWithFilters error:', JSON.stringify(error));
+      console.error(
+        '[SimulationTrainService] findByUserIdWithFilters error:',
+        JSON.stringify(error),
+      );
       throw new Error('模拟交易列表获取失败');
     }
   }
