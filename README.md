@@ -120,6 +120,38 @@ yarn test:e2e
 yarn test:cov
 ```
 
+## 接口文档（Swagger）
+
+本项目采用 [Swagger](https://swagger.io/) 作为接口文档解决方案。
+在本地开发环境下，启动 NestJS 服务 (`yarn start` 或 `yarn start:dev`) 后，可以通过浏览器访问以下路径获取接口文档：
+
+- 默认访问地址（如未修改默认端口和路径）：
+  ```
+  http://localhost:3000/api/docs
+  ```
+- 或项目中配置的其它 Swagger 路径。
+
+> ⚠️ 注意：本项目已在 [`src/main.ts`](trade-backend/src/main.ts:1) 内明确配置了 Swagger 文档实际路径为 `/api/docs`，请确保通过此路径访问。
+
+如果未能访问到 Swagger 文档，请检查 `src/main.ts` 是否包含如下相关代码（实际以项目代码为准）：
+
+```typescript
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+
+const config = new DocumentBuilder()
+  .setTitle('Trade API')
+  .setDescription('Trade service API documentation')
+  .setVersion('1.0')
+  // 支持自定义更多配置
+  .build();
+
+const document = SwaggerModule.createDocument(app, config);
+// 这里的 'api/docs' 即为访问路径（如需自定义可自行更改）
+SwaggerModule.setup('api/docs', app, document);
+```
+
+如需自定义 Swagger 路径或配置，请参考 [NestJS 官方文档](https://docs.nestjs.com/openapi/introduction)。
+
 ## 注意事项
 
 - 确保您的 AWS CLI 已正确配置，并且具有部署所需资源的权限。

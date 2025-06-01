@@ -36,7 +36,10 @@ export class TradingStack extends cdk.Stack {
     // S3 Bucket for images
     const imageBucket = new s3.Bucket(this, `${appName}ImageBucket${envName}`, {
       bucketName: `${appName}-image-bucket-${envName.toLowerCase()}`,
-      removalPolicy: envName === 'prod' ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+      removalPolicy:
+        envName === 'prod'
+          ? cdk.RemovalPolicy.RETAIN
+          : cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: envName !== 'prod', // Only for non-production environments
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -91,7 +94,8 @@ export class TradingStack extends cdk.Stack {
           cachedMethods: cloudfront.CachedMethods.CACHE_GET_HEAD_OPTIONS,
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
           originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
-          responseHeadersPolicy: cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
+          responseHeadersPolicy:
+            cloudfront.ResponseHeadersPolicy.CORS_ALLOW_ALL_ORIGINS,
         },
         comment: `CloudFront distribution for ${appName} images in ${envName}`,
         priceClass: cloudfront.PriceClass.PRICE_CLASS_200,
@@ -107,6 +111,19 @@ export class TradingStack extends cdk.Stack {
       `${appName}TransactionsTable${envName}`,
       {
         tableName: `${appName}-transactions-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'transactionId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY, // DESTROY for dev, RETAIN for prod
+        stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES, // Optional: if you need streams
+      },
+    );
+    // DynamoDB Table for simulation train
+    const simulationTrainTable = new dynamodb.Table(
+      this,
+      `${appName}SimulationTrainTable${envName}`,
+      {
+        tableName: `${appName}-simulation-train-${envName.toLowerCase()}`,
         partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
         sortKey: { name: 'transactionId', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -175,6 +192,7 @@ export class TradingStack extends cdk.Stack {
           IMAGE_BUCKET_NAME: imageBucket.bucketName,
           CLOUDFRONT_DOMAIN_NAME: distribution.distributionDomainName,
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
+          SIMULATION_TRAIN_TABLE_NAME: simulationTrainTable.tableName,
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
@@ -185,6 +203,7 @@ export class TradingStack extends cdk.Stack {
     // Grant Lambda permissions
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
+    simulationTrainTable.grantReadWriteData(fn);
     // Cognito permissions are typically handled by the AWS SDK using the pool/client IDs
 
     const endpoint = new apigw.LambdaRestApi(
@@ -218,6 +237,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TRANSACTIONS_TABLE_NAME', {
       value: transactionsTable.tableName,
       description: `Name of the DynamoDB table for transactions in ${appName} ${envName}`,
+    });
+    
+    new cdk.CfnOutput(this, 'SIMULATION_TRAIN_TABLE_NAME', {
+      value: simulationTrainTable.tableName,
+      description: `Name of the DynamoDB table for simulation train in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'USER_POOL_ID', {
