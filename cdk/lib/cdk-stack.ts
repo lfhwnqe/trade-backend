@@ -8,7 +8,7 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
-// import * as iam from 'aws-cdk-lib/aws-iam'; // iam is defined but never used.
+import * as iam from 'aws-cdk-lib/aws-iam';
 
 export interface TradingStackProps extends cdk.StackProps {
   /**
@@ -204,7 +204,23 @@ export class TradingStack extends cdk.Stack {
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
     simulationTrainTable.grantReadWriteData(fn);
-    // Cognito permissions are typically handled by the AWS SDK using the pool/client IDs
+    
+    // 授予Lambda对Cognito用户池的权限
+    fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: [
+          'cognito-idp:ListUsers',
+          'cognito-idp:AdminGetUser',
+          'cognito-idp:AdminAddUserToGroup',
+          'cognito-idp:AdminEnableUser',
+          'cognito-idp:AdminDisableUser',
+          'cognito-idp:AdminUpdateUserAttributes',
+          'cognito-idp:AdminInitiateAuth',
+          'cognito-idp:AdminRespondToAuthChallenge'
+        ],
+        resources: [userPool.userPoolArn],
+      })
+    );
 
     const endpoint = new apigw.LambdaRestApi(
       this,
