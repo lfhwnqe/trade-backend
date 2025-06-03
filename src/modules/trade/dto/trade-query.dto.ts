@@ -57,6 +57,14 @@ export class TradeQueryDto {
   tradeType?: string;
 
   @IsOptional()
+  @IsString()
+  dateFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  dateTo?: string;
+
+  @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => DateTimeRangeDto)

@@ -242,6 +242,8 @@ export class TradeService {
       tradeResult,
       dateTimeRange,
       tradeType,
+      dateFrom,
+      dateTo,
     } = dto;
     pageSize = limit ?? pageSize ?? 20;
 
@@ -250,6 +252,8 @@ export class TradeService {
         TableName: this.tableName,
         KeyConditionExpression: 'userId = :userId',
         ExpressionAttributeValues: { ':userId': userId },
+        // 设置 ScanIndexForward 为 false，使结果按创建时间降序排列（从最新到最旧）
+        ScanIndexForward: false,
       });
 
       let items = (result.Items || []) as Trade[];
@@ -269,16 +273,69 @@ export class TradeService {
         items = items.filter((t) => t.status === tradeStatus);
       if (tradeResult && tradeResult !== 'all')
         items = items.filter((t) => t.tradeResult === tradeResult);
+      // 处理日期范围查询 - 支持两种方式：dateTimeRange 对象或 dateFrom/dateTo 参数
+      let fromDate = '';
+      let toDate = '';
+      
+      // 处理 dateTimeRange 对象
       if (dateTimeRange && (dateTimeRange.from || dateTimeRange.to)) {
+        if (dateTimeRange.from) {
+          try {
+            fromDate = new Date(dateTimeRange.from).toISOString().split('T')[0];
+          } catch (e) {
+            console.error('Invalid dateTimeRange.from:', dateTimeRange.from);
+          }
+        }
+        
+        if (dateTimeRange.to) {
+          try {
+            const endDate = new Date(dateTimeRange.to);
+            endDate.setHours(23, 59, 59, 999);
+            toDate = endDate.toISOString();
+          } catch (e) {
+            console.error('Invalid dateTimeRange.to:', dateTimeRange.to);
+          }
+        }
+      }
+      
+      // 处理直接传入的 dateFrom/dateTo 参数（优先级高于 dateTimeRange）
+      if (dateFrom) {
+        try {
+          fromDate = new Date(dateFrom).toISOString().split('T')[0];
+        } catch (e) {
+          console.error('Invalid dateFrom:', dateFrom);
+        }
+      }
+      
+      if (dateTo) {
+        try {
+          const endDate = new Date(dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          toDate = endDate.toISOString();
+        } catch (e) {
+          console.error('Invalid dateTo:', dateTo);
+        }
+      }
+      
+      // 应用日期过滤
+      if (fromDate || toDate) {
         items = items.filter((t) => {
-          const createdAt = t.createdAt || t.analysisTime || '';
-          const from = dateTimeRange.from
-            ? new Date(dateTimeRange.from).toISOString()
-            : '';
-          const to = dateTimeRange.to
-            ? new Date(dateTimeRange.to).toISOString()
-            : '';
-          return (!from || createdAt >= from) && (!to || createdAt <= to);
+          // 使用 createdAt 或 analysisTime 作为比较字段
+          const itemDate = t.createdAt || t.analysisTime || '';
+          if (!itemDate) return true; // 如果记录没有日期，则默认显示
+          
+          // 只有开始日期
+          if (fromDate && !toDate) {
+            return itemDate >= fromDate;
+          }
+          
+          // 只有结束日期
+          if (!fromDate && toDate) {
+            return itemDate <= toDate;
+          }
+          
+          // 同时有开始和结束日期
+          return itemDate >= fromDate && itemDate <= toDate;
         });
       }
 
