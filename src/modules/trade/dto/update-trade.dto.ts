@@ -43,6 +43,13 @@ export class UpdateTradeDto {
   })
   @IsDateString({ strict: true })
   analysisTime: string;
+
+  @ApiProperty({
+    description: '交易标的',
+    example: 'eth',
+  })
+  @IsString()
+  tradeSubject: string;
   
   // ===== 交易状态 =====
   @ApiProperty({ 

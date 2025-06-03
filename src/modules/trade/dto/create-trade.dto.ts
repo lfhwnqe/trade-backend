@@ -107,7 +107,7 @@ export class CreateTradeDto {
   })
   @IsDateString({ strict: true })
   analysisTime: string;
-  
+
   // ===== 交易类型 =====
   @ApiProperty({
     description: '交易类型',
@@ -128,10 +128,10 @@ export class CreateTradeDto {
   status: TradeStatus;
 
   // ===== 入场前分析 =====
-  @ApiProperty({ 
-    description: '成交量分布图，最多5张图', 
+  @ApiProperty({
+    description: '成交量分布图，最多5张图',
     type: [ImageResource],
-    maxItems: 5
+    maxItems: 5,
   })
   @IsArray()
   @ValidateNested({ each: true })
@@ -154,13 +154,20 @@ export class CreateTradeDto {
   @Type(() => Number)
   vah: number;
 
-  @ApiProperty({ 
-    description: '其他关键价格点', 
-    example: '日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2' 
+  @ApiProperty({
+    description: '其他关键价格点',
+    example: '日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2',
   })
   @IsString()
   @IsOptional()
   keyPriceLevels: string;
+
+  @ApiProperty({
+    description: '交易标的',
+    example: 'eth',
+  })
+  @IsString()
+  tradeSubject: string;
 
   @ApiProperty({
     description: '市场结构判断',
@@ -177,10 +184,10 @@ export class CreateTradeDto {
   @IsString()
   marketStructureAnalysis: string;
 
-  @ApiProperty({ 
-    description: '预计路径图片', 
+  @ApiProperty({
+    description: '预计路径图片',
     type: [ImageResource],
-    maxItems: 5
+    maxItems: 5,
   })
   @IsArray()
   @ValidateNested({ each: true })
@@ -197,26 +204,26 @@ export class CreateTradeDto {
   @IsOptional()
   expectedPathAnalysis: string;
 
-  @ApiProperty({ 
-    description: '入场计划A', 
-    type: EntryPlan 
+  @ApiProperty({
+    description: '入场计划A',
+    type: EntryPlan,
   })
   @ValidateNested()
   @Type(() => EntryPlan)
   entryPlanA: EntryPlan;
 
-  @ApiProperty({ 
-    description: '入场计划B', 
-    type: EntryPlan 
+  @ApiProperty({
+    description: '入场计划B',
+    type: EntryPlan,
   })
   @ValidateNested()
   @Type(() => EntryPlan)
   @IsOptional()
   entryPlanB: EntryPlan;
 
-  @ApiProperty({ 
-    description: '入场计划C', 
-    type: EntryPlan 
+  @ApiProperty({
+    description: '入场计划C',
+    type: EntryPlan,
   })
   @ValidateNested()
   @Type(() => EntryPlan)
@@ -227,7 +234,9 @@ export class CreateTradeDto {
   @ApiProperty({ description: '入场价格', example: 146.5 })
   @IsNumber()
   @Type(() => Number)
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   entryPrice: number;
 
   @ApiProperty({
@@ -235,7 +244,9 @@ export class CreateTradeDto {
     example: '2025-05-23T09:30:00+08:00',
   })
   @IsDateString({ strict: true })
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   entryTime: string;
 
   @ApiProperty({
@@ -244,19 +255,25 @@ export class CreateTradeDto {
     example: EntryDirection.LONG,
   })
   @IsEnum(EntryDirection)
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   entryDirection: EntryDirection;
 
   @ApiProperty({ description: '止损点', example: 145.0 })
   @IsNumber()
   @Type(() => Number)
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   stopLoss: number;
 
   @ApiProperty({ description: '止盈点', example: 149.5 })
   @IsNumber()
   @Type(() => Number)
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   takeProfit: number;
 
   @ApiProperty({
@@ -264,7 +281,9 @@ export class CreateTradeDto {
     example: '价格回调至支撑位，并且成交量有收缩迹象',
   })
   @IsString()
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   entryReason: string;
 
   @ApiProperty({
@@ -272,22 +291,27 @@ export class CreateTradeDto {
     example: '价格达到目标位，成交量有很大的放大',
   })
   @IsString()
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   exitReason: string;
 
   @ApiProperty({
     description: '交易过程中心态记录',
-    example: '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',
+    example:
+      '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',
   })
   @IsString()
-  @ValidateIf(o => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+  )
   mentalityNotes: string;
 
   // ===== 离场后分析 =====
   @ApiProperty({ description: '离场价格', example: 148.7 })
   @IsNumber()
   @Type(() => Number)
-  @ValidateIf(o => o.status === TradeStatus.EXITED)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED)
   exitPrice: number;
 
   @ApiProperty({
@@ -295,7 +319,7 @@ export class CreateTradeDto {
     example: '2025-05-23T14:30:00+08:00',
   })
   @IsDateString({ strict: true })
-  @ValidateIf(o => o.status === TradeStatus.EXITED)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED)
   exitTime: string;
 
   @ApiProperty({
@@ -304,7 +328,7 @@ export class CreateTradeDto {
     example: TradeResult.PROFIT,
   })
   @IsEnum(TradeResult)
-  @ValidateIf(o => o.status === TradeStatus.EXITED)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED)
   tradeResult: TradeResult;
 
   @ApiProperty({
@@ -312,7 +336,7 @@ export class CreateTradeDto {
     example: true,
   })
   @IsBoolean()
-  @ValidateIf(o => o.status === TradeStatus.EXITED)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED)
   followedPlan: boolean;
 
   @ApiProperty({
@@ -320,13 +344,13 @@ export class CreateTradeDto {
     example: 'planA',
   })
   @IsString()
-  @ValidateIf(o => o.status === TradeStatus.EXITED && o.followedPlan === true)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED && o.followedPlan === true)
   followedPlanId: string;
 
-  @ApiProperty({ 
-    description: '实际行情路径图片', 
+  @ApiProperty({
+    description: '实际行情路径图片',
     type: [ImageResource],
-    maxItems: 5
+    maxItems: 5,
   })
   @IsArray()
   @ValidateNested({ each: true })
@@ -340,7 +364,7 @@ export class CreateTradeDto {
     example: '价格如预期在价值区内震荡后向上突破，但突破力度不及预期',
   })
   @IsString()
-  @ValidateIf(o => o.status === TradeStatus.EXITED)
+  @ValidateIf((o) => o.status === TradeStatus.EXITED)
   actualPathAnalysis: string;
 
   @ApiProperty({
@@ -353,16 +377,17 @@ export class CreateTradeDto {
 
   @ApiProperty({
     description: '需要总结的经验',
-    example: '1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化\n3. 止盈可以分批设置',
+    example:
+      '1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化\n3. 止盈可以分批设置',
   })
   @IsString()
   @IsOptional()
   lessonsLearned: string;
 
-  @ApiProperty({ 
-    description: '分析图，最多5张', 
+  @ApiProperty({
+    description: '分析图，最多5张',
     type: [ImageResource],
-    maxItems: 5
+    maxItems: 5,
   })
   @IsArray()
   @ValidateNested({ each: true })
@@ -388,7 +413,7 @@ export class CreateTradeDto {
     description: '交易分级，高/中/低',
     enum: TradeGrade,
     example: TradeGrade.MEDIUM,
-    required: false
+    required: false,
   })
   @IsEnum(TradeGrade)
   @IsOptional()
@@ -398,7 +423,7 @@ export class CreateTradeDto {
   @ApiProperty({
     description: '分析是否过期，由用户手动标记',
     example: false,
-    required: false
+    required: false,
   })
   @IsBoolean()
   @IsOptional()

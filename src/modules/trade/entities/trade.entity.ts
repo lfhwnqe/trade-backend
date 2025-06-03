@@ -23,7 +23,8 @@ export interface Trade {
 
   // ===== 交易类型 =====
   tradeType: TradeType; // 交易类型: 模拟交易/真实交易
-
+  // ===== 交易标的 =====
+  tradeSubject: string; // 交易标的：eth btc
   // ========== 交易重要性分级 ==========
   grade?: TradeGrade; // 交易分级，高/中/低
 

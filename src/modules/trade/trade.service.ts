@@ -63,6 +63,7 @@ export class TradeService {
       transactionId,
       userId,
       tradeType: dto.tradeType,
+      tradeSubject: dto.tradeSubject,
       grade: dto.grade,
       analysisTime: dto.analysisTime, // 行情分析时间
       // ===== 交易状态 =====
@@ -257,6 +258,11 @@ export class TradeService {
       });
 
       let items = (result.Items || []) as Trade[];
+      
+      // 确保按照 createdAt 降序排序
+      items.sort((a, b) => {
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
 
       // u4f7fu7528 tradeType u53c2u6570u8fdbu884cu8fc7u6ee4uff0cu4f18u5148u7ea7u9ad8u4e8e type u53c2u6570
       if (tradeType && tradeType !== 'all')
