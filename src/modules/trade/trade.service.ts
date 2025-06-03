@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from 'src/modules/common/config.service';
+import { TradeQueryDto } from './dto/trade-query.dto';
 
 @Injectable()
 export class TradeService {
@@ -61,6 +62,8 @@ export class TradeService {
     const newTrade: Trade = {
       transactionId,
       userId,
+      tradeType: dto.tradeType,
+      grade: dto.grade,
       analysisTime: dto.analysisTime, // 行情分析时间
       // ===== 交易状态 =====
       status: dto.status,
@@ -116,7 +119,7 @@ export class TradeService {
       throw new Error('交易创建失败');
     }
   }
-/**
+  /**
    * 获取本月已离场交易数与胜率统计
    * @param userId 用户ID
    * @returns { thisMonthClosedTradeCount, thisMonthWinRate }
@@ -141,14 +144,14 @@ export class TradeService {
       const items = (result.Items || []) as Trade[];
       // 只取本月记录
       const monthTrades = items.filter(
-        t =>
+        (t) =>
           t.createdAt >= monthStartStr &&
           t.createdAt < monthEndStr &&
-          t.status === '已离场'
+          t.status === '已离场',
       );
       const thisMonthClosedTradeCount = monthTrades.length;
       const winCount = monthTrades.filter(
-        t => t.tradeResult === '盈利'
+        (t) => t.tradeResult === '盈利',
       ).length;
       // 避免分母为0
       const thisMonthWinRate =
@@ -223,6 +226,82 @@ export class TradeService {
       throw new Error('交易列表获取失败');
     }
   }
+  /**
+   * 结合筛选条件的分页查询（POST）
+   */
+  async findByUserQuery(userId: string, dto: TradeQueryDto) {
+    let {
+      page = 1,
+      pageSize,
+      limit,
+      type,
+      grade,
+      marketStructure,
+      entryDirection,
+      tradeStatus,
+      tradeResult,
+      dateTimeRange,
+      tradeType,
+    } = dto;
+    pageSize = limit ?? pageSize ?? 20;
+
+    try {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+      });
+
+      let items = (result.Items || []) as Trade[];
+
+      // u4f7fu7528 tradeType u53c2u6570u8fdbu884cu8fc7u6ee4uff0cu4f18u5148u7ea7u9ad8u4e8e type u53c2u6570
+      if (tradeType && tradeType !== 'all')
+        items = items.filter((t) => t.tradeType === tradeType);
+      else if (type && type !== 'all')
+        items = items.filter((t) => t.tradeType === type);
+      if (grade && grade !== 'all')
+        items = items.filter((t) => t.grade === grade);
+      if (marketStructure && marketStructure !== 'all')
+        items = items.filter((t) => t.marketStructure === marketStructure);
+      if (entryDirection && entryDirection !== 'all')
+        items = items.filter((t) => t.entryDirection === entryDirection);
+      if (tradeStatus && tradeStatus !== 'all')
+        items = items.filter((t) => t.status === tradeStatus);
+      if (tradeResult && tradeResult !== 'all')
+        items = items.filter((t) => t.tradeResult === tradeResult);
+      if (dateTimeRange && (dateTimeRange.from || dateTimeRange.to)) {
+        items = items.filter((t) => {
+          const createdAt = t.createdAt || t.analysisTime || '';
+          const from = dateTimeRange.from
+            ? new Date(dateTimeRange.from).toISOString()
+            : '';
+          const to = dateTimeRange.to
+            ? new Date(dateTimeRange.to).toISOString()
+            : '';
+          return (!from || createdAt >= from) && (!to || createdAt <= to);
+        });
+      }
+
+      const total = items.length;
+      const totalPages = Math.ceil(total / pageSize) || 1;
+      const start = (page - 1) * pageSize;
+      const paged = items.slice(start, start + pageSize);
+
+      return {
+        success: true,
+        data: {
+          items: paged,
+          total,
+          page,
+          pageSize,
+          totalPages,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] findByUserQuery error:', error);
+      throw new Error('交易列表获取失败');
+    }
+  }
 
   async getTrade(userId: string, transactionId: string) {
     try {
@@ -261,7 +340,7 @@ export class TradeService {
       if (!oldRes.success) throw new NotFoundException('交易记录不存在');
       // 确保从 dto 更新的属性类型正确
       const existingTrade = oldRes.data as Trade;
-      
+
       // 直接将 dto 中的所有属性复制到 updatedTradeData 中
       // 由于我们已经更新了 DTO 和实体，字段名称现在是一致的
       const updatedTradeData: Partial<Trade> = {
@@ -316,9 +395,9 @@ export class TradeService {
    * @param filters 过滤条件
    */
   async findByUserIdWithFilters(
-    userId: string, 
-    page = 1, 
-    pageSize = 20, 
+    userId: string,
+    page = 1,
+    pageSize = 20,
     filters: {
       marketStructure?: string;
       entryDirection?: string;
@@ -326,16 +405,16 @@ export class TradeService {
       dateFrom?: string;
       dateTo?: string;
       tradeResult?: string;
-    } = {}
+    } = {},
   ) {
     try {
       // 构建过滤表达式
       let filterExpression = '';
       const expressionAttributeValues: Record<string, any> = {
-        ':userId': userId
+        ':userId': userId,
       };
       const expressionAttributeNames: Record<string, string> = {};
-      
+
       // 添加市场结构过滤条件
       if (filters.marketStructure && filters.marketStructure !== 'all') {
         filterExpression += filterExpression ? ' AND ' : '';
@@ -343,7 +422,7 @@ export class TradeService {
         expressionAttributeValues[':marketStructure'] = filters.marketStructure;
         expressionAttributeNames['#marketStructure'] = 'marketStructure';
       }
-      
+
       // 添加入场方向过滤条件
       if (filters.entryDirection && filters.entryDirection !== 'all') {
         filterExpression += filterExpression ? ' AND ' : '';
@@ -351,7 +430,7 @@ export class TradeService {
         expressionAttributeValues[':entryDirection'] = filters.entryDirection;
         expressionAttributeNames['#entryDirection'] = 'entryDirection';
       }
-      
+
       // 添加交易状态过滤条件
       if (filters.status && filters.status !== 'all') {
         filterExpression += filterExpression ? ' AND ' : '';
@@ -359,7 +438,7 @@ export class TradeService {
         expressionAttributeValues[':status'] = filters.status;
         expressionAttributeNames['#status'] = 'status';
       }
-      
+
       // 添加交易结果过滤条件
       if (filters.tradeResult && filters.tradeResult !== 'all') {
         filterExpression += filterExpression ? ' AND ' : '';
@@ -367,7 +446,7 @@ export class TradeService {
         expressionAttributeValues[':tradeResult'] = filters.tradeResult;
         expressionAttributeNames['#tradeResult'] = 'tradeResult';
       }
-      
+
       // 添加日期范围过滤条件 (使用 createdAt 字段)
       if (filters.dateFrom) {
         filterExpression += filterExpression ? ' AND ' : '';
@@ -375,11 +454,12 @@ export class TradeService {
         expressionAttributeValues[':dateFrom'] = filters.dateFrom;
         expressionAttributeNames['#createdAt'] = 'createdAt';
       }
-      
+
       if (filters.dateTo) {
         filterExpression += filterExpression ? ' AND ' : '';
         filterExpression += '#createdAt <= :dateTo';
-        expressionAttributeValues[':dateTo'] = filters.dateTo + 'T23:59:59.999Z';  // 设置为当天结束时间
+        expressionAttributeValues[':dateTo'] =
+          filters.dateTo + 'T23:59:59.999Z'; // 设置为当天结束时间
         if (!expressionAttributeNames['#createdAt']) {
           expressionAttributeNames['#createdAt'] = 'createdAt';
         }
@@ -392,12 +472,12 @@ export class TradeService {
         ExpressionAttributeValues: expressionAttributeValues,
         Select: 'COUNT',
       };
-      
+
       if (filterExpression) {
         countParams.FilterExpression = filterExpression;
         countParams.ExpressionAttributeNames = expressionAttributeNames;
       }
-      
+
       const countResult = await this.db.query(countParams);
       const total = countResult.Count || 0;
       const totalPages = Math.ceil(total / pageSize);
@@ -421,14 +501,14 @@ export class TradeService {
         KeyConditionExpression: 'userId = :userId',
         ExpressionAttributeValues: expressionAttributeValues,
         Limit: pageSize,
-        ScanIndexForward: false,  // 按时间倒序排序
+        ScanIndexForward: false, // 按时间倒序排序
       };
-      
+
       if (filterExpression) {
         queryParams.FilterExpression = filterExpression;
         queryParams.ExpressionAttributeNames = expressionAttributeNames;
       }
-      
+
       const result = await this.db.query(queryParams);
       const mappedItems = result.Items as Trade[];
 
@@ -443,7 +523,10 @@ export class TradeService {
         },
       };
     } catch (error) {
-      console.error('[TradeService] findByUserIdWithFilters error:', JSON.stringify(error));
+      console.error(
+        '[TradeService] findByUserIdWithFilters error:',
+        JSON.stringify(error),
+      );
       throw new Error('交易列表获取失败');
     }
   }
