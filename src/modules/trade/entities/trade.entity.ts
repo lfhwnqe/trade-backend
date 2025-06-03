@@ -6,6 +6,7 @@ import {
   ImageResource,
   EntryPlan,
   TradeGrade,
+  TradeType,
 } from '../dto/create-trade.dto';
 
 /**
@@ -19,6 +20,9 @@ export interface Trade {
 
   // ===== 交易状态 =====
   status: TradeStatus; // 交易状态: 已分析/已入场/已离场
+
+  // ===== 交易类型 =====
+  tradeType: TradeType; // 交易类型: 模拟交易/真实交易
 
   // ========== 交易重要性分级 ==========
   grade?: TradeGrade; // 交易分级，高/中/低

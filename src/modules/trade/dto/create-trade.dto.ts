@@ -15,6 +15,12 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
+// 交易类型枚举
+export enum TradeType {
+  SIMULATION = '模拟交易',
+  REAL = '真实交易',
+}
+
 // 市场结构枚举
 export enum MarketStructure {
   BALANCED = '震荡',
@@ -102,8 +108,18 @@ export class CreateTradeDto {
   @IsDateString({ strict: true })
   analysisTime: string;
   
+  // ===== 交易类型 =====
+  @ApiProperty({
+    description: '交易类型',
+    enum: TradeType,
+    example: TradeType.SIMULATION,
+    required: true,
+  })
+  @IsEnum(TradeType)
+  tradeType: TradeType;
+
   // ===== 交易状态 =====
-  @ApiProperty({ 
+  @ApiProperty({
     description: '交易状态',
     enum: TradeStatus,
     example: TradeStatus.ANALYZED,

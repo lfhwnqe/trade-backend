@@ -20,11 +20,22 @@ import {
   TradeStatus,
   ImageResource,
   EntryPlan,
+  TradeType,
 } from './create-trade.dto';
 import { TradeGrade } from './create-trade.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateTradeDto {
+  @ApiProperty({
+    description: '交易类型',
+    enum: TradeType,
+    example: TradeType.SIMULATION,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(TradeType)
+  tradeType?: TradeType;
+
   @ApiProperty({
     description: '行情分析时间',
     example: '2025-05-23T09:30:00+08:00',
