@@ -21,6 +21,7 @@ import {
   ImageResource,
   EntryPlan,
 } from './create-trade.dto';
+import { TradeGrade } from './create-trade.dto';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateTradeDto {
@@ -68,6 +69,27 @@ export class UpdateTradeDto {
   @IsNumber()
   @Type(() => Number)
   val?: number;
+
+  // ========== 新增：交易重要性分级 ==========
+  @ApiProperty({
+    description: '交易分级，高/中/低',
+    enum: TradeGrade,
+    example: TradeGrade.MEDIUM,
+    required: false
+  })
+  @IsOptional()
+  @IsEnum(TradeGrade)
+  grade?: TradeGrade;
+
+  // ========== 新增：分析是否过期 ==========
+  @ApiProperty({
+    description: '分析是否过期，由用户手动标记',
+    example: false,
+    required: false
+  })
+  @IsOptional()
+  @IsBoolean()
+  analysisExpired?: boolean;
 
   @ApiProperty({ description: '价值区上沿价格', example: 150.5, required: false })
   @IsOptional()

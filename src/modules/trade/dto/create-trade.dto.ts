@@ -42,6 +42,13 @@ export enum TradeStatus {
   EXITED = '已离场',
 }
 
+// 交易重要性分级枚举
+export enum TradeGrade {
+  HIGH = '高',
+  MEDIUM = '中',
+  LOW = '低',
+}
+
 // 图片资源接口
 export class ImageResource {
   @ApiProperty({
@@ -359,4 +366,25 @@ export class CreateTradeDto {
   @IsString()
   @IsOptional()
   riskRewardRatio: string;
+
+  // ========== 新增：交易重要性分级 ==========
+  @ApiProperty({
+    description: '交易分级，高/中/低',
+    enum: TradeGrade,
+    example: TradeGrade.MEDIUM,
+    required: false
+  })
+  @IsEnum(TradeGrade)
+  @IsOptional()
+  grade: TradeGrade;
+
+  // ========== 新增：分析是否过期 ==========
+  @ApiProperty({
+    description: '分析是否过期，由用户手动标记',
+    example: false,
+    required: false
+  })
+  @IsBoolean()
+  @IsOptional()
+  analysisExpired: boolean;
 }

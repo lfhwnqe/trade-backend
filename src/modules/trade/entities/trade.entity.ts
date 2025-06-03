@@ -5,6 +5,7 @@ import {
   TradeStatus,
   ImageResource,
   EntryPlan,
+  TradeGrade,
 } from '../dto/create-trade.dto';
 
 /**
@@ -18,6 +19,12 @@ export interface Trade {
 
   // ===== 交易状态 =====
   status: TradeStatus; // 交易状态: 已分析/已入场/已离场
+
+  // ========== 交易重要性分级 ==========
+  grade?: TradeGrade; // 交易分级，高/中/低
+
+  // ========== 分析是否过期 ==========
+  analysisExpired?: boolean; // 分析是否过期，由用户手动标记
 
   // ===== 入场前分析 =====
   volumeProfileImages: ImageResource[]; // 成交量分布图，最多5张图

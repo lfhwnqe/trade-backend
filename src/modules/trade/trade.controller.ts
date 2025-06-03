@@ -27,16 +27,16 @@ import {
 @Controller('trade')
 export class TradeController {
   constructor(private readonly tradeService: TradeService) {}
-// 首页统计 GET /trade/stats
-@ApiOperation({ summary: '获取本月已离场交易数和胜率' })
-@ApiResponse({ status: 200, description: '统计数据获取成功' })
-@Get('stats')
-async getStats(@Req() req: Request) {
-  const userId = (req as any).user?.sub;
-  if (!userId) throw new NotFoundException('用户信息异常');
-  const data = await this.tradeService.getThisMonthStats(userId);
-  return { success: true, data };
-}
+  // 首页统计 GET /trade/stats
+  @ApiOperation({ summary: '获取本月已离场交易数和胜率' })
+  @ApiResponse({ status: 200, description: '统计数据获取成功' })
+  @Get('stats')
+  async getStats(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const data = await this.tradeService.getThisMonthStats(userId);
+    return { success: true, data };
+  }
 
   // 创建交易记录
   @ApiOperation({ summary: '创建交易记录' })
@@ -87,12 +87,47 @@ async getStats(@Req() req: Request) {
       properties: {
         page: { type: 'number', example: 1 },
         pageSize: { type: 'number', example: 20 },
-        marketStructure: { type: 'string', example: '震荡', description: '市场结构' },
-        entryDirection: { type: 'string', example: '多', description: '交易方向' },
-        tradeStatus: { type: 'string', example: '已离场', description: '交易状态' },
-        dateFrom: { type: 'string', example: '2025-01-01', description: '开始日期' },
-        dateTo: { type: 'string', example: '2025-05-29', description: '结束日期' },
-        tradeResult: { type: 'string', example: '盈利', description: '交易结果' }
+        marketStructure: {
+          type: 'string',
+          example: '震荡',
+          description: '市场结构',
+        },
+        entryDirection: {
+          type: 'string',
+          example: '多',
+          description: '交易方向',
+        },
+        tradeStatus: {
+          type: 'string',
+          example: '已离场',
+          description: '交易状态',
+        },
+        grade: {
+          type: 'string',
+          enum: ['高', '中', '低'],
+          example: '高',
+          description: '交易分级',
+        },
+        analysisExpired: {
+          type: 'boolean',
+          example: false,
+          description: '分析是否过期',
+        },
+        dateFrom: {
+          type: 'string',
+          example: '2025-01-01',
+          description: '开始日期',
+        },
+        dateTo: {
+          type: 'string',
+          example: '2025-05-29',
+          description: '结束日期',
+        },
+        tradeResult: {
+          type: 'string',
+          example: '盈利',
+          description: '交易结果',
+        },
       },
     },
   })
@@ -101,30 +136,39 @@ async getStats(@Req() req: Request) {
   async findAllPost(@Req() req: Request) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    
+
     // 确保 req.body 存在，并提取查询参数
     const body = req.body || {};
-    const { 
-      page, 
-      pageSize, 
-      marketStructure, 
-      entryDirection, 
-      tradeStatus, 
-      dateFrom, 
+    const {
+      page,
+      pageSize,
+      marketStructure,
+      entryDirection,
+      tradeStatus,
+      grade,
+      analysisExpired,
+      dateFrom,
       dateTo,
-      tradeResult 
+      tradeResult,
     } = body;
-    
+
     const p = page ? parseInt(String(page), 10) : 1;
     const ps = pageSize ? parseInt(String(pageSize), 10) : 20;
-    
+
     try {
       // 如果没有任何过滤条件，则使用基本查询方法
-      if (!marketStructure && !entryDirection && !tradeStatus && !dateFrom && !dateTo && !tradeResult) {
+      if (
+        !marketStructure &&
+        !entryDirection &&
+        !tradeStatus &&
+        !dateFrom &&
+        !dateTo &&
+        !tradeResult
+      ) {
         const result = await this.tradeService.findByUserId(userId, p, ps);
         return result;
       }
-      
+
       // 构建查询条件
       const queryParams = {
         marketStructure,
@@ -132,10 +176,15 @@ async getStats(@Req() req: Request) {
         status: tradeStatus,
         dateFrom,
         dateTo,
-        tradeResult
+        tradeResult,
       };
-      
-      const result = await this.tradeService.findByUserIdWithFilters(userId, p, ps, queryParams);
+
+      const result = await this.tradeService.findByUserIdWithFilters(
+        userId,
+        p,
+        ps,
+        queryParams,
+      );
       return result;
     } catch (error) {
       console.error('[TradeController] findAllPost error:', error);
