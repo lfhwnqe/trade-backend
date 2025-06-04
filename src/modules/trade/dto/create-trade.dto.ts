@@ -26,6 +26,8 @@ export enum MarketStructure {
   BALANCED = '震荡',
   IMBALANCED = '趋势',
   UNSEEN = '暂无法判断',
+  STOP = '停止',
+  TRANSITION = '转换',
 }
 
 // 入场方向枚举
