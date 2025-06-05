@@ -4,10 +4,9 @@ import { UserModule } from './modules/user/user.module';
 import { TradeModule } from './modules/trade/trade.module';
 import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
-import { SimulationTrainModule } from './modules/simulation-train/simulation-train.module';
 
 @Module({
-  imports: [CommonModule, UserModule, TradeModule, ImageModule, SimulationTrainModule],
+  imports: [CommonModule, UserModule, TradeModule, ImageModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
