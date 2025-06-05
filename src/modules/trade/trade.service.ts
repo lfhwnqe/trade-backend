@@ -457,6 +457,50 @@ export class TradeService {
    * @param pageSize 每页大小
    * @param filters 过滤条件
    */
+  /**
+   * 复制交易记录
+   * @param userId 用户ID
+   * @param transactionId 要复制的交易ID
+   * @returns 复制后的新交易记录
+   */
+  async copyTrade(userId: string, transactionId: string) {
+    try {
+      // 获取原始交易记录
+      const originalTradeRes = await this.getTrade(userId, transactionId);
+      if (!originalTradeRes.success) {
+        throw new NotFoundException('交易记录不存在');
+      }
+
+      const originalTrade = originalTradeRes.data as Trade;
+      const now = new Date().toISOString();
+      const newTransactionId = uuidv4();
+
+      // 创建新的交易记录，复制原始交易的所有数据
+      const newTrade: Trade = {
+        ...originalTrade,
+        transactionId: newTransactionId,  // 新的交易ID
+        analysisExpired: false,  // 将分析已过期字段设置为未过期
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      // 保存新的交易记录
+      await this.db.put({
+        TableName: this.tableName,
+        Item: newTrade,
+      });
+
+      return {
+        success: true,
+        message: '复制成功',
+        data: newTrade,
+      };
+    } catch (error) {
+      console.error('[TradeService] copyTrade error:', error);
+      throw new Error('交易复制失败');
+    }
+  }
+
   async findByUserIdWithFilters(
     userId: string,
     page = 1,

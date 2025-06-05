@@ -176,4 +176,19 @@ export class TradeController {
     const result = await this.tradeService.deleteTrade(userId, transactionId);
     return result;
   }
+
+  // 复制交易记录
+  @ApiOperation({ summary: '复制交易记录' })
+  @ApiParam({ name: 'transactionId', description: '要复制的交易ID' })
+  @ApiResponse({ status: 201, description: '复制成功' })
+  @Post(':transactionId/copy')
+  async copyTrade(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.copyTrade(userId, transactionId);
+    return result;
+  }
 }
