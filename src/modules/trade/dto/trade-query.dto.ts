@@ -1,4 +1,11 @@
-import { IsOptional, IsNumber, Min, IsString, ValidateNested, IsObject } from 'class-validator';
+import {
+  IsOptional,
+  IsNumber,
+  Min,
+  IsString,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class DateTimeRangeDto {

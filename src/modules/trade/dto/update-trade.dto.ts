@@ -50,24 +50,24 @@ export class UpdateTradeDto {
   })
   @IsString()
   tradeSubject: string;
-  
+
   // ===== 交易状态 =====
-  @ApiProperty({ 
+  @ApiProperty({
     description: '交易状态',
     enum: TradeStatus,
     example: TradeStatus.ANALYZED,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsEnum(TradeStatus)
   status?: TradeStatus;
 
   // ===== 入场前分析 =====
-  @ApiProperty({ 
-    description: '成交量分布图，最多5张图', 
+  @ApiProperty({
+    description: '成交量分布图，最多5张图',
     type: [ImageResource],
     maxItems: 5,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsArray()
@@ -76,13 +76,21 @@ export class UpdateTradeDto {
   @ArrayMaxSize(5)
   volumeProfileImages?: ImageResource[];
 
-  @ApiProperty({ description: '成交量分布图POC价格', example: 147.8, required: false })
+  @ApiProperty({
+    description: '成交量分布图POC价格',
+    example: 147.8,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
   poc?: number;
 
-  @ApiProperty({ description: '价值区下沿价格', example: 145.2, required: false })
+  @ApiProperty({
+    description: '价值区下沿价格',
+    example: 145.2,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
@@ -93,7 +101,7 @@ export class UpdateTradeDto {
     description: '交易分级，高/中/低',
     enum: TradeGrade,
     example: TradeGrade.MEDIUM,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsEnum(TradeGrade)
@@ -103,22 +111,26 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '分析是否过期，由用户手动标记',
     example: false,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsBoolean()
   analysisExpired?: boolean;
 
-  @ApiProperty({ description: '价值区上沿价格', example: 150.5, required: false })
+  @ApiProperty({
+    description: '价值区上沿价格',
+    example: 150.5,
+    required: false,
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)
   vah?: number;
 
-  @ApiProperty({ 
-    description: '其他关键价格点', 
+  @ApiProperty({
+    description: '其他关键价格点',
     example: '日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -128,7 +140,7 @@ export class UpdateTradeDto {
     description: '市场结构判断',
     enum: MarketStructure,
     example: MarketStructure.BALANCED,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsEnum(MarketStructure)
@@ -137,17 +149,17 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '市场结构详细分析',
     example: '市场处于平衡状态，价格在价值区内震荡，成交量集中在中间价位',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
   marketStructureAnalysis?: string;
 
-  @ApiProperty({ 
-    description: '预计路径图片', 
+  @ApiProperty({
+    description: '预计路径图片',
     type: [ImageResource],
     maxItems: 5,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsArray()
@@ -159,36 +171,36 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '预计路径分析',
     example: '预计价格将在价值区内震荡，随后向上突破价值区上沿',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
   expectedPathAnalysis?: string;
 
-  @ApiProperty({ 
-    description: '入场计划A', 
+  @ApiProperty({
+    description: '入场计划A',
     type: EntryPlan,
-    required: false
+    required: false,
   })
   @IsOptional()
   @ValidateNested()
   @Type(() => EntryPlan)
   entryPlanA?: EntryPlan;
 
-  @ApiProperty({ 
-    description: '入场计划B', 
+  @ApiProperty({
+    description: '入场计划B',
     type: EntryPlan,
-    required: false
+    required: false,
   })
   @IsOptional()
   @ValidateNested()
   @Type(() => EntryPlan)
   entryPlanB?: EntryPlan;
 
-  @ApiProperty({ 
-    description: '入场计划C', 
+  @ApiProperty({
+    description: '入场计划C',
     type: EntryPlan,
-    required: false
+    required: false,
   })
   @IsOptional()
   @ValidateNested()
@@ -205,7 +217,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '入场时间',
     example: '2025-05-23T09:30:00+08:00',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsDateString({ strict: true })
@@ -215,7 +227,7 @@ export class UpdateTradeDto {
     description: '入场多空方向',
     enum: EntryDirection,
     example: EntryDirection.LONG,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsEnum(EntryDirection)
@@ -236,7 +248,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '入场理由',
     example: '价格回调至支撑位，并且成交量有收缩迹象',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -245,7 +257,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '离场理由',
     example: '价格达到目标位，成交量有很大的放大',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -253,8 +265,9 @@ export class UpdateTradeDto {
 
   @ApiProperty({
     description: '交易过程中心态记录',
-    example: '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',
-    required: false
+    example:
+      '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -270,7 +283,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '离场时间',
     example: '2025-05-23T14:30:00+08:00',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsDateString({ strict: true })
@@ -280,7 +293,7 @@ export class UpdateTradeDto {
     description: '交易结果',
     enum: TradeResult,
     example: TradeResult.PROFIT,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsEnum(TradeResult)
@@ -289,7 +302,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '是否符合入场计划',
     example: true,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsBoolean()
@@ -298,18 +311,18 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '所遵循的交易计划ID',
     example: 'planA',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
-  @ValidateIf(o => o.followedPlan === true)
+  @ValidateIf((o) => o.followedPlan === true)
   followedPlanId?: string;
 
-  @ApiProperty({ 
-    description: '实际行情路径图片', 
+  @ApiProperty({
+    description: '实际行情路径图片',
     type: [ImageResource],
     maxItems: 5,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsArray()
@@ -321,7 +334,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '实际行情路径分析',
     example: '价格如预期在价值区内震荡后向上突破，但突破力度不及预期',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -330,7 +343,7 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '备注',
     example: '这次交易整体执行较好，但离场时机可以更优化',
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsString()
@@ -338,18 +351,19 @@ export class UpdateTradeDto {
 
   @ApiProperty({
     description: '需要总结的经验',
-    example: '1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化\n3. 止盈可以分批设置',
-    required: false
+    example:
+      '1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化\n3. 止盈可以分批设置',
+    required: false,
   })
   @IsOptional()
   @IsString()
   lessonsLearned?: string;
 
-  @ApiProperty({ 
-    description: '分析图，最多5张', 
+  @ApiProperty({
+    description: '分析图，最多5张',
     type: [ImageResource],
     maxItems: 5,
-    required: false
+    required: false,
   })
   @IsOptional()
   @IsArray()

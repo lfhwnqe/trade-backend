@@ -258,10 +258,12 @@ export class TradeService {
       });
 
       let items = (result.Items || []) as Trade[];
-      
+
       // 确保按照 createdAt 降序排序
       items.sort((a, b) => {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
       });
 
       // u4f7fu7528 tradeType u53c2u6570u8fdbu884cu8fc7u6ee4uff0cu4f18u5148u7ea7u9ad8u4e8e type u53c2u6570
@@ -282,7 +284,7 @@ export class TradeService {
       // 处理日期范围查询 - 支持两种方式：dateTimeRange 对象或 dateFrom/dateTo 参数
       let fromDate = '';
       let toDate = '';
-      
+
       // 处理 dateTimeRange 对象
       if (dateTimeRange && (dateTimeRange.from || dateTimeRange.to)) {
         if (dateTimeRange.from) {
@@ -292,7 +294,7 @@ export class TradeService {
             console.error('Invalid dateTimeRange.from:', dateTimeRange.from);
           }
         }
-        
+
         if (dateTimeRange.to) {
           try {
             const endDate = new Date(dateTimeRange.to);
@@ -303,7 +305,7 @@ export class TradeService {
           }
         }
       }
-      
+
       // 处理直接传入的 dateFrom/dateTo 参数（优先级高于 dateTimeRange）
       if (dateFrom) {
         try {
@@ -312,7 +314,7 @@ export class TradeService {
           console.error('Invalid dateFrom:', dateFrom);
         }
       }
-      
+
       if (dateTo) {
         try {
           const endDate = new Date(dateTo);
@@ -322,24 +324,24 @@ export class TradeService {
           console.error('Invalid dateTo:', dateTo);
         }
       }
-      
+
       // 应用日期过滤
       if (fromDate || toDate) {
         items = items.filter((t) => {
           // 使用 createdAt 或 analysisTime 作为比较字段
           const itemDate = t.createdAt || t.analysisTime || '';
           if (!itemDate) return true; // 如果记录没有日期，则默认显示
-          
+
           // 只有开始日期
           if (fromDate && !toDate) {
             return itemDate >= fromDate;
           }
-          
+
           // 只有结束日期
           if (!fromDate && toDate) {
             return itemDate <= toDate;
           }
-          
+
           // 同时有开始和结束日期
           return itemDate >= fromDate && itemDate <= toDate;
         });
@@ -478,8 +480,8 @@ export class TradeService {
       // 创建新的交易记录，复制原始交易的所有数据
       const newTrade: Trade = {
         ...originalTrade,
-        transactionId: newTransactionId,  // 新的交易ID
-        analysisExpired: false,  // 将分析已过期字段设置为未过期
+        transactionId: newTransactionId, // 新的交易ID
+        analysisExpired: false, // 将分析已过期字段设置为未过期
         createdAt: now,
         updatedAt: now,
       };
