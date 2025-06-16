@@ -119,6 +119,94 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    // RAG DynamoDB Tables
+
+    // 1. Documents Table (rag-documents)
+    const ragDocumentsTable = new dynamodb.Table(
+      this,
+      `${appName}RagDocumentsTable${envName}`,
+      {
+        tableName: `rag-documents-${envName.toLowerCase()}`,
+        partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+      },
+    );
+
+    // Add GSI for Documents Table: userId-createdAt-index
+    ragDocumentsTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Add GSI for Documents Table: status-createdAt-index
+    ragDocumentsTable.addGlobalSecondaryIndex({
+      indexName: 'status-createdAt-index',
+      partitionKey: { name: 'status', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // 2. Chat Sessions Table (rag-chat-sessions)
+    const ragChatSessionsTable = new dynamodb.Table(
+      this,
+      `${appName}RagChatSessionsTable${envName}`,
+      {
+        tableName: `rag-chat-sessions-${envName.toLowerCase()}`,
+        partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+      },
+    );
+
+    // Add GSI for Chat Sessions Table: userId-createdAt-index
+    ragChatSessionsTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // 3. Chat Messages Table (rag-chat-messages)
+    const ragChatMessagesTable = new dynamodb.Table(
+      this,
+      `${appName}RagChatMessagesTable${envName}`,
+      {
+        tableName: `rag-chat-messages-${envName.toLowerCase()}`,
+        partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'messageId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+      },
+    );
+
+    // Add GSI for Chat Messages Table: sessionId-timestamp-index
+    ragChatMessagesTable.addGlobalSecondaryIndex({
+      indexName: 'sessionId-timestamp-index',
+      partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'timestamp', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // 4. Analytics Table (rag-analytics)
+    const ragAnalyticsTable = new dynamodb.Table(
+      this,
+      `${appName}RagAnalyticsTable${envName}`,
+      {
+        tableName: `rag-analytics-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'date', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        pointInTimeRecovery: true,
+      },
+    );
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -182,6 +270,11 @@ export class TradingStack extends cdk.Stack {
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
+          // RAG DynamoDB Tables
+          RAG_DOCUMENTS_TABLE_NAME: ragDocumentsTable.tableName,
+          RAG_CHAT_SESSIONS_TABLE_NAME: ragChatSessionsTable.tableName,
+          RAG_CHAT_MESSAGES_TABLE_NAME: ragChatMessagesTable.tableName,
+          RAG_ANALYTICS_TABLE_NAME: ragAnalyticsTable.tableName,
         },
       },
     );
@@ -189,6 +282,12 @@ export class TradingStack extends cdk.Stack {
     // Grant Lambda permissions
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
+    
+    // Grant Lambda permissions for RAG tables
+    ragDocumentsTable.grantReadWriteData(fn);
+    ragChatSessionsTable.grantReadWriteData(fn);
+    ragChatMessagesTable.grantReadWriteData(fn);
+    ragAnalyticsTable.grantReadWriteData(fn);
 
     // 授予Lambda对Cognito用户池的权限
     fn.addToRolePolicy(
@@ -252,6 +351,27 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AWS_REGION', {
       value: region,
       description: `AWS Region for ${appName} ${envName}`,
+    });
+
+    // RAG DynamoDB Tables Outputs
+    new cdk.CfnOutput(this, 'RAG_DOCUMENTS_TABLE_NAME', {
+      value: ragDocumentsTable.tableName,
+      description: `Name of the DynamoDB table for RAG documents in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'RAG_CHAT_SESSIONS_TABLE_NAME', {
+      value: ragChatSessionsTable.tableName,
+      description: `Name of the DynamoDB table for RAG chat sessions in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'RAG_CHAT_MESSAGES_TABLE_NAME', {
+      value: ragChatMessagesTable.tableName,
+      description: `Name of the DynamoDB table for RAG chat messages in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'RAG_ANALYTICS_TABLE_NAME', {
+      value: ragAnalyticsTable.tableName,
+      description: `Name of the DynamoDB table for RAG analytics in ${appName} ${envName}`,
     });
   }
 }
