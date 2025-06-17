@@ -12,66 +12,25 @@ import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { DocumentType, Priority } from '../types/rag.types';
 
-export class CreateDocumentDto {
+export class DateRangeDto {
   @ApiProperty({
-    description: '文档标题',
-    example: '以太坊交易策略分析',
+    description: '开始时间',
+    example: '2024-01-01T00:00:00Z',
   })
   @IsString()
-  title: string;
+  from: string;
 
   @ApiProperty({
-    description: '文档类型',
-    enum: DocumentType,
-    example: DocumentType.KNOWLEDGE,
-  })
-  @IsEnum(DocumentType)
-  documentType: DocumentType;
-
-  @ApiProperty({
-    description: '文档内容（文本形式）',
-    example: '这是一份关于以太坊交易策略的详细分析文档...',
+    description: '结束时间',
+    example: '2024-12-31T23:59:59Z',
   })
   @IsString()
-  content: string;
-
-  @ApiProperty({
-    description: '内容类型',
-    example: 'text/plain',
-  })
-  @IsString()
-  contentType: string;
-
-  @ApiProperty({
-    description: '原始文件名',
-    example: 'eth-trading-strategy.md',
-    required: false,
-  })
-  @IsString()
-  @IsOptional()
-  originalFileName?: string;
-
-  @ApiProperty({
-    description: '文件大小（字节）',
-    example: 2048,
-    required: false,
-  })
-  @IsNumber()
-  @Min(0)
-  @IsOptional()
-  fileSize?: number;
-
-  @ApiProperty({
-    description: '文档元数据',
-    required: false,
-  })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => DocumentMetadataDto)
-  metadata?: DocumentMetadataDto;
+  to: string;
 }
-
 export class DocumentMetadataDto {
+  constructor() {
+    console.log('[DEBUG] DocumentMetadataDto 构造函数被调用');
+  }
   @ApiProperty({
     description: '文档来源',
     example: '交易策略研究报告',
@@ -147,18 +106,68 @@ export class DocumentMetadataDto {
   dateRange?: DateRangeDto;
 }
 
-export class DateRangeDto {
+
+
+// 添加调试日志以验证模块加载顺序
+console.log('[DEBUG] create-document.dto.ts 模块正在加载...');
+
+export class CreateDocumentDto {
   @ApiProperty({
-    description: '开始时间',
-    example: '2024-01-01T00:00:00Z',
+    description: '文档标题',
+    example: '以太坊交易策略分析',
   })
   @IsString()
-  from: string;
+  title: string;
 
   @ApiProperty({
-    description: '结束时间',
-    example: '2024-12-31T23:59:59Z',
+    description: '文档类型',
+    enum: DocumentType,
+    example: DocumentType.KNOWLEDGE,
+  })
+  @IsEnum(DocumentType)
+  documentType: DocumentType;
+
+  @ApiProperty({
+    description: '文档内容（文本形式）',
+    example: '这是一份关于以太坊交易策略的详细分析文档...',
   })
   @IsString()
-  to: string;
+  content: string;
+
+  @ApiProperty({
+    description: '内容类型',
+    example: 'text/plain',
+  })
+  @IsString()
+  contentType: string;
+
+  @ApiProperty({
+    description: '原始文件名',
+    example: 'eth-trading-strategy.md',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  originalFileName?: string;
+
+  @ApiProperty({
+    description: '文件大小（字节）',
+    example: 2048,
+    required: false,
+  })
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  fileSize?: number;
+
+  @ApiProperty({
+    description: '文档元数据',
+    required: false,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => DocumentMetadataDto)
+  metadata?: DocumentMetadataDto;
 }
+
+console.log('[DEBUG] CreateDocumentDto 类定义完成');
