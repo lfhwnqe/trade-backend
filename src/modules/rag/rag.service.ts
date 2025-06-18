@@ -110,7 +110,7 @@ export class RAGService {
       );
 
       // 5. 更新文档状态和分析结果
-      await this.metadataService.updateDocument(userId, documentId, {
+      const updateData = {
         status: DocumentStatus.COMPLETED,
         processingProgress: 100,
         embeddingIds,
@@ -120,19 +120,47 @@ export class RAGService {
           ...documentAnalysis,
           processedAt: new Date().toISOString(),
         },
+      };
+
+      this.logger.debug(`Updating document ${documentId} with processing results:`, {
+        status: updateData.status,
+        chunkCount: updateData.chunkCount,
+        embeddingIdsCount: embeddingIds.length,
+        totalTokens: updateData.totalTokens
       });
+
+      await this.metadataService.updateDocument(userId, documentId, updateData);
 
       this.logger.log(
         `Document processing completed for ${documentId}: ${chunks.length} chunks, ${embeddingIds.length} vectors`,
       );
     } catch (error) {
-      this.logger.error(`Document processing failed for ${documentId}`, error);
+      this.logger.error(`Document processing failed for ${documentId}`, {
+        error: error.message,
+        stack: error.stack,
+        userId,
+        documentId
+      });
 
       // 更新文档状态为失败
-      await this.metadataService.updateDocument(userId, documentId, {
-        status: DocumentStatus.FAILED,
-        errorMessage: error.message,
-      });
+      try {
+        const failureUpdateData = {
+          status: DocumentStatus.FAILED,
+          errorMessage: error.message,
+          processingProgress: 0,
+        };
+
+        this.logger.debug(`Updating document ${documentId} status to failed:`, failureUpdateData);
+        
+        await this.metadataService.updateDocument(userId, documentId, failureUpdateData);
+      } catch (updateError) {
+        this.logger.error(`Failed to update document status to failed for ${documentId}`, {
+          originalError: error.message,
+          updateError: updateError.message,
+          userId,
+          documentId
+        });
+      }
     }
   }
 

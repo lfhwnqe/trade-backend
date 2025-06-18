@@ -26,7 +26,18 @@ export class MetadataService {
     this.dynamoDBClient = new DynamoDBClient({
       region: this.configService.get('AWS_REGION') || 'us-east-1',
     });
-    this.docClient = DynamoDBDocumentClient.from(this.dynamoDBClient);
+    
+    // 配置 DynamoDB Document Client，自动移除 undefined 值
+    this.docClient = DynamoDBDocumentClient.from(this.dynamoDBClient, {
+      marshallOptions: {
+        removeUndefinedValues: true,
+        convertEmptyValues: false,
+        convertClassInstanceToMap: false,
+      },
+      unmarshallOptions: {
+        wrapNumbers: false,
+      },
+    });
 
     // 获取表名
     this.documentsTableName = this.configService.getOrThrow(
@@ -162,13 +173,22 @@ export class MetadataService {
     // 先验证文档存在且属于该用户
     await this.getDocument(userId, documentId);
 
+    // 清理 updates 对象，移除 undefined 值和无效字段
+    const cleanedUpdates = this.cleanUpdateData(updates);
+    
+    this.logger.debug(`Cleaned update data for document ${documentId}:`, {
+      originalKeys: Object.keys(updates),
+      cleanedKeys: Object.keys(cleanedUpdates),
+      hasUndefined: Object.values(updates).some(v => v === undefined)
+    });
+
     // 构建更新表达式
     const updateExpressions: string[] = [];
     const expressionAttributeNames: Record<string, string> = {};
     const expressionAttributeValues: Record<string, any> = {};
 
     // 动态构建更新表达式
-    Object.entries(updates).forEach(([key, value]) => {
+    Object.entries(cleanedUpdates).forEach(([key, value]) => {
       if (value !== undefined && key !== 'id' && key !== 'userId' && key !== 'documentId') {
         updateExpressions.push(`#${key} = :${key}`);
         expressionAttributeNames[`#${key}`] = key;
@@ -182,6 +202,19 @@ export class MetadataService {
     expressionAttributeValues[':updatedAt'] = now;
 
     try {
+      // 验证更新表达式不为空
+      if (updateExpressions.length === 0) {
+        this.logger.warn(`No valid fields to update for document ${documentId}`);
+        // 如果没有要更新的字段，直接返回当前文档
+        return await this.getDocument(userId, documentId);
+      }
+
+      this.logger.debug(`Updating document ${documentId} with expressions:`, {
+        updateExpressions,
+        expressionAttributeNames,
+        expressionAttributeValues: Object.keys(expressionAttributeValues)
+      });
+
       const result = await this.docClient.send(
         new UpdateCommand({
           TableName: this.documentsTableName,
@@ -193,11 +226,19 @@ export class MetadataService {
         }),
       );
 
-      this.logger.log(`Updated document ${documentId} for user ${userId}`);
+      this.logger.log(`Successfully updated document ${documentId} for user ${userId}`);
 
       return result.Attributes as DocumentEntity;
     } catch (error) {
-      this.logger.error('Failed to update document', error);
+      this.logger.error(`Failed to update document ${documentId}`, {
+        error: error.message,
+        stack: error.stack,
+        updateExpressions,
+        expressionAttributeNames,
+        expressionAttributeValues: Object.keys(expressionAttributeValues),
+        userId,
+        documentId
+      });
       throw error;
     }
   }
@@ -310,5 +351,57 @@ export class MetadataService {
       // 忽略更新访问时间的错误，不影响主要功能
       this.logger.warn('Failed to update last accessed time', error);
     }
+  }
+
+  /**
+   * 清理更新数据，移除 undefined 值和无效字段
+   */
+  private cleanUpdateData(updates: Partial<DocumentEntity>): Partial<DocumentEntity> {
+    const cleaned: Partial<DocumentEntity> = {};
+    
+    Object.entries(updates).forEach(([key, value]) => {
+      // 跳过 undefined 值
+      if (value === undefined) {
+        this.logger.debug(`Skipping undefined value for key: ${key}`);
+        return;
+      }
+      
+      // 跳过不应该更新的字段
+      if (key === 'id' || key === 'userId' || key === 'documentId' || key === 'createdAt') {
+        this.logger.debug(`Skipping protected field: ${key}`);
+        return;
+      }
+      
+      // 特殊处理嵌套对象
+      if (key === 'metadata' && typeof value === 'object' && value !== null) {
+        cleaned[key] = this.cleanMetadata(value as any);
+      } else {
+        cleaned[key] = value;
+      }
+    });
+    
+    return cleaned;
+  }
+
+  /**
+   * 清理元数据对象，移除 undefined 值
+   */
+  private cleanMetadata(metadata: any): any {
+    if (!metadata || typeof metadata !== 'object') {
+      return metadata;
+    }
+    
+    const cleaned: any = {};
+    Object.entries(metadata).forEach(([key, value]) => {
+      if (value !== undefined) {
+        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+          cleaned[key] = this.cleanMetadata(value);
+        } else {
+          cleaned[key] = value;
+        }
+      }
+    });
+    
+    return cleaned;
   }
 }
