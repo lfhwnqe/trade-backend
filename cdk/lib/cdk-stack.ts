@@ -114,7 +114,6 @@ export class TradingStack extends cdk.Stack {
         partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
         sortKey: { name: 'transactionId', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-        removalPolicy: cdk.RemovalPolicy.DESTROY, // DESTROY for dev, RETAIN for prod
         stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES, // Optional: if you need streams
       },
     );
@@ -129,7 +128,7 @@ export class TradingStack extends cdk.Stack {
         tableName: `rag-documents-${envName.toLowerCase()}`,
         partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+
         pointInTimeRecovery: true,
       },
     );
@@ -156,9 +155,12 @@ export class TradingStack extends cdk.Stack {
       `${appName}RagChatSessionsTable${envName}`,
       {
         tableName: `rag-chat-sessions-${envName.toLowerCase()}`,
-        partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+        partitionKey: {
+          name: 'sessionId',
+          type: dynamodb.AttributeType.STRING,
+        },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+
         pointInTimeRecovery: true,
       },
     );
@@ -177,10 +179,13 @@ export class TradingStack extends cdk.Stack {
       `${appName}RagChatMessagesTable${envName}`,
       {
         tableName: `rag-chat-messages-${envName.toLowerCase()}`,
-        partitionKey: { name: 'sessionId', type: dynamodb.AttributeType.STRING },
+        partitionKey: {
+          name: 'sessionId',
+          type: dynamodb.AttributeType.STRING,
+        },
         sortKey: { name: 'messageId', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+
         pointInTimeRecovery: true,
       },
     );
@@ -202,7 +207,7 @@ export class TradingStack extends cdk.Stack {
         partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
         sortKey: { name: 'date', type: dynamodb.AttributeType.STRING },
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
+
         pointInTimeRecovery: true,
       },
     );
@@ -227,7 +232,7 @@ export class TradingStack extends cdk.Stack {
           requireSymbols: true,
         },
         accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
-        removalPolicy: cdk.RemovalPolicy.DESTROY, // DESTROY for dev, RETAIN for prod
+        // DESTROY for dev, RETAIN for prod
       },
     );
 
@@ -282,7 +287,7 @@ export class TradingStack extends cdk.Stack {
     // Grant Lambda permissions
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
-    
+
     // Grant Lambda permissions for RAG tables
     ragDocumentsTable.grantReadWriteData(fn);
     ragChatSessionsTable.grantReadWriteData(fn);
