@@ -6,8 +6,9 @@ import { DocumentType, DocumentStatus, Priority } from '../types/rag.types';
  */
 export interface DocumentEntity {
   // 主键
-  userId: string; // 分区键 - 用户ID
-  documentId: string; // 排序键 - 文档ID
+  id: string; // 主键 - 文档ID（对应 DynamoDB 表的 partition key）
+  userId: string; // 用户ID（用于 GSI）
+  documentId: string; // 文档ID（保留为向后兼容）
 
   // 文档基本信息
   title: string; // 文档标题

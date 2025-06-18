@@ -50,8 +50,9 @@ export class MetadataService {
     const now = new Date().toISOString();
 
     const document: DocumentEntity = {
+      id: documentId, // 使用 documentId 作为主键
       userId,
-      documentId,
+      documentId, // 保留为向后兼容
       title: documentData.title,
       documentType: documentData.documentType,
       contentType: documentData.contentType,
@@ -97,7 +98,7 @@ export class MetadataService {
       const result = await this.docClient.send(
         new GetCommand({
           TableName: this.documentsTableName,
-          Key: { userId, documentId },
+          Key: { id: documentId }, // 使用 id 作为主键
         }),
       );
 
@@ -107,10 +108,18 @@ export class MetadataService {
         );
       }
 
-      // 更新最后访问时间
-      await this.updateLastAccessed(userId, documentId);
+      // 验证文档属于该用户
+      const document = result.Item as DocumentEntity;
+      if (document.userId !== userId) {
+        throw new NotFoundException(
+          `Document ${documentId} not found for user ${userId}`,
+        );
+      }
 
-      return result.Item as DocumentEntity;
+      // 更新最后访问时间
+      await this.updateLastAccessed(documentId);
+
+      return document;
     } catch (error) {
       if (error instanceof NotFoundException) {
         throw error;
@@ -130,6 +139,9 @@ export class MetadataService {
   ): Promise<DocumentEntity> {
     const now = new Date().toISOString();
 
+    // 先验证文档存在且属于该用户
+    await this.getDocument(userId, documentId);
+
     // 构建更新表达式
     const updateExpressions: string[] = [];
     const expressionAttributeNames: Record<string, string> = {};
@@ -137,7 +149,7 @@ export class MetadataService {
 
     // 动态构建更新表达式
     Object.entries(updates).forEach(([key, value]) => {
-      if (value !== undefined && key !== 'userId' && key !== 'documentId') {
+      if (value !== undefined && key !== 'id' && key !== 'userId' && key !== 'documentId') {
         updateExpressions.push(`#${key} = :${key}`);
         expressionAttributeNames[`#${key}`] = key;
         expressionAttributeValues[`:${key}`] = value;
@@ -153,7 +165,7 @@ export class MetadataService {
       const result = await this.docClient.send(
         new UpdateCommand({
           TableName: this.documentsTableName,
-          Key: { userId, documentId },
+          Key: { id: documentId }, // 使用 id 作为主键
           UpdateExpression: `SET ${updateExpressions.join(', ')}`,
           ExpressionAttributeNames: expressionAttributeNames,
           ExpressionAttributeValues: expressionAttributeValues,
@@ -175,10 +187,13 @@ export class MetadataService {
    */
   async deleteDocument(userId: string, documentId: string): Promise<void> {
     try {
+      // 先验证文档存在且属于该用户
+      await this.getDocument(userId, documentId);
+
       await this.docClient.send(
         new DeleteCommand({
           TableName: this.documentsTableName,
-          Key: { userId, documentId },
+          Key: { id: documentId }, // 使用 id 作为主键
         }),
       );
 
@@ -196,9 +211,12 @@ export class MetadataService {
     userId: string,
     filters?: DocumentFilter,
   ): Promise<DocumentEntity[]> {
+    this.logger.log(`Querying documents for userId: ${userId}`);
+    
     try {
       const params: any = {
         TableName: this.documentsTableName,
+        IndexName: 'userId-createdAt-index', // 使用 GSI
         KeyConditionExpression: 'userId = :userId',
         ExpressionAttributeValues: {
           ':userId': userId,
@@ -256,15 +274,12 @@ export class MetadataService {
   /**
    * 更新文档最后访问时间
    */
-  private async updateLastAccessed(
-    userId: string,
-    documentId: string,
-  ): Promise<void> {
+  private async updateLastAccessed(documentId: string): Promise<void> {
     try {
       await this.docClient.send(
         new UpdateCommand({
           TableName: this.documentsTableName,
-          Key: { userId, documentId },
+          Key: { id: documentId }, // 使用 id 作为主键
           UpdateExpression: 'SET lastAccessedAt = :timestamp',
           ExpressionAttributeValues: {
             ':timestamp': new Date().toISOString(),
