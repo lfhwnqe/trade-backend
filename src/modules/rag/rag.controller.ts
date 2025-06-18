@@ -10,6 +10,7 @@ import {
   Req,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -38,11 +39,96 @@ import {
   DocumentStatus,
 } from './types/rag.types';
 import { ApiResponse as BaseApiResponse } from '../../base/interfaces/response.interface';
+import { IsString } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
+// 简单测试查询DTO
+class SimpleTestQueryDto {
+  @ApiProperty({
+    description: '查询文本',
+    example: '这是一个简单的RAG测试查询',
+  })
+  @IsString()
+  query: string;
+
+  @ApiProperty({
+    description: '要上传的文本内容（可选）',
+    example: '这是要向量化并存储到Upstash的文本内容',
+    required: false,
+  })
+  @IsString()
+  content?: string;
+}
+
+// 简单测试响应DTO
+class SimpleTestResponseDto {
+  @ApiProperty({
+    description: '原始查询文本',
+    example: '这是一个简单的RAG测试查询',
+  })
+  query: string;
+
+  @ApiProperty({
+    description: '测试响应消息',
+    example: 'RAG系统测试成功',
+  })
+  message: string;
+
+  @ApiProperty({
+    description: '当前时间戳',
+    example: '2024-01-15T10:30:00Z',
+  })
+  timestamp: string;
+
+  @ApiProperty({
+    description: '模拟的搜索结果',
+    example: [
+      '模拟结果1：这是第一个测试结果',
+      '模拟结果2：这是第二个测试结果',
+      '模拟结果3：这是第三个测试结果'
+    ],
+  })
+  mockResults: string[];
+
+  @ApiProperty({
+    description: '系统状态',
+    example: 'healthy',
+  })
+  status: string;
+
+  @ApiProperty({
+    description: '向量化处理结果（如果提供了content）',
+    required: false,
+  })
+  vectorization?: {
+    // 向量化模型信息
+    model: string;
+    // 生成的向量ID
+    vectorId: string;
+    // 存储状态
+    storageStatus: 'success' | 'failed';
+    // token使用量
+    tokenUsage: {
+      inputTokens: number;
+      embeddingDimensions: number;
+    };
+    // 处理时间（毫秒）
+    processingTimeMs: number;
+    // 文本块信息
+    chunkInfo: {
+      chunkCount: number;
+      totalCharacters: number;
+      averageChunkSize: number;
+    };
+  };
+}
 
 @ApiTags('RAG 模块')
 @ApiBearerAuth()
 @Controller('rag')
 export class RAGController {
+  private readonly logger = new Logger(RAGController.name);
+
   constructor(
     private readonly ragService: RAGService,
     private readonly metadataService: MetadataService,
@@ -181,6 +267,62 @@ export class RAGController {
       success: true,
       data: result,
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  // ==================== 测试接口 ====================
+
+  @ApiOperation({
+    summary: 'RAG 简单测试接口',
+    description: '用于调试的简单RAG测试接口，返回固定的测试数据，不需要用户权限验证'
+  })
+  @ApiBody({ type: SimpleTestQueryDto })
+  @ApiResponse({
+    status: 200,
+    description: '测试成功',
+    type: SimpleTestResponseDto
+  })
+  @Post('simple-test')
+  async simpleTest(
+    @Body() dto: SimpleTestQueryDto,
+  ): Promise<BaseApiResponse<SimpleTestResponseDto>> {
+    const currentTime = new Date().toISOString();
+    
+    let vectorizationResult;
+    let message = 'RAG系统测试成功！您的查询已被正确接收和处理。';
+
+    // 如果提供了content，进行向量化处理
+    if (dto.content && dto.content.trim().length > 0) {
+      try {
+        vectorizationResult = await this.ragService.vectorizeAndStoreText(dto.content);
+        message += ' 文本已成功向量化并存储到Upstash向量数据库。';
+      } catch (error) {
+        this.logger.error('Vectorization failed in simple test', error);
+        message += ' 文本向量化处理失败，请检查系统配置。';
+      }
+    }
+    
+    // 创建测试响应数据
+    const testResponse: SimpleTestResponseDto = {
+      query: dto.query,
+      message,
+      timestamp: currentTime,
+      mockResults: [
+        `模拟结果1：针对查询"${dto.query}"的第一个相关文档片段`,
+        `模拟结果2：这是一个包含关键信息的测试文档内容`,
+        `模拟结果3：RAG系统正在正常工作，向量搜索功能可用`,
+        `模拟结果4：文档检索和相似度计算功能正常`,
+        `模拟结果5：测试完成，系统状态良好`
+      ],
+      status: 'healthy',
+      vectorization: vectorizationResult
+    };
+
+    return {
+      success: true,
+      data: testResponse,
+      message: 'RAG 简单测试完成',
+      timestamp: currentTime,
     };
   }
 

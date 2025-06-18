@@ -49,25 +49,45 @@ export class MetadataService {
     const documentId = uuidv4();
     const now = new Date().toISOString();
 
+    // [DEBUG] 添加调试日志检查对象类型
+    this.logger.debug('=== DynamoDB 序列化调试信息 ===');
+    this.logger.debug(`documentData constructor: ${documentData.constructor.name}`);
+    this.logger.debug(`documentData instanceof CreateDocumentDto: ${documentData instanceof CreateDocumentDto}`);
+    this.logger.debug(`documentData keys: ${Object.keys(documentData)}`);
+    
+    if (documentData.metadata) {
+      this.logger.debug(`metadata constructor: ${documentData.metadata.constructor.name}`);
+      this.logger.debug(`metadata instanceof Object: ${documentData.metadata instanceof Object}`);
+      this.logger.debug(`metadata plain object check: ${documentData.metadata.constructor === Object}`);
+      this.logger.debug(`metadata prototype: ${Object.getPrototypeOf(documentData.metadata)}`);
+    }
+
+    // 转换 DTO 为普通对象以避免类实例序列化问题
+    const plainDocumentData = JSON.parse(JSON.stringify(documentData));
+    this.logger.debug(`plainDocumentData constructor: ${plainDocumentData.constructor.name}`);
+
     const document: DocumentEntity = {
       id: documentId, // 使用 documentId 作为主键
       userId,
       documentId, // 保留为向后兼容
-      title: documentData.title,
-      documentType: documentData.documentType,
-      contentType: documentData.contentType,
-      originalFileName: documentData.originalFileName || documentData.title,
-      fileSize: documentData.fileSize || 0,
+      title: plainDocumentData.title,
+      documentType: plainDocumentData.documentType,
+      contentType: plainDocumentData.contentType,
+      originalFileName: plainDocumentData.originalFileName || plainDocumentData.title,
+      fileSize: plainDocumentData.fileSize || 0,
       embeddingIds,
       chunkCount,
       totalTokens,
       embeddingModel: 'text-embedding-3-small', // 默认模型
-      metadata: documentData.metadata || {},
+      metadata: plainDocumentData.metadata || {},
       status: DocumentStatus.PROCESSING,
       processingProgress: 0,
       createdAt: now,
       updatedAt: now,
     };
+
+    this.logger.debug(`final document object constructor: ${document.constructor.name}`);
+    this.logger.debug(`final document.metadata constructor: ${document.metadata.constructor.name}`);
 
     try {
       await this.docClient.send(

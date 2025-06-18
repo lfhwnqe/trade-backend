@@ -106,11 +106,6 @@ export class DocumentMetadataDto {
   dateRange?: DateRangeDto;
 }
 
-
-
-// 添加调试日志以验证模块加载顺序
-console.log('[DEBUG] create-document.dto.ts 模块正在加载...');
-
 export class CreateDocumentDto {
   @ApiProperty({
     description: '文档标题',
@@ -169,5 +164,3 @@ export class CreateDocumentDto {
   @Type(() => DocumentMetadataDto)
   metadata?: DocumentMetadataDto;
 }
-
-console.log('[DEBUG] CreateDocumentDto 类定义完成');

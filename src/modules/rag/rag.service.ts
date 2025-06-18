@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../common/config.service';
 import { MetadataService } from './metadata.service';
 import { Index } from '@upstash/vector';
-import { openai } from '@ai-sdk/openai';
+import { openai, createOpenAI } from '@ai-sdk/openai';
 import { embed } from 'ai';
 import {
   CreateDocumentDto,
@@ -50,6 +50,12 @@ export class RAGService {
     this.logger.log(
       `Processing document upload for user ${userId}: ${documentData.title}`,
     );
+
+    // [DEBUG] 检查传入的 DTO 对象类型
+    this.logger.debug('=== RAG Service 调试信息 ===');
+    this.logger.debug(`Received documentData type: ${typeof documentData}`);
+    this.logger.debug(`documentData constructor: ${documentData.constructor.name}`);
+    this.logger.debug(`documentData prototype: ${Object.getPrototypeOf(documentData).constructor.name}`);
 
     try {
       // 1. 创建文档元数据（处理中状态）
@@ -273,10 +279,15 @@ export class RAGService {
     try {
       const embeddings: number[][] = [];
 
+      // 创建带有API密钥的openai provider
+      const openaiProvider = createOpenAI({
+        apiKey: this.configService.getOrThrow('OPENAI_API_KEY'),
+      });
+
       // 批量处理嵌入
       for (const text of texts) {
         const { embedding } = await embed({
-          model: openai.embedding('text-embedding-3-small'),
+          model: openaiProvider.embedding('text-embedding-3-small'),
           value: text,
         });
         embeddings.push(embedding);
@@ -414,6 +425,111 @@ export class RAGService {
     };
 
     return analysis;
+  }
+
+  /**
+   * 简单的文本向量化和存储方法（用于测试接口）
+   */
+  async vectorizeAndStoreText(content: string): Promise<{
+    model: string;
+    vectorId: string;
+    storageStatus: 'success' | 'failed';
+    tokenUsage: {
+      inputTokens: number;
+      embeddingDimensions: number;
+    };
+    processingTimeMs: number;
+    chunkInfo: {
+      chunkCount: number;
+      totalCharacters: number;
+      averageChunkSize: number;
+    };
+  }> {
+    const startTime = Date.now();
+    
+    try {
+      this.logger.log(`Starting simple vectorization for content length: ${content.length}`);
+
+      // 1. 文本预处理
+      const processedContent = await this.preprocessDocument(content);
+      
+      // 2. 智能文本分块
+      const chunks = this.splitText(processedContent);
+      
+      // 3. 生成嵌入向量（只处理第一个块用于测试）
+      const firstChunk = chunks[0];
+      
+      // 创建带有API密钥的openai provider
+      const openaiProvider = createOpenAI({
+        apiKey: this.configService.getOrThrow('OPENAI_API_KEY'),
+      });
+      
+      const { embedding } = await embed({
+        model: openaiProvider.embedding('text-embedding-3-small'),
+        value: firstChunk.content,
+      });
+
+      // 4. 生成唯一的向量ID
+      const vectorId = `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // 5. 存储向量到 Upstash Vector
+      const vector = {
+        id: vectorId,
+        vector: embedding,
+        metadata: {
+          userId: 'test-user',
+          documentId: 'test-document',
+          chunkIndex: 0,
+          content: firstChunk.content,
+          documentType: DocumentType.KNOWLEDGE,
+          title: 'Simple Test Document',
+          timestamp: new Date().toISOString(),
+          tokenCount: firstChunk.tokenCount,
+          isTestData: true, // 标记为测试数据
+        },
+      };
+
+      await this.vectorIndex.upsert([vector]);
+
+      const processingTime = Date.now() - startTime;
+
+      this.logger.log(`Simple vectorization completed for vector ID: ${vectorId}`);
+
+      return {
+        model: 'text-embedding-3-small',
+        vectorId,
+        storageStatus: 'success',
+        tokenUsage: {
+          inputTokens: firstChunk.tokenCount,
+          embeddingDimensions: embedding.length,
+        },
+        processingTimeMs: processingTime,
+        chunkInfo: {
+          chunkCount: chunks.length,
+          totalCharacters: content.length,
+          averageChunkSize: Math.round(chunks.reduce((sum, chunk) => sum + chunk.content.length, 0) / chunks.length),
+        },
+      };
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      this.logger.error('Simple vectorization failed', error);
+      
+      return {
+        model: 'text-embedding-3-small',
+        vectorId: '',
+        storageStatus: 'failed',
+        tokenUsage: {
+          inputTokens: 0,
+          embeddingDimensions: 0,
+        },
+        processingTimeMs: processingTime,
+        chunkInfo: {
+          chunkCount: 0,
+          totalCharacters: content.length,
+          averageChunkSize: 0,
+        },
+      };
+    }
   }
 
 }

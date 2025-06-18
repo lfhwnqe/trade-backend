@@ -30,12 +30,6 @@ export class ImageService {
       throw new Error('CLOUDFRONT_DOMAIN_NAME is not configured');
     }
     this.cloudfrontDomain = cloudfrontDomain;
-
-    console.log('Image Service Configuration:', {
-      region: this.configService.get('AWS_REGION'),
-      bucketName: this.bucketName,
-      cloudfrontDomain: this.cloudfrontDomain,
-    });
   }
 
   /**

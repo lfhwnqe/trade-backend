@@ -30,14 +30,8 @@ export class UserService {
     this.userPoolId = this.configService.get('USER_POOL_ID'); // Changed to uppercase
     this.clientId = this.configService.get('USER_POOL_CLIENT_ID'); // Changed to uppercase
 
-    console.log(`UserPoolId: ${this.userPoolId}`);
-    console.log(`ClientId: ${this.clientId}`);
 
     const region = this.configService.get('AWS_REGION');
-    console.log(`UserService Initializing with Config (using console.log):`);
-    console.log(`- AWS_REGION: ${region}`);
-    console.log(`- USER_POOL_ID: ${this.userPoolId}`);
-    console.log(`- USER_POOL_CLIENT_ID: ${this.clientId}`);
 
     if (!this.userPoolId || !this.clientId || !region) {
       console.error(
