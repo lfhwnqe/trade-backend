@@ -324,59 +324,28 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
-    new cdk.CfnOutput(this, 'API_ENDPOINT_URL', {
-      value: endpoint.url,
-      description: `The URL of the API Gateway endpoint for ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'IMAGE_BUCKET_NAME', {
-      value: imageBucket.bucketName,
-      description: `Name of the S3 bucket for images in ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'CLOUDFRONT_DOMAIN_NAME', {
-      value: distribution.distributionDomainName,
-      description: `Domain name of the CloudFront distribution for ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'TRANSACTIONS_TABLE_NAME', {
-      value: transactionsTable.tableName,
-      description: `Name of the DynamoDB table for transactions in ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'USER_POOL_ID', {
-      value: userPool.userPoolId,
-      description: `ID of the Cognito User Pool for ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'USER_POOL_CLIENT_ID', {
-      value: userPoolClient.userPoolClientId,
-      description: `Client ID of the Cognito User Pool Client for ${appName} ${envName}`,
-    });
-    new cdk.CfnOutput(this, 'AWS_REGION', {
-      value: region,
-      description: `AWS Region for ${appName} ${envName}`,
-    });
-
-    // RAG DynamoDB Tables Outputs
-    new cdk.CfnOutput(this, 'RAG_DOCUMENTS_TABLE_NAME', {
-      value: ragDocumentsTable.tableName,
-      description: `Name of the DynamoDB table for RAG documents in ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'RAG_CHAT_SESSIONS_TABLE_NAME', {
-      value: ragChatSessionsTable.tableName,
-      description: `Name of the DynamoDB table for RAG chat sessions in ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'RAG_CHAT_MESSAGES_TABLE_NAME', {
-      value: ragChatMessagesTable.tableName,
-      description: `Name of the DynamoDB table for RAG chat messages in ${appName} ${envName}`,
-    });
-
-    new cdk.CfnOutput(this, 'RAG_ANALYTICS_TABLE_NAME', {
-      value: ragAnalyticsTable.tableName,
-      description: `Name of the DynamoDB table for RAG analytics in ${appName} ${envName}`,
+    // Unified Environment Variables Output
+    new cdk.CfnOutput(this, 'EnvironmentVariables', {
+      value: [
+        `# Environment Variables for ${appName} ${envName}`,
+        `# Copy the following lines to your .env file`,
+        ``,
+        `AWS_REGION=${region}`,
+        `USER_POOL_ID=${userPool.userPoolId}`,
+        `USER_POOL_CLIENT_ID=${userPoolClient.userPoolClientId}`,
+        `IMAGE_BUCKET_NAME=${imageBucket.bucketName}`,
+        `CLOUDFRONT_DOMAIN_NAME=${distribution.distributionDomainName}`,
+        `TRANSACTIONS_TABLE_NAME=${transactionsTable.tableName}`,
+        `API_ENDPOINT_URL=${endpoint.url}`,
+        `COGNITO_ADMIN_GROUP_NAME=${adminGroupName}`,
+        ``,
+        `# RAG Module Environment Variables`,
+        `RAG_DOCUMENTS_TABLE_NAME=${ragDocumentsTable.tableName}`,
+        `RAG_CHAT_SESSIONS_TABLE_NAME=${ragChatSessionsTable.tableName}`,
+        `RAG_CHAT_MESSAGES_TABLE_NAME=${ragChatMessagesTable.tableName}`,
+        `RAG_ANALYTICS_TABLE_NAME=${ragAnalyticsTable.tableName}`,
+      ].join('\n'),
+      description: 'Environment variables for .env file - copy and paste directly',
     });
   }
 }
