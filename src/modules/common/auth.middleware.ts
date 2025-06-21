@@ -1,13 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { CognitoService } from './cognito.service';
-
-const whitelist = [
-  '/user/register',
-  '/user/confirm',
-  '/user/login',
-  '/user/registration/status',
-];
+import { isPathWhitelisted } from './auth.config';
 
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
@@ -15,7 +9,7 @@ export class AuthMiddleware implements NestMiddleware {
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
-      if (whitelist.some((pattern) => req.path.startsWith(pattern))) {
+      if (isPathWhitelisted(req.path)) {
         console.log('[AuthMiddleware] 命中白名单，放行');
         return next();
       }

@@ -9,7 +9,7 @@ import { RAGModule } from './modules/rag/rag.module';
 import { ResponseInterceptor } from './base/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './base/filters/http-exception.filter';
 import { ExampleModule } from './base/examples/example.module';
-
+import { AUTH_WHITELIST } from './modules/common/auth.config';
 @Module({
   imports: [
     CommonModule,
@@ -36,7 +36,7 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(AuthMiddleware)
-      .exclude('/user/login', '/user/register', '/user/confirm')
+      .exclude(...AUTH_WHITELIST)
       .forRoutes('*');
   }
 }
