@@ -3,8 +3,6 @@ import {
   Post,
   Body,
   Req,
-  BadRequestException,
-  UnauthorizedException,
   Get,
   Param,
   UseFilters,
@@ -14,6 +12,12 @@ import { ImageService } from './image.service';
 import { Request } from 'express';
 import { ALLOWED_IMAGE_TYPES, UploadImageRequest } from './types/image.types';
 import { HttpExceptionFilter } from 'src/base/filters/http-exception.filter';
+import {
+  ValidationException,
+  AuthenticationException,
+  AuthorizationException,
+} from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
 import {
   ApiTags,
   ApiOperation,
@@ -56,8 +60,11 @@ export class ImageController {
 
     // 验证文件类型
     if (!ALLOWED_IMAGE_TYPES.includes(fileType)) {
-      throw new BadRequestException(
+      throw new ValidationException(
+        `Unsupported file type: ${fileType}. Allowed types: ${ALLOWED_IMAGE_TYPES.join(', ')}`,
+        ERROR_CODES.IMAGE_FORMAT_INVALID,
         `不支持的文件类型。支持的类型: ${ALLOWED_IMAGE_TYPES.join(', ')}`,
+        { providedType: fileType, allowedTypes: ALLOWED_IMAGE_TYPES },
       );
     }
 
@@ -67,7 +74,12 @@ export class ImageController {
         user: req['user'],
         headers: req.headers,
       });
-      throw new UnauthorizedException('用户未认证');
+      throw new AuthenticationException(
+        'User authentication failed: missing user.sub',
+        ERROR_CODES.AUTH_TOKEN_MISSING,
+        '用户未认证',
+        { user: req['user'] },
+      );
     }
 
     const userId = req['user'].sub;
@@ -96,7 +108,12 @@ export class ImageController {
   async deleteImage(@Param('key') key: string, @Req() req: Request) {
     // 验证用户身份
     if (!req['user']?.sub) {
-      throw new UnauthorizedException('用户未认证');
+      throw new AuthenticationException(
+        'User authentication failed: missing user.sub',
+        ERROR_CODES.AUTH_TOKEN_MISSING,
+        '用户未认证',
+        { user: req['user'] },
+      );
     }
 
     // 验证文件所有权（可选，根据key中的用户ID判断）
@@ -109,7 +126,12 @@ export class ImageController {
       keyParts[0] === 'images' &&
       keyParts[2] !== userId
     ) {
-      throw new UnauthorizedException('无权删除其他用户的图片');
+      throw new AuthorizationException(
+        `User ${userId} attempted to delete image owned by ${keyParts[2]}`,
+        ERROR_CODES.IMAGE_DELETE_PERMISSION_DENIED,
+        '无权删除其他用户的图片',
+        { userId, keyUserId: keyParts[2], key },
+      );
     }
 
     return this.imageService.deleteImage(key);

@@ -21,7 +21,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
-    const { status, errorResponse } = this.handleException(exception, request);
+    const { status, errorResponse } = this.handleException(exception);
 
     // 记录错误日志
     this.logError(exception, request, status);
@@ -29,7 +29,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json(errorResponse);
   }
 
-  private handleException(exception: Error, request: Request) {
+  private handleException(exception: Error) {
     let status: number;
     let errorResponse: ApiResponse;
 
@@ -47,7 +47,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       // 处理验证异常
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse() as any;
-      
+
       errorResponse = {
         success: false,
         error: this.formatValidationError(exceptionResponse),
@@ -59,12 +59,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
       // 处理其他 HTTP 异常
       status = exception.getStatus();
       const exceptionResponse = exception.getResponse() as any;
-      
+
       errorResponse = {
         success: false,
-        error: typeof exceptionResponse === 'string'
-          ? exceptionResponse
-          : exceptionResponse.message || exception.message,
+        error:
+          typeof exceptionResponse === 'string'
+            ? exceptionResponse
+            : exceptionResponse.message || exception.message,
         errorCode: this.getErrorCodeByStatus(status),
         errorType: this.getErrorTypeByStatus(status),
         timestamp: new Date().toISOString(),
@@ -72,7 +73,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     } else {
       // 处理系统异常
       status = HttpStatus.INTERNAL_SERVER_ERROR;
-      
+
       // 检查是否是特定的系统异常
       if (this.isCognitoError(exception)) {
         errorResponse = {
@@ -88,6 +89,30 @@ export class HttpExceptionFilter implements ExceptionFilter {
           error: '数据库操作异常，请稍后重试',
           errorCode: ERROR_CODES.DYNAMODB_CONNECTION_ERROR,
           errorType: ErrorType.DYNAMODB,
+          timestamp: new Date().toISOString(),
+        };
+      } else if (this.isS3Error(exception)) {
+        errorResponse = {
+          success: false,
+          error: 'S3存储服务异常，请稍后重试',
+          errorCode: ERROR_CODES.S3_UPLOAD_FAILED,
+          errorType: ErrorType.S3,
+          timestamp: new Date().toISOString(),
+        };
+      } else if (this.isVectorDBError(exception)) {
+        errorResponse = {
+          success: false,
+          error: '向量数据库服务异常，请稍后重试',
+          errorCode: ERROR_CODES.VECTOR_DB_CONNECTION_ERROR,
+          errorType: ErrorType.VECTOR_DB,
+          timestamp: new Date().toISOString(),
+        };
+      } else if (this.isAIServiceError(exception)) {
+        errorResponse = {
+          success: false,
+          error: 'AI服务异常，请稍后重试',
+          errorCode: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+          errorType: ErrorType.AI_SERVICE,
           timestamp: new Date().toISOString(),
         };
       } else {
@@ -151,26 +176,75 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   private isCognitoError(exception: Error): boolean {
     const message = exception.message?.toLowerCase() || '';
-    return message.includes('cognito') ||
-           message.includes('jwt') ||
-           message.includes('token') ||
-           message.includes('Token 校验失败');
+    return (
+      message.includes('cognito') ||
+      message.includes('jwt') ||
+      message.includes('token') ||
+      message.includes('Token 校验失败')
+    );
   }
 
   private isDynamoDBError(exception: Error): boolean {
     const message = exception.message?.toLowerCase() || '';
     const stack = exception.stack?.toLowerCase() || '';
-    
-    return message.includes('dynamodb') ||
-           stack.includes('dynamodb') ||
-           message.includes('aws-sdk') ||
-           message.includes('resourcenotfound');
+
+    return (
+      message.includes('dynamodb') ||
+      stack.includes('dynamodb') ||
+      message.includes('aws-sdk') ||
+      message.includes('resourcenotfound')
+    );
+  }
+
+  private isS3Error(exception: Error): boolean {
+    const message = exception.message?.toLowerCase() || '';
+    const stack = exception.stack?.toLowerCase() || '';
+
+    return (
+      message.includes('s3') ||
+      stack.includes('s3') ||
+      message.includes('bucket') ||
+      message.includes('aws s3') ||
+      message.includes('nosuchbucket') ||
+      message.includes('accessdenied')
+    );
+  }
+
+  private isVectorDBError(exception: Error): boolean {
+    const message = exception.message?.toLowerCase() || '';
+    const stack = exception.stack?.toLowerCase() || '';
+
+    return (
+      message.includes('vector') ||
+      message.includes('embedding') ||
+      message.includes('pinecone') ||
+      message.includes('weaviate') ||
+      message.includes('chroma') ||
+      stack.includes('vector')
+    );
+  }
+
+  private isAIServiceError(exception: Error): boolean {
+    const message = exception.message?.toLowerCase() || '';
+    const stack = exception.stack?.toLowerCase() || '';
+
+    return (
+      message.includes('openai') ||
+      message.includes('anthropic') ||
+      message.includes('claude') ||
+      message.includes('gpt') ||
+      message.includes('ai service') ||
+      message.includes('rate limit') ||
+      message.includes('quota exceeded') ||
+      stack.includes('openai') ||
+      stack.includes('anthropic')
+    );
   }
 
   private logError(exception: Error, request: Request, status: number) {
     const { method, url, ip, headers } = request;
     const userAgent = headers['user-agent'] || '';
-    
+
     const logData = {
       timestamp: new Date().toISOString(),
       method,

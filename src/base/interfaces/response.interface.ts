@@ -18,6 +18,9 @@ export enum ErrorType {
   BUSINESS = 'BUSINESS',
   SYSTEM = 'SYSTEM',
   NETWORK = 'NETWORK',
+  S3 = 'S3',
+  VECTOR_DB = 'VECTOR_DB',
+  AI_SERVICE = 'AI_SERVICE',
 }
 
 export interface ErrorDetails {

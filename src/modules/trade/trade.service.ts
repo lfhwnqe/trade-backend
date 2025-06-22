@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
@@ -11,6 +7,12 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from 'src/modules/common/config.service';
 import { TradeQueryDto } from './dto/trade-query.dto';
+import {
+  DynamoDBException,
+  AuthorizationException,
+  ResourceNotFoundException,
+} from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
 
 @Injectable()
 export class TradeService {
@@ -117,7 +119,12 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] createTrade error:', error);
-      throw new Error('交易创建失败');
+      throw new DynamoDBException(
+        `交易创建失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易创建失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
   /**
@@ -166,7 +173,12 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] getThisMonthStats error:', error);
-      throw new Error('交易统计获取失败');
+      throw new DynamoDBException(
+        `交易统计获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易统计获取失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -224,7 +236,12 @@ export class TradeService {
         JSON.stringify(error),
       );
       // console.error('[TradeService] findByUserId error:', error);
-      throw new Error('交易列表获取失败');
+      throw new DynamoDBException(
+        `交易列表获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易列表获取失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
   /**
@@ -364,7 +381,12 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] findByUserQuery error:', error);
-      throw new Error('交易列表获取失败');
+      throw new DynamoDBException(
+        `筛选查询失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易列表获取失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -383,7 +405,11 @@ export class TradeService {
       }
       // 权限校验: Trade 必须属当前 userId
       if (result.Item.userId !== userId) {
-        throw new ForbiddenException('没有权限访问此交易');
+        throw new AuthorizationException(
+          `用户 ${userId} 试图访问不属于自己的交易记录 ${transactionId}`,
+          ERROR_CODES.TRADE_ACCESS_DENIED,
+          '您没有权限访问此交易记录',
+        );
       }
       return {
         success: true,
@@ -391,7 +417,15 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] getTrade error:', error);
-      throw new Error('交易记录获取失败');
+      if (error instanceof AuthorizationException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `单个交易获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易记录获取失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -402,7 +436,13 @@ export class TradeService {
   ) {
     try {
       const oldRes = await this.getTrade(userId, transactionId);
-      if (!oldRes.success) throw new NotFoundException('交易记录不存在');
+      if (!oldRes.success) {
+        throw new ResourceNotFoundException(
+          `交易记录不存在: userId=${userId}, transactionId=${transactionId}`,
+          ERROR_CODES.TRADE_NOT_FOUND,
+          '交易记录不存在',
+        );
+      }
       // 确保从 dto 更新的属性类型正确
       const existingTrade = oldRes.data as Trade;
 
@@ -429,7 +469,15 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] updateTrade error:', error);
-      throw new Error('交易更新失败');
+      if (error instanceof ResourceNotFoundException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `交易更新失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易更新失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -437,7 +485,13 @@ export class TradeService {
     try {
       // 存在性和权限校验
       const oldRes = await this.getTrade(userId, transactionId);
-      if (!oldRes.success) throw new NotFoundException('交易记录不存在');
+      if (!oldRes.success) {
+        throw new AuthorizationException(
+          `删除前检查失败: userId=${userId}, transactionId=${transactionId}`,
+          ERROR_CODES.TRADE_ACCESS_DENIED,
+          '您没有权限访问此交易记录',
+        );
+      }
       await this.db.delete({
         TableName: this.tableName,
         Key: { userId, transactionId },
@@ -448,7 +502,15 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] deleteTrade error:', error);
-      throw new Error('交易删除失败');
+      if (error instanceof AuthorizationException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `交易删除失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易删除失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -470,7 +532,11 @@ export class TradeService {
       // 获取原始交易记录
       const originalTradeRes = await this.getTrade(userId, transactionId);
       if (!originalTradeRes.success) {
-        throw new NotFoundException('交易记录不存在');
+        throw new ResourceNotFoundException(
+          `复制的交易记录不存在: userId=${userId}, transactionId=${transactionId}`,
+          ERROR_CODES.TRADE_NOT_FOUND,
+          '交易记录不存在',
+        );
       }
 
       const originalTrade = originalTradeRes.data as Trade;
@@ -499,7 +565,15 @@ export class TradeService {
       };
     } catch (error) {
       console.error('[TradeService] copyTrade error:', error);
-      throw new Error('交易复制失败');
+      if (error instanceof ResourceNotFoundException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `交易复制失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易复制失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -636,7 +710,12 @@ export class TradeService {
         '[TradeService] findByUserIdWithFilters error:',
         JSON.stringify(error),
       );
-      throw new Error('交易列表获取失败');
+      throw new DynamoDBException(
+        `带过滤器查询失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易列表获取失败，请稍后重试',
+        { originalError: error.message },
+      );
     }
   }
 }

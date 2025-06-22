@@ -159,3 +159,63 @@ export class ResourceNotFoundException extends BaseCustomException {
     );
   }
 }
+
+export class S3Exception extends BaseCustomException {
+  constructor(
+    message: string,
+    errorCode: ErrorCode,
+    userMessage?: string,
+    details?: any,
+  ) {
+    super(
+      {
+        code: errorCode,
+        type: ErrorType.S3,
+        message,
+        userMessage: userMessage || 'S3存储服务异常，请稍后重试',
+        details,
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+}
+
+export class VectorDBException extends BaseCustomException {
+  constructor(
+    message: string,
+    errorCode: ErrorCode,
+    userMessage?: string,
+    details?: any,
+  ) {
+    super(
+      {
+        code: errorCode,
+        type: ErrorType.VECTOR_DB,
+        message,
+        userMessage: userMessage || '向量数据库服务异常，请稍后重试',
+        details,
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+}
+
+export class AIServiceException extends BaseCustomException {
+  constructor(
+    message: string,
+    errorCode: ErrorCode,
+    userMessage?: string,
+    details?: any,
+  ) {
+    super(
+      {
+        code: errorCode,
+        type: ErrorType.AI_SERVICE,
+        message,
+        userMessage: userMessage || 'AI服务异常，请稍后重试',
+        details,
+      },
+      HttpStatus.SERVICE_UNAVAILABLE,
+    );
+  }
+}

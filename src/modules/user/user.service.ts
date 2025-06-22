@@ -1,11 +1,12 @@
+import { Injectable, Logger } from '@nestjs/common';
 import {
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-  NotFoundException,
-  UnauthorizedException,
-  ForbiddenException,
-} from '@nestjs/common';
+  CognitoException,
+  ValidationException,
+  BusinessException,
+  AuthenticationException,
+  ResourceNotFoundException,
+} from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
 import { ConfigService } from '../common/config.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
@@ -43,8 +44,11 @@ export class UserService {
       console.error(
         'Cognito User Pool ID, Client ID, or AWS Region is not configured properly via console.log.',
       );
-      throw new InternalServerErrorException(
+      throw new CognitoException(
         'Cognito configuration is missing or incomplete.',
+        ERROR_CODES.COGNITO_CONFIG_ERROR,
+        '认证服务配置异常，请联系管理员',
+        { userPoolId: this.userPoolId, clientId: this.clientId, region },
       );
     }
 
@@ -71,17 +75,35 @@ export class UserService {
     } catch (err) {
       this.logger.error(`注册验证码验证失败: ${err}`);
       if (err.name === 'CodeMismatchException') {
-        throw new ForbiddenException('验证码错误，请检查邮件中的验证码。');
+        throw new ValidationException(
+          'Confirmation code mismatch',
+          ERROR_CODES.COGNITO_CODE_MISMATCH,
+          '验证码错误，请检查邮件中的验证码',
+          { username, error: err.name },
+        );
       }
       if (err.name === 'ExpiredCodeException') {
-        throw new ForbiddenException(
-          '验证码已过期，请重新注册或请求新的验证码。',
+        throw new ValidationException(
+          'Confirmation code expired',
+          ERROR_CODES.COGNITO_CODE_EXPIRED,
+          '验证码已过期，请重新注册或请求新的验证码',
+          { username, error: err.name },
         );
       }
       if (err.name === 'UserNotFoundException') {
-        throw new NotFoundException('未找到该用户，请检查用户名是否正确。');
+        throw new ResourceNotFoundException(
+          `User not found: ${username}`,
+          ERROR_CODES.COGNITO_USER_NOT_FOUND,
+          '未找到该用户，请检查用户名是否正确',
+          { username },
+        );
       }
-      throw new InternalServerErrorException('验证码验证失败，请稍后重试。');
+      throw new CognitoException(
+        `User confirmation failed: ${err.message}`,
+        ERROR_CODES.COGNITO_VERIFICATION_FAILED,
+        '验证码验证失败，请稍后重试',
+        { username, error: err.name },
+      );
     }
   }
 
@@ -92,7 +114,11 @@ export class UserService {
       this.logger.warn(
         'User registration is globally disabled. Blocking registration attempt.',
       );
-      throw new ForbiddenException('User registration is currently disabled.');
+      throw new BusinessException(
+        'User registration is globally disabled',
+        ERROR_CODES.USER_REGISTRATION_DISABLED,
+        '用户注册当前已禁用',
+      );
     }
 
     const { username, email, password } = createUserDto;
@@ -160,8 +186,11 @@ export class UserService {
         error.stack,
       );
       // 可以根据 Cognito 返回的错误类型进行更细致的处理
-      throw new InternalServerErrorException(
+      throw new CognitoException(
         `Failed to register user: ${error.message}`,
+        ERROR_CODES.COGNITO_REGISTRATION_FAILED,
+        '用户注册失败，请稍后重试',
+        { username, email, error: error.name },
       );
     }
   }
@@ -191,8 +220,11 @@ export class UserService {
         // 通常 InitiateAuthCommand 成功时会返回 AuthenticationResult
         // 如果没有，可能意味着需要其他认证流程（例如 MFA），或者配置问题
         this.logger.error(`Authentication result missing for user ${email}.`);
-        throw new UnauthorizedException(
-          'Login failed, authentication result missing.',
+        throw new AuthenticationException(
+          'Login failed, authentication result missing',
+          ERROR_CODES.AUTH_VERIFICATION_FAILED,
+          '登录失败，认证结果缺失',
+          { email },
         );
       }
     } catch (error: any) {
@@ -204,9 +236,19 @@ export class UserService {
         error.name === 'NotAuthorizedException' ||
         error.name === 'UserNotFoundException'
       ) {
-        throw new UnauthorizedException('Invalid email or password.');
+        throw new AuthenticationException(
+          'Invalid email or password',
+          ERROR_CODES.COGNITO_INVALID_PASSWORD,
+          '邮箱或密码错误',
+          { email, error: error.name },
+        );
       }
-      throw new InternalServerErrorException(`Login failed: ${error.message}`);
+      throw new CognitoException(
+        `Login failed: ${error.message}`,
+        ERROR_CODES.COGNITO_LOGIN_FAILED,
+        '登录失败，请稍后重试',
+        { email, error: error.name },
+      );
     }
   }
 
@@ -239,8 +281,11 @@ export class UserService {
       return { users, nextToken: response.PaginationToken };
     } catch (error: any) {
       this.logger.error(`Error listing users: ${error.message}`, error.stack);
-      throw new InternalServerErrorException(
+      throw new CognitoException(
         `Failed to list users: ${error.message}`,
+        ERROR_CODES.COGNITO_USER_LIST_FAILED,
+        '获取用户列表失败，请稍后重试',
+        { error: error.name },
       );
     }
   }
@@ -265,18 +310,29 @@ export class UserService {
       );
       // 特定错误处理，例如 UserNotFoundException, GroupNotFoundException
       if (error.name === 'UserNotFoundException') {
-        throw new NotFoundException(`User ${username} not found.`);
+        throw new ResourceNotFoundException(
+          `User ${username} not found`,
+          ERROR_CODES.COGNITO_USER_NOT_FOUND,
+          '用户不存在',
+          { username },
+        );
       }
       if (error.name === 'GroupNotFoundException') {
         this.logger.error(
           `Cognito group "${adminGroupName}" not found. Please create it in the AWS Cognito console.`,
         );
-        throw new InternalServerErrorException(
-          `Admin group "${adminGroupName}" not found.`,
+        throw new CognitoException(
+          `Admin group "${adminGroupName}" not found`,
+          ERROR_CODES.COGNITO_GROUP_NOT_FOUND,
+          `管理员组"${adminGroupName}"不存在`,
+          { adminGroupName },
         );
       }
-      throw new InternalServerErrorException(
+      throw new CognitoException(
         `Failed to add user ${username} to admin group: ${error.message}`,
+        ERROR_CODES.COGNITO_ADD_USER_TO_GROUP_FAILED,
+        '添加用户到管理员组失败，请稍后重试',
+        { username, adminGroupName, error: error.name },
       );
     }
   }

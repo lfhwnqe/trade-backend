@@ -1,6 +1,8 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { CognitoService } from './cognito.service';
+import { AuthenticationException } from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
 
 const whitelist = [
   '/user/register',
@@ -28,7 +30,11 @@ export class AuthMiddleware implements NestMiddleware {
 
       if (!token) {
         console.log('[AuthMiddleware] 缺少 token');
-        return res.status(401).json({ message: '缺少 token，请登录' });
+        throw new AuthenticationException(
+          'Authorization token missing from request',
+          ERROR_CODES.AUTH_TOKEN_MISSING,
+          '缺少 token，请登录',
+        );
       }
       let user = null;
       try {
@@ -41,15 +47,27 @@ export class AuthMiddleware implements NestMiddleware {
       }
       if (!user) {
         console.log('[AuthMiddleware] token校验失败');
-        return res.status(401).json({ message: 'token 校验失败' });
+        throw new AuthenticationException(
+          'JWT token verification failed',
+          ERROR_CODES.AUTH_TOKEN_INVALID,
+          'token 校验失败',
+        );
       }
       (req as any).user = user;
       return next();
     } catch (e: any) {
       console.log('[AuthMiddleware] 总catch捕获到异常:', e?.message || e);
-      return res
-        .status(401)
-        .json({ message: 'token 校验失败: ' + (e?.message || '') });
+      // 如果已经是我们的自定义异常，直接重新抛出
+      if (e instanceof AuthenticationException) {
+        throw e;
+      }
+      // 否则包装为认证验证失败异常
+      throw new AuthenticationException(
+        'Authentication verification failed',
+        ERROR_CODES.AUTH_VERIFICATION_FAILED,
+        'token 校验失败',
+        { originalError: e?.message || e },
+      );
     }
   }
 }

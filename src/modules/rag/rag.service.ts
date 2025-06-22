@@ -4,15 +4,9 @@ import { MetadataService } from './metadata.service';
 import { Index } from '@upstash/vector';
 import { openai } from '@ai-sdk/openai';
 import { embed } from 'ai';
-import {
-  CreateDocumentDto,
-  UpdateDocumentDto,
-  SearchQueryDto,
-} from './dto';
+import { CreateDocumentDto, UpdateDocumentDto, SearchQueryDto } from './dto';
 import { DocumentEntity } from './entities/document.entity';
-import {
-  RetrievalResultDto,
-} from './dto/rag-response.dto';
+import { RetrievalResultDto } from './dto/rag-response.dto';
 import {
   DocumentFilter,
   DocumentStatus,
@@ -21,6 +15,13 @@ import {
   TextChunk,
 } from './types/rag.types';
 import { TextProcessor } from './utils/text-processor';
+import {
+  BusinessException,
+  AIServiceException,
+  VectorDBException,
+  BaseCustomException,
+} from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
 
 @Injectable()
 export class RAGService {
@@ -68,7 +69,17 @@ export class RAGService {
       return document;
     } catch (error) {
       this.logger.error('Failed to upload document', error);
-      throw error;
+      // 如果捕获的异常已经是自定义异常，直接重新抛出
+      if (error instanceof BaseCustomException) {
+        throw error;
+      }
+      // 如果是原生 Error，包装为 BusinessException
+      throw new BusinessException(
+        `Failed to upload document: ${error.message}`,
+        ERROR_CODES.BUSINESS_OPERATION_NOT_ALLOWED,
+        '文档上传失败',
+        { originalError: error.message },
+      );
     }
   }
 
@@ -127,6 +138,13 @@ export class RAGService {
         status: DocumentStatus.FAILED,
         errorMessage: error.message,
       });
+
+      throw new BusinessException(
+        `Document processing failed for ${documentId}: ${error.message}`,
+        ERROR_CODES.RAG_DOCUMENT_PROCESSING_FAILED,
+        '文档处理失败',
+        { documentId, originalError: error.message },
+      );
     }
   }
 
@@ -183,7 +201,12 @@ export class RAGService {
       this.logger.log(`Document ${documentId} deleted for user ${userId}`);
     } catch (error) {
       this.logger.error('Failed to delete document', error);
-      throw error;
+      throw new BusinessException(
+        `Failed to delete document ${documentId}: ${error.message}`,
+        ERROR_CODES.RAG_DOCUMENT_DELETE_FAILED,
+        '文档删除失败',
+        { documentId, userId, originalError: error.message },
+      );
     }
   }
 
@@ -226,10 +249,14 @@ export class RAGService {
       };
     } catch (error) {
       this.logger.error('Failed to search documents', error);
-      throw error;
+      throw new BusinessException(
+        `Failed to search documents: ${error.message}`,
+        ERROR_CODES.RAG_DOCUMENT_SEARCH_FAILED,
+        '文档搜索失败',
+        { query: searchQuery.query, userId, originalError: error.message },
+      );
     }
   }
-
 
   /**
    * 文本分块 - 使用增强的文本处理器
@@ -259,7 +286,7 @@ export class RAGService {
     });
 
     // 转换为 RAG 服务期望的格式
-    return processedChunks.map(chunk => ({
+    return processedChunks.map((chunk) => ({
       content: chunk.content,
       index: chunk.index,
       tokenCount: chunk.tokenCount,
@@ -285,7 +312,12 @@ export class RAGService {
       return embeddings;
     } catch (error) {
       this.logger.error('Failed to generate embeddings', error);
-      throw error;
+      throw new AIServiceException(
+        `Failed to generate embeddings: ${error.message}`,
+        ERROR_CODES.AI_SERVICE_EMBEDDING_FAILED,
+        '嵌入向量生成失败',
+        { textCount: texts.length, originalError: error.message },
+      );
     }
   }
 
@@ -326,7 +358,17 @@ export class RAGService {
       return vectors.map((v) => v.id);
     } catch (error) {
       this.logger.error('Failed to store vectors', error);
-      throw error;
+      throw new VectorDBException(
+        `Failed to store vectors: ${error.message}`,
+        ERROR_CODES.VECTOR_DB_STORE_FAILED,
+        '向量存储失败',
+        {
+          vectorCount: vectors.length,
+          documentId,
+          userId,
+          originalError: error.message,
+        },
+      );
     }
   }
 
@@ -359,7 +401,16 @@ export class RAGService {
         }));
     } catch (error) {
       this.logger.error('Failed to perform vector search', error);
-      throw error;
+      throw new VectorDBException(
+        `Failed to perform vector search: ${error.message}`,
+        ERROR_CODES.VECTOR_DB_SEARCH_FAILED,
+        '向量搜索异常',
+        {
+          userId,
+          topK: options.maxResults || 10,
+          originalError: error.message,
+        },
+      );
     }
   }
 
@@ -371,7 +422,15 @@ export class RAGService {
       await this.vectorIndex.delete(vectorIds);
     } catch (error) {
       this.logger.error('Failed to delete vectors', error);
-      throw error;
+      throw new VectorDBException(
+        `Failed to delete vectors: ${error.message}`,
+        ERROR_CODES.VECTOR_DB_DELETE_FAILED,
+        '向量删除失败',
+        {
+          vectorIds: vectorIds.length,
+          originalError: error.message,
+        },
+      );
     }
   }
 
@@ -383,7 +442,6 @@ export class RAGService {
       .map((result, index) => `[文档 ${index + 1}] ${result.content}`)
       .join('\n\n');
   }
-
 
   /**
    * 估算 token 数量 - 使用增强的估算逻辑
@@ -415,5 +473,4 @@ export class RAGService {
 
     return analysis;
   }
-
 }

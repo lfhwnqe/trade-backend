@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpStatus, BadRequestException } from '@nestjs/common';
 import { HttpExceptionFilter } from '../filters/http-exception.filter';
-import { 
-  CognitoException, 
-  DynamoDBException, 
+import {
+  CognitoException,
+  DynamoDBException,
   ValidationException,
-  BaseCustomException 
+  S3Exception,
+  VectorDBException,
+  AIServiceException,
 } from '../exceptions/custom.exceptions';
 import { ERROR_CODES } from '../constants/error-codes';
 import { ErrorType } from '../interfaces/response.interface';
@@ -53,7 +55,7 @@ describe('Error Handling System', () => {
       const exception = new CognitoException(
         'Token verification failed',
         ERROR_CODES.COGNITO_VERIFICATION_FAILED,
-        '令牌验证失败，请重新登录'
+        '令牌验证失败，请重新登录',
       );
 
       filter.catch(exception, mockArgumentsHost);
@@ -66,7 +68,7 @@ describe('Error Handling System', () => {
           errorCode: ERROR_CODES.COGNITO_VERIFICATION_FAILED,
           errorType: ErrorType.COGNITO,
           timestamp: expect.any(String),
-        })
+        }),
       );
     });
 
@@ -74,19 +76,21 @@ describe('Error Handling System', () => {
       const exception = new DynamoDBException(
         'Connection failed',
         ERROR_CODES.DYNAMODB_CONNECTION_ERROR,
-        '数据库连接失败'
+        '数据库连接失败',
       );
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: '数据库连接失败',
           errorCode: ERROR_CODES.DYNAMODB_CONNECTION_ERROR,
           errorType: ErrorType.DYNAMODB,
-        })
+        }),
       );
     });
 
@@ -94,7 +98,7 @@ describe('Error Handling System', () => {
       const exception = new ValidationException(
         'Invalid input',
         ERROR_CODES.VALIDATION_INVALID_FORMAT,
-        '输入格式无效'
+        '输入格式无效',
       );
 
       filter.catch(exception, mockArgumentsHost);
@@ -106,7 +110,73 @@ describe('Error Handling System', () => {
           error: '输入格式无效',
           errorCode: ERROR_CODES.VALIDATION_INVALID_FORMAT,
           errorType: ErrorType.VALIDATION,
-        })
+        }),
+      );
+    });
+
+    it('should handle S3Exception correctly', () => {
+      const exception = new S3Exception(
+        'S3 upload failed',
+        ERROR_CODES.S3_UPLOAD_FAILED,
+        'S3上传失败，请重试',
+      );
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'S3上传失败，请重试',
+          errorCode: ERROR_CODES.S3_UPLOAD_FAILED,
+          errorType: ErrorType.S3,
+        }),
+      );
+    });
+
+    it('should handle VectorDBException correctly', () => {
+      const exception = new VectorDBException(
+        'Vector database connection failed',
+        ERROR_CODES.VECTOR_DB_CONNECTION_ERROR,
+        '向量数据库连接失败',
+      );
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: '向量数据库连接失败',
+          errorCode: ERROR_CODES.VECTOR_DB_CONNECTION_ERROR,
+          errorType: ErrorType.VECTOR_DB,
+        }),
+      );
+    });
+
+    it('should handle AIServiceException correctly', () => {
+      const exception = new AIServiceException(
+        'AI service rate limit exceeded',
+        ERROR_CODES.AI_SERVICE_RATE_LIMIT,
+        'AI服务请求频率超限',
+      );
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'AI服务请求频率超限',
+          errorCode: ERROR_CODES.AI_SERVICE_RATE_LIMIT,
+          errorType: ErrorType.AI_SERVICE,
+        }),
       );
     });
   });
@@ -128,7 +198,7 @@ describe('Error Handling System', () => {
           error: 'field1 is required; field2 must be a string',
           errorCode: ERROR_CODES.VALIDATION_REQUIRED_FIELD,
           errorType: ErrorType.VALIDATION,
-        })
+        }),
       );
     });
   });
@@ -139,14 +209,16 @@ describe('Error Handling System', () => {
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: '系统内部错误，请稍后重试',
           errorCode: ERROR_CODES.SYSTEM_INTERNAL_ERROR,
           errorType: ErrorType.SYSTEM,
-        })
+        }),
       );
     });
 
@@ -155,14 +227,16 @@ describe('Error Handling System', () => {
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: '认证服务异常，请稍后重试',
           errorCode: ERROR_CODES.COGNITO_VERIFICATION_FAILED,
           errorType: ErrorType.COGNITO,
-        })
+        }),
       );
     });
 
@@ -171,14 +245,71 @@ describe('Error Handling System', () => {
 
       filter.catch(exception, mockArgumentsHost);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
       expect(mockResponse.json).toHaveBeenCalledWith(
         expect.objectContaining({
           success: false,
           error: '数据库操作异常，请稍后重试',
           errorCode: ERROR_CODES.DYNAMODB_CONNECTION_ERROR,
           errorType: ErrorType.DYNAMODB,
-        })
+        }),
+      );
+    });
+
+    it('should detect S3-related errors', () => {
+      const exception = new Error('S3 bucket access denied');
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'S3存储服务异常，请稍后重试',
+          errorCode: ERROR_CODES.S3_UPLOAD_FAILED,
+          errorType: ErrorType.S3,
+        }),
+      );
+    });
+    
+
+    it('should detect Vector DB-related errors', () => {
+      const exception = new Error('Vector database index error');
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: '向量数据库服务异常，请稍后重试',
+          errorCode: ERROR_CODES.VECTOR_DB_CONNECTION_ERROR,
+          errorType: ErrorType.VECTOR_DB,
+        }),
+      );
+    });
+
+    it('should detect AI Service-related errors', () => {
+      const exception = new Error('OpenAI rate limit exceeded');
+
+      filter.catch(exception, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          success: false,
+          error: 'AI服务异常，请稍后重试',
+          errorCode: ERROR_CODES.AI_SERVICE_UNAVAILABLE,
+          errorType: ErrorType.AI_SERVICE,
+        }),
       );
     });
   });
