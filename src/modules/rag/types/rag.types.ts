@@ -5,6 +5,7 @@
 // 文档类型枚举
 export enum DocumentType {
   TRADE = 'trade',
+  TRADE_HISTORY = 'trade_history', // 新增：交易历史类型
   KNOWLEDGE = 'knowledge',
   MANUAL = 'manual',
   REPORT = 'report',
@@ -57,6 +58,11 @@ export interface VectorMetadata {
   tags?: string[];
   timestamp: string;
   tokenCount: number;
+  // 交易历史特有字段
+  tradeId?: string; // 交易ID
+  tradeSubject?: string; // 交易标的
+  tradeResult?: string; // 交易结果
+  analysisTime?: string; // 分析时间
 }
 
 // 向量记录

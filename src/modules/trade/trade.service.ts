@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
@@ -7,6 +7,7 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from 'src/modules/common/config.service';
 import { TradeQueryDto } from './dto/trade-query.dto';
+import { TradeHistoryRAGService } from '../rag/trade-history-rag.service';
 import {
   DynamoDBException,
   AuthorizationException,
@@ -16,10 +17,14 @@ import { ERROR_CODES } from '../../base/constants/error-codes';
 
 @Injectable()
 export class TradeService {
+  private readonly logger = new Logger(TradeService.name);
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly tradeHistoryRAGService: TradeHistoryRAGService,
+  ) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
@@ -112,6 +117,10 @@ export class TradeService {
         TableName: this.tableName,
         Item: newTrade,
       });
+
+      // 检查是否需要添加到交易历史RAG库
+      await this.checkAndAddToRAGHistory(newTrade);
+
       return {
         success: true,
         message: '创建成功',
@@ -462,6 +471,10 @@ export class TradeService {
         TableName: this.tableName,
         Item: updated,
       });
+
+      // 检查是否需要添加到交易历史RAG库
+      await this.checkAndAddToRAGHistory(updated);
+
       return {
         success: true,
         message: '更新成功',
@@ -492,6 +505,18 @@ export class TradeService {
           '您没有权限访问此交易记录',
         );
       }
+
+      // 从向量数据库删除交易历史
+      try {
+        await this.tradeHistoryRAGService.removeTradeFromHistory(transactionId);
+        this.logger.log(`Removed trade ${transactionId} from RAG history`);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to remove trade ${transactionId} from RAG history: ${error.message}`,
+        );
+        // 不阻止删除操作，只记录警告
+      }
+
       await this.db.delete({
         TableName: this.tableName,
         Key: { userId, transactionId },
@@ -716,6 +741,30 @@ export class TradeService {
         '交易列表获取失败，请稍后重试',
         { originalError: error.message },
       );
+    }
+  }
+
+  /**
+   * 检查交易是否需要添加到RAG历史库
+   * 条件：analysisExpired = true 且 lessonsLearned 存在
+   */
+  private async checkAndAddToRAGHistory(trade: Trade): Promise<void> {
+    try {
+      if (trade.analysisExpired === true && trade.lessonsLearned) {
+        this.logger.log(
+          `Adding trade ${trade.transactionId} to RAG history - analysis expired with lessons learned`,
+        );
+        await this.tradeHistoryRAGService.addTradeToHistory(trade);
+        this.logger.log(
+          `Successfully added trade ${trade.transactionId} to RAG history`,
+        );
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to add trade ${trade.transactionId} to RAG history: ${error.message}`,
+        error,
+      );
+      // 不抛出异常，避免影响主要的交易操作
     }
   }
 }
