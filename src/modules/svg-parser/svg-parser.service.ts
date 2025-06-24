@@ -177,23 +177,110 @@ export class SVGParserService {
    */
   private async fetchSVGFromUrl(url: string): Promise<string> {
     try {
-      const response = await fetch(url);
+      // 检查是否是 Whimsical URL，需要特殊处理
+      if (url.includes('whimsical.com') && url.includes('/svg')) {
+        return await this.fetchWhimsicalSVG(url);
+      }
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; SVGParser/1.0)',
+          'Accept': 'image/svg+xml,text/xml,application/xml,text/html,*/*',
+        },
+      });
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type');
+      const content = await response.text();
+
+      // 检查内容是否包含 SVG
+      if (content.includes('<svg')) {
+        // 如果是 HTML 页面，尝试提取 SVG 内容
+        if (contentType?.includes('text/html')) {
+          return this.extractSVGFromHTML(content);
+        }
+        return content;
+      }
+
       if (
         contentType &&
         !contentType.includes('image/svg+xml') &&
-        !contentType.includes('text/xml')
+        !contentType.includes('text/xml') &&
+        !contentType.includes('text/html')
       ) {
         this.logger.warn(`可能不是SVG文件，Content-Type: ${contentType}`);
       }
 
-      return await response.text();
+      return content;
     } catch (error) {
       throw new Error(`获取SVG内容失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 处理 Whimsical SVG URL
+   */
+  private async fetchWhimsicalSVG(url: string): Promise<string> {
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/svg+xml,text/xml,application/xml,text/html,*/*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Whimsical HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const content = await response.text();
+
+      // 如果直接返回 SVG，直接使用
+      if (content.trim().startsWith('<svg')) {
+        return content;
+      }
+
+      // 如果是 HTML 页面，尝试提取 SVG
+      if (content.includes('<svg')) {
+        return this.extractSVGFromHTML(content);
+      }
+
+      throw new Error('未找到有效的SVG内容');
+    } catch (error) {
+      throw new Error(`获取Whimsical SVG失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 从HTML中提取SVG内容
+   */
+  private extractSVGFromHTML(html: string): string {
+    try {
+      // 使用正则表达式提取 SVG 内容
+      const svgMatch = html.match(/<svg[^>]*>[\s\S]*?<\/svg>/i);
+      if (svgMatch) {
+        return svgMatch[0];
+      }
+
+      // 如果没有找到完整的 SVG 标签，尝试查找内联 SVG
+      const svgStartMatch = html.match(/<svg[^>]*>/i);
+      if (svgStartMatch) {
+        const startIndex = html.indexOf(svgStartMatch[0]);
+        const endIndex = html.lastIndexOf('</svg>');
+        if (endIndex > startIndex) {
+          return html.substring(startIndex, endIndex + 6);
+        }
+      }
+
+      throw new Error('HTML中未找到有效的SVG内容');
+    } catch (error) {
+      throw new Error(`提取SVG内容失败: ${error.message}`);
     }
   }
 

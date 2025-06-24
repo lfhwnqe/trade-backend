@@ -21,7 +21,16 @@ export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer
       .apply(AuthMiddleware)
-      .exclude('/user/login', '/user/register', '/user/confirm')
+      .exclude(
+        '/user/login',
+        '/user/register',
+        '/user/confirm',
+        '/svg-parser/parse',
+        '/svg-parser/parse-string',
+        '/svg-parser/parse-url',
+        '/svg-parser/parse-file',
+        '/svg-parser/validate'
+      )
       .forRoutes('*');
   }
 }
