@@ -29,7 +29,7 @@ export class AppModule implements NestModule {
         '/svg-parser/parse-string',
         '/svg-parser/parse-url',
         '/svg-parser/parse-file',
-        '/svg-parser/validate'
+        '/svg-parser/validate',
       )
       .forRoutes('*');
   }

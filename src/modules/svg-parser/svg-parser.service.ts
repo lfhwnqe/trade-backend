@@ -185,7 +185,7 @@ export class SVGParserService {
       const response = await fetch(url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; SVGParser/1.0)',
-          'Accept': 'image/svg+xml,text/xml,application/xml,text/html,*/*',
+          Accept: 'image/svg+xml,text/xml,application/xml,text/html,*/*',
         },
       });
 
@@ -227,16 +227,19 @@ export class SVGParserService {
     try {
       const response = await fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'image/svg+xml,text/xml,application/xml,text/html,*/*',
+          'User-Agent':
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'image/svg+xml,text/xml,application/xml,text/html,*/*',
           'Accept-Language': 'en-US,en;q=0.9',
           'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache',
+          Pragma: 'no-cache',
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Whimsical HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(
+          `Whimsical HTTP ${response.status}: ${response.statusText}`,
+        );
       }
 
       const content = await response.text();
