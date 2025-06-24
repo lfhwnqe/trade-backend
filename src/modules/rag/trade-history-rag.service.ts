@@ -29,6 +29,7 @@ export class TradeHistoryRAGService {
   /**
    * 将交易数据添加到向量数据库
    */
+  // todo 如果该交易之前已经入库过了，需要先删除旧的向量记录，以便更新
   async addTradeToHistory(trade: Trade): Promise<void> {
     try {
       this.logger.log(
