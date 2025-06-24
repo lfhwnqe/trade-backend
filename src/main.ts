@@ -6,10 +6,10 @@ import { HttpExceptionFilter } from './base/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+
   // 全局异常过滤器
   app.useGlobalFilters(new HttpExceptionFilter());
-  
+
   // 全局验证管道
   app.useGlobalPipes(
     new ValidationPipe({

@@ -26,7 +26,6 @@ export enum Priority {
   LOW = 'low',
 }
 
-
 // 向量搜索选项
 export interface SearchOptions {
   userId: string;
@@ -45,7 +44,6 @@ export interface RetrievalOptions extends SearchOptions {
   includeMetadata?: boolean;
   contextWindowSize?: number;
 }
-
 
 // 向量记录元数据
 export interface VectorMetadata {
@@ -88,7 +86,6 @@ export interface RetrievalResult {
   processingTime: number;
   context: string;
 }
-
 
 // 文档摘要
 export interface DocumentSummary {
@@ -153,7 +150,6 @@ export interface RAGAnalytics {
     documents: number;
   }>;
 }
-
 
 // 嵌入配置
 export interface EmbeddingConfig {

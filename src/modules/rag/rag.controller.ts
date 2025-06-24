@@ -23,14 +23,8 @@ import {
 import { Request } from 'express';
 import { RAGService } from './rag.service';
 import { MetadataService } from './metadata.service';
-import {
-  CreateDocumentDto,
-  UpdateDocumentDto,
-  SearchQueryDto,
-} from './dto';
-import {
-  RetrievalResultDto,
-} from './dto/rag-response.dto';
+import { CreateDocumentDto, UpdateDocumentDto, SearchQueryDto } from './dto';
+import { RetrievalResultDto } from './dto/rag-response.dto';
 import { DocumentEntity } from './entities/document.entity';
 import {
   DocumentFilter,

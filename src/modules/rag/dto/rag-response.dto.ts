@@ -34,7 +34,6 @@ export class SearchResultDto {
   };
 }
 
-
 export class DocumentSummaryDto {
   @ApiProperty({
     description: '文档ID',

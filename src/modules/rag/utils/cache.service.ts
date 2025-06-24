@@ -20,8 +20,12 @@ export class CacheService {
   private readonly maxSize: number;
 
   constructor(private readonly configService: ConfigService) {
-    this.defaultTTL = parseInt(this.configService.get('RAG_CACHE_TTL') || '300000'); // 5分钟
-    this.maxSize = parseInt(this.configService.get('RAG_CACHE_MAX_SIZE') || '1000'); // 最大1000项
+    this.defaultTTL = parseInt(
+      this.configService.get('RAG_CACHE_TTL') || '300000',
+    ); // 5分钟
+    this.maxSize = parseInt(
+      this.configService.get('RAG_CACHE_MAX_SIZE') || '1000',
+    ); // 最大1000项
 
     // 定期清理过期缓存
     setInterval(() => this.cleanup(), 60000); // 每分钟清理一次
@@ -32,7 +36,7 @@ export class CacheService {
    */
   set<T>(key: string, data: T, ttl?: number): void {
     const actualTTL = ttl || this.defaultTTL;
-    
+
     // 如果缓存已满，删除最旧的项
     if (this.cache.size >= this.maxSize) {
       const oldestKey = this.getOldestKey();
@@ -55,7 +59,7 @@ export class CacheService {
    */
   get<T>(key: string): T | null {
     const item = this.cache.get(key);
-    
+
     if (!item) {
       return null;
     }
@@ -87,7 +91,7 @@ export class CacheService {
    */
   has(key: string): boolean {
     const item = this.cache.get(key);
-    
+
     if (!item) {
       return false;
     }
@@ -129,16 +133,23 @@ export class CacheService {
    * 生成缓存键
    */
   static generateKey(prefix: string, ...params: any[]): string {
-    const keyParts = [prefix, ...params.map(p => 
-      typeof p === 'object' ? JSON.stringify(p) : String(p)
-    )];
+    const keyParts = [
+      prefix,
+      ...params.map((p) =>
+        typeof p === 'object' ? JSON.stringify(p) : String(p),
+      ),
+    ];
     return keyParts.join(':');
   }
 
   /**
    * 为搜索查询生成缓存键
    */
-  static generateSearchKey(userId: string, query: string, options: any): string {
+  static generateSearchKey(
+    userId: string,
+    query: string,
+    options: any,
+  ): string {
     const normalizedQuery = query.toLowerCase().trim();
     const optionsHash = this.hashObject(options);
     return this.generateKey('search', userId, normalizedQuery, optionsHash);
@@ -187,13 +198,13 @@ export class CacheService {
   private static hashString(str: string): string {
     let hash = 0;
     if (str.length === 0) return hash.toString();
-    
+
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
+      hash = (hash << 5) - hash + char;
       hash = hash & hash; // 转换为32位整数
     }
-    
+
     return Math.abs(hash).toString(36);
   }
 

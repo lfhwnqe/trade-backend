@@ -107,4 +107,3 @@ export class SearchQueryDto {
   @IsOptional()
   documentIds?: string[];
 }
-

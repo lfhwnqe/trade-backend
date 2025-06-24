@@ -49,4 +49,3 @@ export interface DocumentEntity {
   updatedAt: string; // 更新时间
   lastAccessedAt?: string; // 最后访问时间
 }
-

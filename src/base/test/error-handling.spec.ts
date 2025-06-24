@@ -275,7 +275,6 @@ describe('Error Handling System', () => {
         }),
       );
     });
-    
 
     it('should detect Vector DB-related errors', () => {
       const exception = new Error('Vector database index error');

@@ -31,7 +31,7 @@ export class CognitoService {
           `Cognito configuration missing: ${error.message}`,
           ERROR_CODES.COGNITO_CONFIG_MISSING,
           '认证服务配置异常，请联系管理员',
-          { error: error.message }
+          { error: error.message },
         );
       }
     }
@@ -48,7 +48,7 @@ export class CognitoService {
       throw new CognitoException(
         'Access token is required',
         ERROR_CODES.AUTH_TOKEN_MISSING,
-        '请提供访问令牌'
+        '请提供访问令牌',
       );
     }
 
@@ -61,21 +61,21 @@ export class CognitoService {
           `Token expired: ${e.message}`,
           ERROR_CODES.AUTH_TOKEN_EXPIRED,
           '访问令牌已过期，请重新登录',
-          { originalError: e.message }
+          { originalError: e.message },
         );
       } else if (e?.message?.includes('invalid')) {
         throw new CognitoException(
           `Invalid token: ${e.message}`,
           ERROR_CODES.AUTH_TOKEN_INVALID,
           '访问令牌无效，请重新登录',
-          { originalError: e.message }
+          { originalError: e.message },
         );
       } else {
         throw new CognitoException(
           `Token verification failed: ${e?.message || 'Unknown error'}`,
           ERROR_CODES.COGNITO_VERIFICATION_FAILED,
           '令牌验证失败，请重新登录',
-          { originalError: e?.message }
+          { originalError: e?.message },
         );
       }
     }

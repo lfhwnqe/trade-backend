@@ -8,7 +8,11 @@ import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from '../common/config.service';
 import { TradeQueryDto } from './dto/trade-query.dto';
 import { TradeHistoryRAGService } from '../rag/trade-history-rag.service';
-import { getCurrentRAGConfig, validateRAGConfig, RAGEvaluationConfig } from './rag-evaluation.config';
+import {
+  getCurrentRAGConfig,
+  validateRAGConfig,
+  RAGEvaluationConfig,
+} from './rag-evaluation.config';
 import {
   DynamoDBException,
   AuthorizationException,
@@ -787,7 +791,11 @@ export class TradeService {
    * 评估交易记录是否有价值添加到RAG系统
    * 使用多维度评分系统进行综合判断
    */
-  private evaluateTradeValueForRAG(trade: Trade): { shouldAdd: boolean; reason: string; score: number } {
+  private evaluateTradeValueForRAG(trade: Trade): {
+    shouldAdd: boolean;
+    reason: string;
+    score: number;
+  } {
     let score = 0;
     const reasons: string[] = [];
 
@@ -796,7 +804,7 @@ export class TradeService {
       return {
         shouldAdd: false,
         reason: '交易数据不完整，缺少关键信息',
-        score: 0
+        score: 0,
       };
     }
 
@@ -844,7 +852,7 @@ export class TradeService {
       reason: shouldAdd
         ? `综合评分${score}/100，符合条件: ${reasons.join(', ')}`
         : `综合评分${score}/100，未达到阈值${threshold}分`,
-      score
+      score,
     };
   }
 
@@ -858,12 +866,12 @@ export class TradeService {
       trade.tradeType,
       trade.analysisTime,
       trade.marketStructure,
-      trade.marketStructureAnalysis
+      trade.marketStructureAnalysis,
     ];
 
     // 检查字符串字段
     const stringFieldsValid = requiredStringFields.every(
-      field => field !== undefined && field !== null && field !== ''
+      (field) => field !== undefined && field !== null && field !== '',
     );
 
     if (!stringFieldsValid) {
@@ -875,7 +883,7 @@ export class TradeService {
       // 完整交易：需要入场和离场数据
       const requiredNumberFields = [trade.entryPrice, trade.exitPrice];
       const numberFieldsValid = requiredNumberFields.every(
-        field => field !== undefined && field !== null && !isNaN(field)
+        (field) => field !== undefined && field !== null && !isNaN(field),
       );
 
       const enumFieldsValid =
@@ -906,12 +914,19 @@ export class TradeService {
   /**
    * 评估交易的学习价值
    */
-  private assessLearningValue(trade: Trade): { score: number; reasons: string[] } {
+  private assessLearningValue(trade: Trade): {
+    score: number;
+    reasons: string[];
+  } {
     let score = 0;
     const reasons: string[] = [];
 
     // 经验总结存在且有实质内容
-    if (trade.lessonsLearned && trade.lessonsLearned.trim().length > this.ragConfig.textRequirements.detailedLessonsLearned) {
+    if (
+      trade.lessonsLearned &&
+      trade.lessonsLearned.trim().length >
+        this.ragConfig.textRequirements.detailedLessonsLearned
+    ) {
       score += this.ragConfig.learningScores.detailedLessons;
       reasons.push('包含详细经验总结');
     } else if (trade.lessonsLearned && trade.lessonsLearned.trim().length > 0) {
@@ -920,13 +935,21 @@ export class TradeService {
     }
 
     // 心态记录存在
-    if (trade.mentalityNotes && trade.mentalityNotes.trim().length > this.ragConfig.textRequirements.basicMentalityNotes) {
+    if (
+      trade.mentalityNotes &&
+      trade.mentalityNotes.trim().length >
+        this.ragConfig.textRequirements.basicMentalityNotes
+    ) {
       score += this.ragConfig.learningScores.mentalityNotes;
       reasons.push('包含心态记录');
     }
 
     // 实际路径分析存在
-    if (trade.actualPathAnalysis && trade.actualPathAnalysis.trim().length > this.ragConfig.textRequirements.detailedPathAnalysis) {
+    if (
+      trade.actualPathAnalysis &&
+      trade.actualPathAnalysis.trim().length >
+        this.ragConfig.textRequirements.detailedPathAnalysis
+    ) {
       score += this.ragConfig.learningScores.pathAnalysis;
       reasons.push('包含实际路径分析');
     }
@@ -937,7 +960,10 @@ export class TradeService {
   /**
    * 评估交易重要性
    */
-  private assessTradeImportance(trade: Trade): { score: number; reasons: string[] } {
+  private assessTradeImportance(trade: Trade): {
+    score: number;
+    reasons: string[];
+  } {
     let score = 0;
     const reasons: string[] = [];
 
@@ -968,21 +994,36 @@ export class TradeService {
   /**
    * 评估分析质量
    */
-  private assessAnalysisQuality(trade: Trade): { score: number; reasons: string[] } {
+  private assessAnalysisQuality(trade: Trade): {
+    score: number;
+    reasons: string[];
+  } {
     let score = 0;
     const reasons: string[] = [];
 
     // 市场结构分析质量
-    if (trade.marketStructureAnalysis && trade.marketStructureAnalysis.trim().length > this.ragConfig.textRequirements.detailedMarketAnalysis) {
+    if (
+      trade.marketStructureAnalysis &&
+      trade.marketStructureAnalysis.trim().length >
+        this.ragConfig.textRequirements.detailedMarketAnalysis
+    ) {
       score += this.ragConfig.qualityScores.detailedMarketAnalysis;
       reasons.push('详细市场结构分析');
-    } else if (trade.marketStructureAnalysis && trade.marketStructureAnalysis.trim().length > this.ragConfig.textRequirements.basicMarketAnalysis) {
+    } else if (
+      trade.marketStructureAnalysis &&
+      trade.marketStructureAnalysis.trim().length >
+        this.ragConfig.textRequirements.basicMarketAnalysis
+    ) {
       score += this.ragConfig.qualityScores.basicMarketAnalysis;
       reasons.push('基础市场结构分析');
     }
 
     // 预期路径分析存在
-    if (trade.expectedPathAnalysis && trade.expectedPathAnalysis.trim().length > this.ragConfig.textRequirements.basicPathAnalysis) {
+    if (
+      trade.expectedPathAnalysis &&
+      trade.expectedPathAnalysis.trim().length >
+        this.ragConfig.textRequirements.basicPathAnalysis
+    ) {
       score += this.ragConfig.qualityScores.expectedPathAnalysis;
       reasons.push('包含预期路径分析');
     }
@@ -1002,10 +1043,11 @@ export class TradeService {
     }
 
     // 图片资源丰富度
-    const imageCount = (trade.volumeProfileImages?.length || 0) +
-                      (trade.expectedPathImages?.length || 0) +
-                      (trade.actualPathImages?.length || 0) +
-                      (trade.analysisImages?.length || 0);
+    const imageCount =
+      (trade.volumeProfileImages?.length || 0) +
+      (trade.expectedPathImages?.length || 0) +
+      (trade.actualPathImages?.length || 0) +
+      (trade.analysisImages?.length || 0);
 
     if (imageCount >= this.ragConfig.imageRequirements.richImages) {
       score += this.ragConfig.qualityScores.richImages;
@@ -1021,7 +1063,10 @@ export class TradeService {
   /**
    * 评估交易结果多样性价值
    */
-  private assessResultDiversity(trade: Trade): { score: number; reasons: string[] } {
+  private assessResultDiversity(trade: Trade): {
+    score: number;
+    reasons: string[];
+  } {
     let score = 0;
     const reasons: string[] = [];
 
@@ -1043,7 +1088,10 @@ export class TradeService {
   /**
    * 评估交易状态价值
    */
-  private assessTradeStatus(trade: Trade): { score: number; reasons: string[] } {
+  private assessTradeStatus(trade: Trade): {
+    score: number;
+    reasons: string[];
+  } {
     let score = 0;
     const reasons: string[] = [];
 

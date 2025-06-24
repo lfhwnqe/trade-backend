@@ -33,25 +33,30 @@ export class TextProcessor {
   static cleanText(text: string): string {
     if (!text) return '';
 
-    return text
-      // 移除多余的空白字符
-      .replace(/\s+/g, ' ')
-      // 移除多余的换行符
-      .replace(/\n\s*\n/g, '\n\n')
-      // 移除行首行尾空格
-      .replace(/^\s+|\s+$/gm, '')
-      // 标准化引号
-      .replace(/[""]/g, '"')
-      .replace(/['']/g, "'")
-      // 移除不可见字符
-      .replace(/[\u200B-\u200D\uFEFF]/g, '')
-      .trim();
+    return (
+      text
+        // 移除多余的空白字符
+        .replace(/\s+/g, ' ')
+        // 移除多余的换行符
+        .replace(/\n\s*\n/g, '\n\n')
+        // 移除行首行尾空格
+        .replace(/^\s+|\s+$/gm, '')
+        // 标准化引号
+        .replace(/[""]/g, '"')
+        .replace(/['']/g, "'")
+        // 移除不可见字符
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')
+        .trim()
+    );
   }
 
   /**
    * 智能文本分块
    */
-  static splitText(text: string, options?: Partial<ChunkingOptions>): TextChunk[] {
+  static splitText(
+    text: string,
+    options?: Partial<ChunkingOptions>,
+  ): TextChunk[] {
     const opts: ChunkingOptions = {
       chunkSize: options?.chunkSize || this.DEFAULT_CHUNK_SIZE,
       chunkOverlap: options?.chunkOverlap || this.DEFAULT_CHUNK_OVERLAP,
@@ -65,13 +70,15 @@ export class TextProcessor {
     const chunks: TextChunk[] = [];
 
     if (cleanedText.length <= opts.chunkSize) {
-      return [{
-        content: cleanedText,
-        index: 0,
-        tokenCount: this.estimateTokenCount(cleanedText),
-        startChar: 0,
-        endChar: cleanedText.length,
-      }];
+      return [
+        {
+          content: cleanedText,
+          index: 0,
+          tokenCount: this.estimateTokenCount(cleanedText),
+          startChar: 0,
+          endChar: cleanedText.length,
+        },
+      ];
     }
 
     let currentPosition = 0;
@@ -92,13 +99,16 @@ export class TextProcessor {
       // 尝试在段落边界处分割
       if (opts.preserveParagraphs && chunkEnd < cleanedText.length) {
         const paragraphEnd = this.findParagraphEnd(cleanedText, chunkEnd);
-        if (paragraphEnd > chunkStart + opts.minChunkSize && paragraphEnd <= chunkStart + opts.maxChunkSize) {
+        if (
+          paragraphEnd > chunkStart + opts.minChunkSize &&
+          paragraphEnd <= chunkStart + opts.maxChunkSize
+        ) {
           chunkEnd = paragraphEnd;
         }
       }
 
       const chunkContent = cleanedText.slice(chunkStart, chunkEnd).trim();
-      
+
       if (chunkContent.length >= opts.minChunkSize) {
         chunks.push({
           content: chunkContent,
@@ -120,22 +130,58 @@ export class TextProcessor {
    */
   static extractKeywords(text: string, maxKeywords: number = 10): string[] {
     const cleanedText = this.cleanText(text.toLowerCase());
-    
+
     // 移除停用词
     const stopWords = new Set([
-      'a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from',
-      'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the',
-      'to', 'was', 'were', 'will', 'with', 'the', '的', '了', '在', '是',
-      '和', '与', '或', '但', '因为', '所以', '如果', '那么', '这个', '那个'
+      'a',
+      'an',
+      'and',
+      'are',
+      'as',
+      'at',
+      'be',
+      'by',
+      'for',
+      'from',
+      'has',
+      'he',
+      'in',
+      'is',
+      'it',
+      'its',
+      'of',
+      'on',
+      'that',
+      'the',
+      'to',
+      'was',
+      'were',
+      'will',
+      'with',
+      'the',
+      '的',
+      '了',
+      '在',
+      '是',
+      '和',
+      '与',
+      '或',
+      '但',
+      '因为',
+      '所以',
+      '如果',
+      '那么',
+      '这个',
+      '那个',
     ]);
 
-    const words = cleanedText
-      .match(/\b\w+\b/g) || []
-      .filter(word => word.length > 2 && !stopWords.has(word));
+    const words =
+      cleanedText.match(/\b\w+\b/g) ||
+      [].filter((word) => word.length > 2 && !stopWords.has(word));
 
     // 计算词频
     const wordFreq = new Map<string, number>();
-    words.forEach(word => {
+    words.forEach((word) => {
       wordFreq.set(word, (wordFreq.get(word) || 0) + 1);
     });
 
@@ -151,14 +197,14 @@ export class TextProcessor {
    */
   static generateSummary(text: string, maxSentences: number = 3): string {
     const sentences = this.splitIntoSentences(text);
-    
+
     if (sentences.length <= maxSentences) {
       return sentences.join(' ');
     }
 
     // 简单的摘要算法：选择包含关键词最多的句子
     const keywords = this.extractKeywords(text, 20);
-    const sentenceScores = sentences.map(sentence => {
+    const sentenceScores = sentences.map((sentence) => {
       const lowerSentence = sentence.toLowerCase();
       const score = keywords.reduce((acc, keyword) => {
         return acc + (lowerSentence.includes(keyword) ? 1 : 0);
@@ -169,7 +215,7 @@ export class TextProcessor {
     return sentenceScores
       .sort((a, b) => b.score - a.score)
       .slice(0, maxSentences)
-      .map(item => item.sentence)
+      .map((item) => item.sentence)
       .join(' ');
   }
 
@@ -178,12 +224,12 @@ export class TextProcessor {
    */
   static estimateTokenCount(text: string): number {
     if (!text) return 0;
-    
+
     // 简化的 token 估算：平均每4个字符对应1个 token
     // 中文字符通常每个字符对应1个 token
     const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
     const otherChars = text.length - chineseChars;
-    
+
     return Math.ceil(chineseChars + otherChars / 4);
   }
 
@@ -205,7 +251,7 @@ export class TextProcessor {
     if (chineseRatio > 0.7) return 'zh';
     if (englishRatio > 0.7) return 'en';
     if (chineseRatio > 0.2 && englishRatio > 0.2) return 'mixed';
-    
+
     return 'unknown';
   }
 
@@ -221,13 +267,17 @@ export class TextProcessor {
   } {
     const lines = text.split('\n');
     const sections: { title: string; content: string; level: number }[] = [];
-    let currentSection: { title: string; content: string; level: number } | null = null;
+    let currentSection: {
+      title: string;
+      content: string;
+      level: number;
+    } | null = null;
 
     // 检测标题模式
     const titlePatterns = [
-      /^#{1,6}\s+(.+)$/,           // Markdown 标题
-      /^(\d+\.)\s+(.+)$/,         // 数字标题
-      /^([一二三四五六七八九十]+[、.])\s*(.+)$/,  // 中文数字标题
+      /^#{1,6}\s+(.+)$/, // Markdown 标题
+      /^(\d+\.)\s+(.+)$/, // 数字标题
+      /^([一二三四五六七八九十]+[、.])\s*(.+)$/, // 中文数字标题
     ];
 
     let documentTitle: string | undefined;
@@ -245,8 +295,10 @@ export class TextProcessor {
         const match = trimmedLine.match(pattern);
         if (match) {
           isTitle = true;
-          titleLevel = pattern === titlePatterns[0] ? 
-            (match[0].match(/^#+/) || [''])[0].length : 1;
+          titleLevel =
+            pattern === titlePatterns[0]
+              ? (match[0].match(/^#+/) || [''])[0].length
+              : 1;
           titleText = match[match.length - 1];
           break;
         }
@@ -270,7 +322,8 @@ export class TextProcessor {
         };
       } else if (currentSection) {
         // 添加内容到当前章节
-        currentSection.content += (currentSection.content ? '\n' : '') + trimmedLine;
+        currentSection.content +=
+          (currentSection.content ? '\n' : '') + trimmedLine;
       } else {
         // 没有章节时，创建默认章节
         if (!currentSection) {
@@ -304,7 +357,7 @@ export class TextProcessor {
   private static findSentenceEnd(text: string, startPos: number): number {
     const sentenceEnders = /[.!?。！？]/g;
     sentenceEnders.lastIndex = startPos;
-    
+
     const match = sentenceEnders.exec(text);
     return match ? match.index + 1 : startPos;
   }
@@ -318,7 +371,7 @@ export class TextProcessor {
     // 简单的句子分割
     return text
       .split(/[.!?。！？]+/)
-      .map(s => s.trim())
-      .filter(s => s.length > 0);
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
   }
 }

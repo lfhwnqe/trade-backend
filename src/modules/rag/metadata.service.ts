@@ -149,7 +149,12 @@ export class MetadataService {
 
     // 动态构建更新表达式
     Object.entries(updates).forEach(([key, value]) => {
-      if (value !== undefined && key !== 'id' && key !== 'userId' && key !== 'documentId') {
+      if (
+        value !== undefined &&
+        key !== 'id' &&
+        key !== 'userId' &&
+        key !== 'documentId'
+      ) {
         updateExpressions.push(`#${key} = :${key}`);
         expressionAttributeNames[`#${key}`] = key;
         expressionAttributeValues[`:${key}`] = value;
@@ -212,7 +217,7 @@ export class MetadataService {
     filters?: DocumentFilter,
   ): Promise<DocumentEntity[]> {
     this.logger.log(`Querying documents for userId: ${userId}`);
-    
+
     try {
       const params: any = {
         TableName: this.documentsTableName,
@@ -269,7 +274,6 @@ export class MetadataService {
       throw error;
     }
   }
-
 
   /**
    * 更新文档最后访问时间

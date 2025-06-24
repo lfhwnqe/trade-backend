@@ -9,7 +9,12 @@ import { CommonModule } from '../common/common.module';
 @Module({
   imports: [CommonModule],
   controllers: [RAGController],
-  providers: [RAGService, MetadataService, TradeHistoryRAGService, CacheService],
+  providers: [
+    RAGService,
+    MetadataService,
+    TradeHistoryRAGService,
+    CacheService,
+  ],
   exports: [RAGService, MetadataService, TradeHistoryRAGService, CacheService],
 })
 export class RAGModule {}

@@ -77,7 +77,9 @@ describe('TradeHistoryRAGService', () => {
     it('should remove trade from history successfully', async () => {
       const tradeId = 'test-trade-id';
 
-      await expect(service.removeTradeFromHistory(tradeId)).resolves.not.toThrow();
+      await expect(
+        service.removeTradeFromHistory(tradeId),
+      ).resolves.not.toThrow();
     });
   });
 

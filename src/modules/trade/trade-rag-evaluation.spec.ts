@@ -3,7 +3,14 @@ import { TradeService } from './trade.service';
 import { TradeHistoryRAGService } from '../rag/trade-history-rag.service';
 import { ConfigService } from '../common/config.service';
 import { Trade } from './entities/trade.entity';
-import { TradeType, TradeStatus, TradeResult, EntryDirection, MarketStructure, TradeGrade } from './dto/create-trade.dto';
+import {
+  TradeType,
+  TradeStatus,
+  TradeResult,
+  EntryDirection,
+  MarketStructure,
+  TradeGrade,
+} from './dto/create-trade.dto';
 
 describe('TradeService - RAG Evaluation Logic', () => {
   let service: TradeService;
@@ -65,7 +72,7 @@ describe('TradeService - RAG Evaluation Logic', () => {
     entryPlanA: {
       entryReason: '价格回调至支撑位',
       entrySignal: '成交量减少',
-      exitSignal: '价格突破阻力位'
+      exitSignal: '价格突破阻力位',
     },
     ...overrides,
   });
@@ -78,7 +85,7 @@ describe('TradeService - RAG Evaluation Logic', () => {
 
       // 使用反射访问私有方法进行测试
       const result = (service as any).evaluateTradeValueForRAG(incompleteTrade);
-      
+
       expect(result.shouldAdd).toBe(false);
       expect(result.reason).toContain('交易数据不完整');
     });
@@ -90,11 +97,15 @@ describe('TradeService - RAG Evaluation Logic', () => {
         exitPrice: undefined, // 没有离场价格
         entryDirection: undefined, // 没有入场方向
         tradeResult: undefined, // 没有交易结果
-        expectedPathAnalysis: '预期市场将在当前支撑位企稳后向上突破，关键阻力位在前高附近',
-        lessonsLearned: '通过这次分析学到了在震荡市场中识别关键支撑阻力位的重要性',
+        expectedPathAnalysis:
+          '预期市场将在当前支撑位企稳后向上突破，关键阻力位在前高附近',
+        lessonsLearned:
+          '通过这次分析学到了在震荡市场中识别关键支撑阻力位的重要性',
       });
 
-      const result = (service as any).evaluateTradeValueForRAG(analysisOnlyTrade);
+      const result = (service as any).evaluateTradeValueForRAG(
+        analysisOnlyTrade,
+      );
 
       expect(result.shouldAdd).toBe(true);
       expect(result.reason).toContain('纯行情分析');
@@ -111,8 +122,12 @@ describe('TradeService - RAG Evaluation Logic', () => {
         status: TradeStatus.EXITED, // 交易已完结
       });
 
-      const ongoingResult = (service as any).evaluateTradeValueForRAG(ongoingTrade);
-      const completedResult = (service as any).evaluateTradeValueForRAG(completedTrade);
+      const ongoingResult = (service as any).evaluateTradeValueForRAG(
+        ongoingTrade,
+      );
+      const completedResult = (service as any).evaluateTradeValueForRAG(
+        completedTrade,
+      );
 
       // 进行中的交易评分应该低于已完结的交易
       expect(ongoingResult.score).toBeLessThan(completedResult.score);
@@ -125,17 +140,22 @@ describe('TradeService - RAG Evaluation Logic', () => {
       const highValueTrade = createBaseTrade({
         grade: TradeGrade.HIGH, // 高重要性
         tradeType: TradeType.REAL, // 真实交易
-        lessonsLearned: '这次交易让我学到了在震荡市场中耐心等待突破的重要性，同时也认识到了风险管理的关键作用', // 详细经验总结
+        lessonsLearned:
+          '这次交易让我学到了在震荡市场中耐心等待突破的重要性，同时也认识到了风险管理的关键作用', // 详细经验总结
         mentalityNotes: '入场后感到紧张，但坚持了交易计划', // 心态记录
-        actualPathAnalysis: '价格如预期在支撑位获得支撑后反弹，但反弹力度超出预期', // 实际路径分析
+        actualPathAnalysis:
+          '价格如预期在支撑位获得支撑后反弹，但反弹力度超出预期', // 实际路径分析
         volumeProfileImages: [{ key: 'img1', url: 'url1' }],
         expectedPathImages: [{ key: 'img2', url: 'url2' }],
         actualPathImages: [{ key: 'img3', url: 'url3' }],
-        analysisImages: [{ key: 'img4', url: 'url4' }, { key: 'img5', url: 'url5' }],
+        analysisImages: [
+          { key: 'img4', url: 'url4' },
+          { key: 'img5', url: 'url5' },
+        ],
       });
 
       const result = (service as any).evaluateTradeValueForRAG(highValueTrade);
-      
+
       expect(result.shouldAdd).toBe(true);
       expect(result.score).toBeGreaterThan(45); // 新阈值
       expect(result.reason).toContain('综合评分');
@@ -154,36 +174,45 @@ describe('TradeService - RAG Evaluation Logic', () => {
       });
 
       const lossResult = (service as any).evaluateTradeValueForRAG(lossTrade);
-      const profitResult = (service as any).evaluateTradeValueForRAG(profitTrade);
-      
+      const profitResult = (service as any).evaluateTradeValueForRAG(
+        profitTrade,
+      );
+
       // 亏损交易应该获得更高的多样性评分
       expect(lossResult.score).toBeGreaterThan(profitResult.score);
     });
 
-
-
     it('应该正确评估分析质量', async () => {
       const highQualityTrade = createBaseTrade({
-        marketStructureAnalysis: '市场目前处于上升趋势中的回调阶段，价格在关键斐波那契回撤位获得支撑，成交量在回调过程中逐步萎缩，显示抛压减轻', // 详细分析
+        marketStructureAnalysis:
+          '市场目前处于上升趋势中的回调阶段，价格在关键斐波那契回撤位获得支撑，成交量在回调过程中逐步萎缩，显示抛压减轻', // 详细分析
         expectedPathAnalysis: '预期价格将在当前支撑位企稳后重新向上突破前高',
         entryPlanB: {
           entryReason: '备选方案：如果跌破支撑位则反手做空',
           entrySignal: '跌破支撑位且成交量放大',
-          exitSignal: '到达下一个支撑位'
+          exitSignal: '到达下一个支撑位',
         },
-        volumeProfileImages: [{ key: 'img1', url: 'url1' }, { key: 'img2', url: 'url2' }],
+        volumeProfileImages: [
+          { key: 'img1', url: 'url1' },
+          { key: 'img2', url: 'url2' },
+        ],
         expectedPathImages: [{ key: 'img3', url: 'url3' }],
         actualPathImages: [{ key: 'img4', url: 'url4' }],
-        analysisImages: [{ key: 'img5', url: 'url5' }, { key: 'img6', url: 'url6' }],
+        analysisImages: [
+          { key: 'img5', url: 'url5' },
+          { key: 'img6', url: 'url6' },
+        ],
       });
 
       const basicTrade = createBaseTrade({
         marketStructureAnalysis: '震荡市场', // 简单分析
       });
 
-      const highQualityResult = (service as any).evaluateTradeValueForRAG(highQualityTrade);
+      const highQualityResult = (service as any).evaluateTradeValueForRAG(
+        highQualityTrade,
+      );
       const basicResult = (service as any).evaluateTradeValueForRAG(basicTrade);
-      
+
       expect(highQualityResult.score).toBeGreaterThan(basicResult.score);
     });
   });
@@ -197,8 +226,10 @@ describe('TradeService - RAG Evaluation Logic', () => {
       });
 
       await (service as any).checkAndAddToRAGHistory(highValueTrade);
-      
-      expect(mockRAGService.addTradeToHistory).toHaveBeenCalledWith(highValueTrade);
+
+      expect(mockRAGService.addTradeToHistory).toHaveBeenCalledWith(
+        highValueTrade,
+      );
     });
 
     it('应该跳过低价值交易', async () => {
@@ -207,7 +238,7 @@ describe('TradeService - RAG Evaluation Logic', () => {
       });
 
       await (service as any).checkAndAddToRAGHistory(lowValueTrade);
-      
+
       expect(mockRAGService.addTradeToHistory).not.toHaveBeenCalled();
     });
   });
