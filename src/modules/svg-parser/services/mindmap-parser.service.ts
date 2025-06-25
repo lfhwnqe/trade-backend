@@ -1,55 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { XMLParser } from 'fast-xml-parser';
 import { DirectedGraph } from 'data-structure-typed';
-
-export interface MindMapNode {
-  id: string;
-  text: string;
-  level: number;
-  parentId?: string;
-  children?: MindMapNode[];
-  position?: { x: number; y: number };
-  style?: {
-    color?: string;
-    backgroundColor?: string;
-    fontSize?: number;
-    fontWeight?: string;
-  };
-}
-
-export interface MindMapData {
-  nodes: MindMapNode[];
-  links: Array<{
-    source: string;
-    target: string;
-    type?: string;
-  }>;
-  metadata?: {
-    title?: string;
-    author?: string;
-    created?: string;
-    modified?: string;
-    format?: string;
-  };
-}
-
-export interface GraphData {
-  nodes: Array<{
-    id: string;
-    name: string;
-    val?: number;
-    group?: string;
-    level?: number;
-    [key: string]: any;
-  }>;
-  links: Array<{
-    source: string;
-    target: string;
-    value?: number;
-    type?: string;
-    [key: string]: any;
-  }>;
-}
+import { MindMapData, MindMapNode, ForceGraphData } from '../types/mindmap.types';
 
 @Injectable()
 export class MindMapParserService {
@@ -101,7 +53,7 @@ export class MindMapParserService {
   private parseFreeMind(xmlContent: string): MindMapData {
     const parsed = this.xmlParser.parse(xmlContent);
     const map = parsed.map;
-    
+
     if (!map || !map.node) {
       throw new Error('无效的FreeMind文件格式');
     }
@@ -113,20 +65,22 @@ export class MindMapParserService {
     const processNode = (node: any, parentId?: string, level = 0): string => {
       const nodeId = `node_${nodeIdCounter++}`;
       const text = node['@_TEXT'] || node['@_text'] || '未命名节点';
-      
+
       const mindMapNode: MindMapNode = {
         id: nodeId,
         text,
         level,
         parentId,
-        position: node['@_POSITION'] ? {
-          x: parseFloat(node['@_POSITION'].split(',')[0] || '0'),
-          y: parseFloat(node['@_POSITION'].split(',')[1] || '0')
-        } : undefined,
+        position: node['@_POSITION']
+          ? {
+              x: parseFloat(node['@_POSITION'].split(',')[0] || '0'),
+              y: parseFloat(node['@_POSITION'].split(',')[1] || '0'),
+            }
+          : undefined,
         style: {
           color: node['@_COLOR'],
           backgroundColor: node['@_BACKGROUND_COLOR'],
-        }
+        },
       };
 
       nodes.push(mindMapNode);
@@ -134,14 +88,14 @@ export class MindMapParserService {
       if (parentId) {
         links.push({
           source: parentId,
-          target: nodeId
+          target: nodeId,
         });
       }
 
       // 处理子节点
       if (node.node) {
         const children = Array.isArray(node.node) ? node.node : [node.node];
-        children.forEach(child => {
+        children.forEach((child) => {
           processNode(child, nodeId, level + 1);
         });
       }
@@ -156,8 +110,8 @@ export class MindMapParserService {
       links,
       metadata: {
         format: 'freemind',
-        title: map.node['@_TEXT'] || '思维导图'
-      }
+        title: map.node['@_TEXT'] || '思维导图',
+      },
     };
   }
 
@@ -167,7 +121,7 @@ export class MindMapParserService {
   private parseOPML(xmlContent: string): MindMapData {
     const parsed = this.xmlParser.parse(xmlContent);
     const opml = parsed.opml;
-    
+
     if (!opml || !opml.body) {
       throw new Error('无效的OPML文件格式');
     }
@@ -176,15 +130,19 @@ export class MindMapParserService {
     const links: Array<{ source: string; target: string }> = [];
     let nodeIdCounter = 0;
 
-    const processOutline = (outline: any, parentId?: string, level = 0): string => {
+    const processOutline = (
+      outline: any,
+      parentId?: string,
+      level = 0,
+    ): string => {
       const nodeId = `node_${nodeIdCounter++}`;
       const text = outline['@_text'] || outline['@_title'] || '未命名节点';
-      
+
       const mindMapNode: MindMapNode = {
         id: nodeId,
         text,
         level,
-        parentId
+        parentId,
       };
 
       nodes.push(mindMapNode);
@@ -192,14 +150,16 @@ export class MindMapParserService {
       if (parentId) {
         links.push({
           source: parentId,
-          target: nodeId
+          target: nodeId,
         });
       }
 
       // 处理子节点
       if (outline.outline) {
-        const children = Array.isArray(outline.outline) ? outline.outline : [outline.outline];
-        children.forEach(child => {
+        const children = Array.isArray(outline.outline)
+          ? outline.outline
+          : [outline.outline];
+        children.forEach((child) => {
           processOutline(child, nodeId, level + 1);
         });
       }
@@ -209,8 +169,10 @@ export class MindMapParserService {
 
     const body = opml.body;
     if (body.outline) {
-      const outlines = Array.isArray(body.outline) ? body.outline : [body.outline];
-      outlines.forEach(outline => {
+      const outlines = Array.isArray(body.outline)
+        ? body.outline
+        : [body.outline];
+      outlines.forEach((outline) => {
         processOutline(outline);
       });
     }
@@ -223,8 +185,8 @@ export class MindMapParserService {
         title: opml.head?.title || '思维导图',
         author: opml.head?.ownerName,
         created: opml.head?.dateCreated,
-        modified: opml.head?.dateModified
-      }
+        modified: opml.head?.dateModified,
+      },
     };
   }
 
@@ -233,7 +195,7 @@ export class MindMapParserService {
    */
   private parseJSON(jsonContent: string): MindMapData {
     const data = JSON.parse(jsonContent);
-    
+
     // 如果已经是标准格式，直接返回
     if (data.nodes && data.links) {
       return data;
@@ -258,12 +220,12 @@ export class MindMapParserService {
     const processNode = (node: any, parentId?: string, level = 0): string => {
       const nodeId = `node_${nodeIdCounter++}`;
       const text = node.data?.text || '未命名节点';
-      
+
       const mindMapNode: MindMapNode = {
         id: nodeId,
         text,
         level,
-        parentId
+        parentId,
       };
 
       nodes.push(mindMapNode);
@@ -271,7 +233,7 @@ export class MindMapParserService {
       if (parentId) {
         links.push({
           source: parentId,
-          target: nodeId
+          target: nodeId,
         });
       }
 
@@ -292,8 +254,8 @@ export class MindMapParserService {
       links,
       metadata: {
         format: 'simple-mind-map',
-        title: data.data?.text || '思维导图'
-      }
+        title: data.data?.text || '思维导图',
+      },
     };
   }
 
@@ -301,7 +263,7 @@ export class MindMapParserService {
    * 解析Markdown格式的思维导图
    */
   private parseMarkdown(content: string): MindMapData {
-    const lines = content.split('\n').filter(line => line.trim());
+    const lines = content.split('\n').filter((line) => line.trim());
     const nodes: MindMapNode[] = [];
     const links: Array<{ source: string; target: string }> = [];
     const nodeStack: Array<{ id: string; level: number }> = [];
@@ -317,17 +279,21 @@ export class MindMapParserService {
       const nodeId = `node_${nodeIdCounter++}`;
 
       // 清理栈，保留当前级别的父节点
-      while (nodeStack.length > 0 && nodeStack[nodeStack.length - 1].level >= level) {
+      while (
+        nodeStack.length > 0 &&
+        nodeStack[nodeStack.length - 1].level >= level
+      ) {
         nodeStack.pop();
       }
 
-      const parentId = nodeStack.length > 0 ? nodeStack[nodeStack.length - 1].id : undefined;
+      const parentId =
+        nodeStack.length > 0 ? nodeStack[nodeStack.length - 1].id : undefined;
 
       const mindMapNode: MindMapNode = {
         id: nodeId,
         text,
         level,
-        parentId
+        parentId,
       };
 
       nodes.push(mindMapNode);
@@ -335,7 +301,7 @@ export class MindMapParserService {
       if (parentId) {
         links.push({
           source: parentId,
-          target: nodeId
+          target: nodeId,
         });
       }
 
@@ -347,8 +313,8 @@ export class MindMapParserService {
       links,
       metadata: {
         format: 'markdown',
-        title: '思维导图'
-      }
+        title: '思维导图',
+      },
     };
   }
 
@@ -364,21 +330,21 @@ export class MindMapParserService {
   /**
    * 转换为图数据格式 (适用于force-graph等可视化库)
    */
-  convertToGraphData(mindMapData: MindMapData): GraphData {
-    const nodes = mindMapData.nodes.map(node => ({
+  convertToGraphData(mindMapData: MindMapData): ForceGraphData {
+    const nodes = mindMapData.nodes.map((node) => ({
       id: node.id,
       name: node.text,
       val: Math.max(1, 10 - node.level), // 根据层级设置节点大小
       group: node.level.toString(),
       level: node.level,
-      ...node.style
+      ...node.style,
     }));
 
-    const links = mindMapData.links.map(link => ({
+    const links = mindMapData.links.map((link) => ({
       source: link.source,
       target: link.target,
       value: 1,
-      type: link.type || 'hierarchy'
+      type: link.type || 'hierarchy',
     }));
 
     return { nodes, links };
@@ -391,12 +357,12 @@ export class MindMapParserService {
     const graph = new DirectedGraph<string>();
 
     // 添加节点
-    mindMapData.nodes.forEach(node => {
+    mindMapData.nodes.forEach((node) => {
       graph.addVertex(node.id, node.text);
     });
 
     // 添加边
-    mindMapData.links.forEach(link => {
+    mindMapData.links.forEach((link) => {
       graph.addEdge(link.source, link.target);
     });
 

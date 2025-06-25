@@ -7,6 +7,7 @@ import { ValidationService } from './services/validation.service';
 import { PerformanceMonitorService } from './services/performance-monitor.service';
 import { LoggingService } from './services/logging.service';
 import { MindMapParserService } from './services/mindmap-parser.service';
+import { GraphRepositoryService } from './services/graph-repository.service';
 
 @Module({
   controllers: [SVGParserController],
@@ -18,7 +19,8 @@ import { MindMapParserService } from './services/mindmap-parser.service';
     PerformanceMonitorService,
     LoggingService,
     MindMapParserService,
+    GraphRepositoryService,
   ],
-  exports: [SVGParserService, MindMapParserService],
+  exports: [SVGParserService, MindMapParserService, GraphRepositoryService],
 })
 export class SVGParserModule {}
