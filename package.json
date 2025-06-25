@@ -25,6 +25,10 @@
     "destroy:prod": "cd cdk && yarn destroy:prod"
   },
   "dependencies": {
+    "simple-mind-map": "^0.10.2",
+    "data-structure-typed": "^1.52.0",
+    "force-graph": "^1.43.5",
+    "fast-xml-parser": "^4.3.4",
     "@ai-sdk/openai": "^1.3.22",
     "@aws-sdk/client-cognito-identity-provider": "^3.812.0",
     "@aws-sdk/client-dynamodb": "^3.812.0",

@@ -6,6 +6,7 @@ import { DataTransformService } from './services/data-transform.service';
 import { ValidationService } from './services/validation.service';
 import { PerformanceMonitorService } from './services/performance-monitor.service';
 import { LoggingService } from './services/logging.service';
+import { MindMapParserService } from './services/mindmap-parser.service';
 
 @Module({
   controllers: [SVGParserController],
@@ -16,7 +17,8 @@ import { LoggingService } from './services/logging.service';
     ValidationService,
     PerformanceMonitorService,
     LoggingService,
+    MindMapParserService,
   ],
-  exports: [SVGParserService],
+  exports: [SVGParserService, MindMapParserService],
 })
 export class SVGParserModule {}
