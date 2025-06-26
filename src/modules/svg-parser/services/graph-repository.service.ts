@@ -144,10 +144,10 @@ export class GraphRepositoryService {
     const oldKeywords = simpleTokenize(currentNode.text);
     const newKeywords = simpleTokenize(newText);
 
-    const keywordsToDelete = [...oldKeywords].filter((k) => !newKeywords.has(k));
-    const keywordsToAdd = [...newKeywords].filter(
-      (k) => !oldKeywords.has(k),
+    const keywordsToDelete = [...oldKeywords].filter(
+      (k) => !newKeywords.has(k),
     );
+    const keywordsToAdd = [...newKeywords].filter((k) => !oldKeywords.has(k));
 
     // 2. Build a transaction to update everything at once
     const transactionItems = [];

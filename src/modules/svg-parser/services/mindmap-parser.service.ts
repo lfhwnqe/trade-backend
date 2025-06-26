@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { XMLParser } from 'fast-xml-parser';
 import { DirectedGraph } from 'data-structure-typed';
-import { MindMapData, MindMapNode, ForceGraphData } from '../types/mindmap.types';
+import {
+  MindMapData,
+  MindMapNode,
+  ForceGraphData,
+} from '../types/mindmap.types';
 
 @Injectable()
 export class MindMapParserService {
