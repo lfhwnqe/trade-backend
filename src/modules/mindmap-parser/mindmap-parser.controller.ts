@@ -20,31 +20,75 @@ import {
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
-import { SVGParserService } from './svg-parser.service';
 import { MindMapParserService } from './services/mindmap-parser.service';
 import { GraphRepositoryService } from './services/graph-repository.service';
 import {
-  SVGParseRequestDto,
-  SVGParseFromUrlDto,
-  SVGParseFromStringDto,
-  SVGParseResponseDto,
-  InputType,
-} from './dto/svg-parse.dto';
+  MindMapUploadDto,
+  MindMapParseRequestDto,
+  MindMapParseResponseDto,
+  GraphCreateResponseDto,
+  NodeSearchResultDto,
+  SubgraphNodeDto,
+} from './dto/mindmap-parse.dto';
 import { v4 as uuidv4 } from 'uuid';
 
-@ApiTags('SVG & MindMap Parser')
+@ApiTags('MindMap Parser')
 @Controller('parser')
-export class SVGParserController {
-  private readonly logger = new Logger(SVGParserController.name);
+export class MindMapParserController {
+  private readonly logger = new Logger(MindMapParserController.name);
 
   constructor(
-    private readonly svgParserService: SVGParserService,
     private readonly mindMapParserService: MindMapParserService,
     private readonly graphRepository: GraphRepositoryService,
   ) {}
 
-  // Existing SVG parsing endpoints can remain here...
-  // For brevity, I'm focusing on the MindMap and Graph endpoints.
+  @Post('mindmap/parse')
+  @ApiOperation({
+    summary: '解析思维导图内容',
+    description: '解析思维导图内容并返回结构化数据，不存储到数据库',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '解析成功',
+    type: MindMapParseResponseDto,
+  })
+  async parseMindMap(
+    @Body() body: MindMapParseRequestDto,
+  ): Promise<MindMapParseResponseDto> {
+    this.logger.log(`开始解析思维导图内容，格式: ${body.format}`);
+
+    try {
+      const mindMapData = await this.mindMapParserService.parseMindMap(
+        body.content,
+        body.format,
+      );
+
+      this.logger.log(
+        `思维导图解析成功，节点数: ${mindMapData.nodes.length}，连接数: ${mindMapData.links.length}`,
+      );
+
+      return {
+        success: true,
+        data: {
+          nodes: mindMapData.nodes,
+          links: mindMapData.links,
+          metadata: {
+            format: mindMapData.metadata?.format || body.format,
+            title: mindMapData.metadata?.title || '思维导图',
+            author: mindMapData.metadata?.author,
+            created: mindMapData.metadata?.created,
+            modified: mindMapData.metadata?.modified,
+          },
+        },
+      };
+    } catch (error) {
+      this.logger.error(`思维导图解析失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
 
   @Post('mindmap/upload-and-store')
   @UseInterceptors(FileInterceptor('file'))
@@ -53,11 +97,15 @@ export class SVGParserController {
     summary: '上传思维导图,解析并存入DynamoDB',
     description: '一步完成解析和存储,返回唯一的Graph ID',
   })
-  @ApiResponse({ status: 201, description: '图创建成功' })
+  @ApiResponse({
+    status: 201,
+    description: '图创建成功',
+    type: GraphCreateResponseDto,
+  })
   async uploadAndParseMindMap(
     @UploadedFile() file: any,
-    @Body() body: { format?: string },
-  ) {
+    @Body() body: MindMapUploadDto,
+  ): Promise<GraphCreateResponseDto> {
     if (!file) {
       throw new BadRequestException('请上传文件');
     }
@@ -102,8 +150,14 @@ export class SVGParserController {
     description: '使用反向索引在DynamoDB中快速查找包含关键词的节点',
   })
   @ApiQuery({ name: 'keyword', required: true, type: String })
-  @ApiResponse({ status: 200, description: '返回匹配的节点引用' })
-  async searchNodes(@Query('keyword') keyword: string) {
+  @ApiResponse({
+    status: 200,
+    description: '返回匹配的节点引用',
+    type: [NodeSearchResultDto],
+  })
+  async searchNodes(
+    @Query('keyword') keyword: string,
+  ): Promise<NodeSearchResultDto[]> {
     if (!keyword) {
       throw new BadRequestException('Keyword must be provided');
     }
@@ -118,11 +172,15 @@ export class SVGParserController {
   })
   @ApiParam({ name: 'graphId', required: true, type: String })
   @ApiParam({ name: 'nodeId', required: true, type: String })
-  @ApiResponse({ status: 200, description: '返回子图数据' })
+  @ApiResponse({
+    status: 200,
+    description: '返回子图数据',
+    type: [SubgraphNodeDto],
+  })
   async getSubgraph(
     @Param('graphId') graphId: string,
     @Param('nodeId') nodeId: string,
-  ) {
+  ): Promise<SubgraphNodeDto[]> {
     this.logger.log(`获取子图, GraphID: ${graphId}, NodeID: ${nodeId}`);
     const subgraph = await this.graphRepository.getSubgraphForNode(
       graphId,

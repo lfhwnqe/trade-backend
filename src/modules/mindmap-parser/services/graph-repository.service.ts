@@ -32,11 +32,11 @@ export class GraphRepositoryService {
   /**
    * Searches for nodes containing a specific keyword using the inverted index.
    * @param keyword The keyword to search for.
-   * @returns A list of { graphId, nodeId } references.
+   * @returns A list of { graphId, nodeId, text } with node details.
    */
   async searchNodesByKeyword(
     keyword: string,
-  ): Promise<{ graphId: string; nodeId: string }[]> {
+  ): Promise<{ graphId: string; nodeId: string; text: string }[]> {
     const command = new QueryCommand({
       TableName: this.tableName,
       KeyConditionExpression: 'PK = :pk',
@@ -47,10 +47,32 @@ export class GraphRepositoryService {
 
     const { Items } = await this.docClient.send(command);
 
-    return Items.map((item) => {
+    // Get detailed node information for each reference
+    const results = [];
+    for (const item of Items) {
       const [graphId, nodeSK] = item.SK.split('|');
-      return { graphId, nodeId: nodeSK.replace('NODE#', '') };
-    });
+      const nodeId = nodeSK.replace('NODE#', '');
+
+      // Fetch the actual node data
+      const nodeCommand = new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: graphId,
+          SK: `NODE#${nodeId}`,
+        },
+      });
+
+      const { Item: nodeItem } = await this.docClient.send(nodeCommand);
+      if (nodeItem) {
+        results.push({
+          graphId,
+          nodeId,
+          text: nodeItem.text || '',
+        });
+      }
+    }
+
+    return results;
   }
 
   // =================================================================
