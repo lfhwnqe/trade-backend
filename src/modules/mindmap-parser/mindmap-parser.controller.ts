@@ -194,6 +194,255 @@ export class MindMapParserController {
     return subgraph;
   }
 
+  @Post('graphs/g-rag/test')
+  @ApiOperation({
+    summary: 'G-RAG搜索测试',
+    description: '测试图数据的RAG搜索能力，包括关键词搜索、语义搜索和上下文检索',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'G-RAG测试结果',
+  })
+  async testGraphRAG(@Body() body: any): Promise<any> {
+    this.logger.log(`开始G-RAG测试，查询: ${body.query}`);
+
+    try {
+      const startTime = Date.now();
+
+      // 1. 关键词搜索
+      const keywordResults = await this.graphRepository.searchNodesByKeyword(body.query);
+
+      // 2. 为每个匹配的节点获取上下文子图
+      const contextResults = [];
+      for (const result of keywordResults.slice(0, 5)) { // 限制前5个结果
+        try {
+          const subgraph = await this.graphRepository.getSubgraphForNode(
+            result.graphId,
+            result.nodeId,
+          );
+          contextResults.push({
+            ...result,
+            context: subgraph,
+            contextSize: subgraph.length,
+          });
+        } catch (error) {
+          this.logger.warn(`获取节点 ${result.nodeId} 的上下文失败: ${error.message}`);
+          contextResults.push({
+            ...result,
+            context: [],
+            contextSize: 0,
+            error: error.message,
+          });
+        }
+      }
+
+      const processingTime = Date.now() - startTime;
+
+      return {
+        success: true,
+        query: body.query,
+        processingTime,
+        results: {
+          keywordMatches: keywordResults.length,
+          contextResults: contextResults,
+          totalContextNodes: contextResults.reduce((sum, r) => sum + r.contextSize, 0),
+        },
+        metadata: {
+          searchType: 'graph-keyword-with-context',
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      this.logger.error(`G-RAG测试失败: ${error.message}`, error.stack);
+      return {
+        success: false,
+        error: error.message,
+        query: body.query,
+      };
+    }
+  }
+
+  @Post('graphs/g-rag/batch-test')
+  @ApiOperation({
+    summary: 'G-RAG批量测试',
+    description: '批量测试多个查询的G-RAG搜索效果',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'G-RAG批量测试结果',
+  })
+  async batchTestGraphRAG(@Body() body: { queries: string[] }): Promise<any> {
+    this.logger.log(`开始G-RAG批量测试，查询数量: ${body.queries.length}`);
+
+    const results = [];
+    const startTime = Date.now();
+
+    for (const query of body.queries) {
+      try {
+        const queryStartTime = Date.now();
+
+        // 关键词搜索
+        const keywordResults = await this.graphRepository.searchNodesByKeyword(query);
+
+        // 获取前3个结果的上下文
+        const contextResults = [];
+        for (const result of keywordResults.slice(0, 3)) {
+          try {
+            const subgraph = await this.graphRepository.getSubgraphForNode(
+              result.graphId,
+              result.nodeId,
+            );
+            contextResults.push({
+              ...result,
+              contextSize: subgraph.length,
+            });
+          } catch (error) {
+            contextResults.push({
+              ...result,
+              contextSize: 0,
+              error: error.message,
+            });
+          }
+        }
+
+        const queryProcessingTime = Date.now() - queryStartTime;
+
+        results.push({
+          query,
+          success: true,
+          processingTime: queryProcessingTime,
+          keywordMatches: keywordResults.length,
+          contextResults: contextResults.length,
+          totalContextNodes: contextResults.reduce((sum, r) => sum + r.contextSize, 0),
+        });
+      } catch (error) {
+        results.push({
+          query,
+          success: false,
+          error: error.message,
+          processingTime: 0,
+          keywordMatches: 0,
+          contextResults: 0,
+          totalContextNodes: 0,
+        });
+      }
+    }
+
+    const totalProcessingTime = Date.now() - startTime;
+
+    return {
+      success: true,
+      totalQueries: body.queries.length,
+      totalProcessingTime,
+      averageProcessingTime: totalProcessingTime / body.queries.length,
+      results,
+      summary: {
+        successfulQueries: results.filter(r => r.success).length,
+        failedQueries: results.filter(r => !r.success).length,
+        totalMatches: results.reduce((sum, r) => sum + r.keywordMatches, 0),
+        totalContextNodes: results.reduce((sum, r) => sum + r.totalContextNodes, 0),
+      },
+      metadata: {
+        testType: 'batch-g-rag-test',
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
+  @Get('graphs/g-rag/performance-test')
+  @ApiOperation({
+    summary: 'G-RAG性能测试',
+    description: '测试图数据RAG搜索的性能指标',
+  })
+  @ApiQuery({ name: 'iterations', required: false, type: Number, description: '测试迭代次数' })
+  @ApiResponse({
+    status: 200,
+    description: 'G-RAG性能测试结果',
+  })
+  async performanceTestGraphRAG(@Query('iterations') iterations: number = 10): Promise<any> {
+    this.logger.log(`开始G-RAG性能测试，迭代次数: ${iterations}`);
+
+    const testQueries = [
+      '中心主题',
+      '分支',
+      '子分支',
+      '节点',
+      '测试',
+    ];
+
+    const performanceResults = [];
+    const startTime = Date.now();
+
+    for (let i = 0; i < iterations; i++) {
+      const query = testQueries[i % testQueries.length];
+      const iterationStartTime = Date.now();
+
+      try {
+        // 执行搜索
+        const keywordResults = await this.graphRepository.searchNodesByKeyword(query);
+
+        // 获取第一个结果的上下文（如果存在）
+        let contextSize = 0;
+        if (keywordResults.length > 0) {
+          try {
+            const subgraph = await this.graphRepository.getSubgraphForNode(
+              keywordResults[0].graphId,
+              keywordResults[0].nodeId,
+            );
+            contextSize = subgraph.length;
+          } catch (error) {
+            // 忽略上下文获取错误
+          }
+        }
+
+        const iterationTime = Date.now() - iterationStartTime;
+
+        performanceResults.push({
+          iteration: i + 1,
+          query,
+          processingTime: iterationTime,
+          keywordMatches: keywordResults.length,
+          contextSize,
+          success: true,
+        });
+      } catch (error) {
+        const iterationTime = Date.now() - iterationStartTime;
+        performanceResults.push({
+          iteration: i + 1,
+          query,
+          processingTime: iterationTime,
+          keywordMatches: 0,
+          contextSize: 0,
+          success: false,
+          error: error.message,
+        });
+      }
+    }
+
+    const totalTime = Date.now() - startTime;
+    const successfulTests = performanceResults.filter(r => r.success);
+    const processingTimes = successfulTests.map(r => r.processingTime);
+
+    return {
+      success: true,
+      totalIterations: iterations,
+      totalTime,
+      results: performanceResults,
+      statistics: {
+        successRate: (successfulTests.length / iterations) * 100,
+        averageProcessingTime: processingTimes.reduce((sum, time) => sum + time, 0) / processingTimes.length,
+        minProcessingTime: Math.min(...processingTimes),
+        maxProcessingTime: Math.max(...processingTimes),
+        totalMatches: successfulTests.reduce((sum, r) => sum + r.keywordMatches, 0),
+        totalContextNodes: successfulTests.reduce((sum, r) => sum + r.contextSize, 0),
+      },
+      metadata: {
+        testType: 'performance-test',
+        timestamp: new Date().toISOString(),
+      },
+    };
+  }
+
   private detectFileFormat(filename: string): string {
     const ext = filename.toLowerCase().split('.').pop();
     switch (ext) {

@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>技术架构思维导图</title>
+    <ownerName>G-RAG测试用户</ownerName>
+    <dateCreated>2024-01-01T00:00:00Z</dateCreated>
+    <dateModified>2024-01-01T00:00:00Z</dateModified>
+  </head>
+  <body>
+    <outline text="技术架构">
+      <outline text="前端技术栈">
+        <outline text="框架选择">
+          <outline text="React">
+            <outline text="组件化开发"/>
+            <outline text="虚拟DOM"/>
+            <outline text="生态系统丰富"/>
+          </outline>
+          <outline text="Vue.js">
+            <outline text="渐进式框架"/>
+            <outline text="双向数据绑定"/>
+            <outline text="模板语法简洁"/>
+          </outline>
+          <outline text="Angular">
+            <outline text="企业级框架"/>
+            <outline text="TypeScript原生支持"/>
+            <outline text="依赖注入"/>
+          </outline>
+        </outline>
+        <outline text="状态管理">
+          <outline text="Redux">
+            <outline text="可预测状态"/>
+            <outline text="时间旅行调试"/>
+          </outline>
+          <outline text="Vuex">
+            <outline text="Vue专用状态管理"/>
+            <outline text="模块化设计"/>
+          </outline>
+          <outline text="MobX">
+            <outline text="响应式编程"/>
+            <outline text="简单易用"/>
+          </outline>
+        </outline>
+        <outline text="构建工具">
+          <outline text="Webpack">
+            <outline text="模块打包"/>
+            <outline text="代码分割"/>
+            <outline text="热更新"/>
+          </outline>
+          <outline text="Vite">
+            <outline text="快速冷启动"/>
+            <outline text="ESM原生支持"/>
+          </outline>
+          <outline text="Rollup">
+            <outline text="Tree Shaking"/>
+            <outline text="ES6模块"/>
+          </outline>
+        </outline>
+      </outline>
+      <outline text="后端技术栈">
+        <outline text="编程语言">
+          <outline text="Node.js">
+            <outline text="JavaScript运行时"/>
+            <outline text="事件驱动"/>
+            <outline text="非阻塞I/O"/>
+            <outline text="框架选择">
+              <outline text="Express.js">
+                <outline text="轻量级框架"/>
+                <outline text="中间件机制"/>
+              </outline>
+              <outline text="NestJS">
+                <outline text="企业级框架"/>
+                <outline text="装饰器语法"/>
+                <outline text="依赖注入"/>
+              </outline>
+              <outline text="Koa.js">
+                <outline text="洋葱模型"/>
+                <outline text="async/await"/>
+              </outline>
+            </outline>
+          </outline>
+          <outline text="Python">
+            <outline text="简洁语法"/>
+            <outline text="丰富生态"/>
+            <outline text="框架选择">
+              <outline text="Django">
+                <outline text="全栈框架"/>
+                <outline text="ORM内置"/>
+                <outline text="管理后台"/>
+              </outline>
+              <outline text="FastAPI">
+                <outline text="高性能"/>
+                <outline text="自动文档"/>
+                <outline text="类型提示"/>
+              </outline>
+              <outline text="Flask">
+                <outline text="微框架"/>
+                <outline text="灵活扩展"/>
+              </outline>
+            </outline>
+          </outline>
+          <outline text="Java">
+            <outline text="企业级应用"/>
+            <outline text="跨平台"/>
+            <outline text="框架选择">
+              <outline text="Spring Boot">
+                <outline text="自动配置"/>
+                <outline text="微服务支持"/>
+              </outline>
+              <outline text="Spring Cloud">
+                <outline text="分布式系统"/>
+                <outline text="服务治理"/>
+              </outline>
+            </outline>
+          </outline>
+        </outline>
+        <outline text="API设计">
+          <outline text="RESTful API">
+            <outline text="资源导向"/>
+            <outline text="HTTP动词"/>
+            <outline text="状态码规范"/>
+          </outline>
+          <outline text="GraphQL">
+            <outline text="查询语言"/>
+            <outline text="类型系统"/>
+            <outline text="单一端点"/>
+          </outline>
+          <outline text="gRPC">
+            <outline text="高性能RPC"/>
+            <outline text="Protocol Buffers"/>
+            <outline text="流式传输"/>
+          </outline>
+        </outline>
+        <outline text="认证授权">
+          <outline text="JWT">
+            <outline text="无状态认证"/>
+            <outline text="跨域支持"/>
+          </outline>
+          <outline text="OAuth 2.0">
+            <outline text="第三方授权"/>
+            <outline text="标准协议"/>
+          </outline>
+          <outline text="Session">
+            <outline text="服务端存储"/>
+            <outline text="传统方案"/>
+          </outline>
+        </outline>
+      </outline>
+      <outline text="数据库技术">
+        <outline text="关系型数据库">
+          <outline text="MySQL">
+            <outline text="开源免费"/>
+            <outline text="高性能"/>
+            <outline text="广泛应用"/>
+          </outline>
+          <outline text="PostgreSQL">
+            <outline text="功能丰富"/>
+            <outline text="扩展性强"/>
+            <outline text="ACID支持"/>
+          </outline>
+          <outline text="Oracle">
+            <outline text="企业级"/>
+            <outline text="高可用"/>
+            <outline text="商业支持"/>
+          </outline>
+        </outline>
+        <outline text="NoSQL数据库">
+          <outline text="MongoDB">
+            <outline text="文档数据库"/>
+            <outline text="灵活模式"/>
+            <outline text="水平扩展"/>
+          </outline>
+          <outline text="Redis">
+            <outline text="内存数据库"/>
+            <outline text="缓存方案"/>
+            <outline text="数据结构丰富"/>
+          </outline>
+          <outline text="Elasticsearch">
+            <outline text="搜索引擎"/>
+            <outline text="全文检索"/>
+            <outline text="分布式"/>
+          </outline>
+        </outline>
+        <outline text="图数据库">
+          <outline text="Neo4j">
+            <outline text="原生图存储"/>
+            <outline text="Cypher查询"/>
+            <outline text="关系分析"/>
+          </outline>
+          <outline text="Amazon Neptune">
+            <outline text="云原生"/>
+            <outline text="多模型"/>
+            <outline text="高可用"/>
+          </outline>
+        </outline>
+      </outline>
+      <outline text="云服务平台">
+        <outline text="AWS">
+          <outline text="计算服务">
+            <outline text="EC2"/>
+            <outline text="Lambda"/>
+            <outline text="ECS"/>
+          </outline>
+          <outline text="存储服务">
+            <outline text="S3"/>
+            <outline text="EBS"/>
+            <outline text="EFS"/>
+          </outline>
+          <outline text="数据库服务">
+            <outline text="RDS"/>
+            <outline text="DynamoDB"/>
+            <outline text="ElastiCache"/>
+          </outline>
+        </outline>
+        <outline text="Azure">
+          <outline text="计算服务">
+            <outline text="Virtual Machines"/>
+            <outline text="Functions"/>
+            <outline text="Container Instances"/>
+          </outline>
+          <outline text="存储服务">
+            <outline text="Blob Storage"/>
+            <outline text="File Storage"/>
+            <outline text="Queue Storage"/>
+          </outline>
+        </outline>
+        <outline text="Google Cloud">
+          <outline text="计算服务">
+            <outline text="Compute Engine"/>
+            <outline text="Cloud Functions"/>
+            <outline text="Cloud Run"/>
+          </outline>
+          <outline text="AI/ML服务">
+            <outline text="AutoML"/>
+            <outline text="BigQuery ML"/>
+            <outline text="Vertex AI"/>
+          </outline>
+        </outline>
+      </outline>
+      <outline text="DevOps工具链">
+        <outline text="版本控制">
+          <outline text="Git">
+            <outline text="分布式"/>
+            <outline text="分支管理"/>
+          </outline>
+          <outline text="GitHub">
+            <outline text="代码托管"/>
+            <outline text="协作平台"/>
+          </outline>
+          <outline text="GitLab">
+            <outline text="CI/CD集成"/>
+            <outline text="私有部署"/>
+          </outline>
+        </outline>
+        <outline text="CI/CD">
+          <outline text="Jenkins">
+            <outline text="自动化构建"/>
+            <outline text="插件丰富"/>
+          </outline>
+          <outline text="GitHub Actions">
+            <outline text="原生集成"/>
+            <outline text="工作流自动化"/>
+          </outline>
+          <outline text="GitLab CI">
+            <outline text="配置简单"/>
+            <outline text="Docker支持"/>
+          </outline>
+        </outline>
+        <outline text="容器化">
+          <outline text="Docker">
+            <outline text="应用容器化"/>
+            <outline text="环境一致性"/>
+          </outline>
+          <outline text="Kubernetes">
+            <outline text="容器编排"/>
+            <outline text="自动扩缩容"/>
+            <outline text="服务发现"/>
+          </outline>
+        </outline>
+        <outline text="监控运维">
+          <outline text="Prometheus">
+            <outline text="指标监控"/>
+            <outline text="时序数据库"/>
+          </outline>
+          <outline text="Grafana">
+            <outline text="可视化面板"/>
+            <outline text="告警系统"/>
+          </outline>
+          <outline text="ELK Stack">
+            <outline text="日志分析"/>
+            <outline text="搜索可视化"/>
+          </outline>
+        </outline>
+      </outline>
+    </outline>
+  </body>
+</opml>
