@@ -5,7 +5,6 @@ import { TradeModule } from './modules/trade/trade.module';
 import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
 import { RAGModule } from './modules/rag/rag.module';
-import { MindMapParserModule } from './modules/mindmap-parser/mindmap-parser.module';
 
 @Module({
   imports: [
@@ -14,7 +13,6 @@ import { MindMapParserModule } from './modules/mindmap-parser/mindmap-parser.mod
     TradeModule,
     ImageModule,
     RAGModule,
-    MindMapParserModule,
   ],
 })
 export class AppModule implements NestModule {
