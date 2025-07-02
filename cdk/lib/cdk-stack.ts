@@ -212,6 +212,27 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    // 5. MindMap Table (mindmap)
+    const mindMapTable = new dynamodb.Table(
+      this,
+      `${appName}MindMapTable${envName}`,
+      {
+        tableName: `mindmap-${envName.toLowerCase()}`,
+        partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING }, // USER#{userId}
+        sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING }, // MINDMAP#{mindmapId}
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+        pointInTimeRecovery: true,
+      },
+    );
+
+    // Add GSI for MindMap Table: GSI1PK-GSI1SK-index (for tag-based queries)
+    mindMapTable.addGlobalSecondaryIndex({
+      indexName: 'GSI1PK-GSI1SK-index',
+      partitionKey: { name: 'GSI1PK', type: dynamodb.AttributeType.STRING }, // TAG#{tag}
+      sortKey: { name: 'GSI1SK', type: dynamodb.AttributeType.STRING }, // MINDMAP#{mindmapId}
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -280,6 +301,8 @@ export class TradingStack extends cdk.Stack {
           RAG_CHAT_SESSIONS_TABLE_NAME: ragChatSessionsTable.tableName,
           RAG_CHAT_MESSAGES_TABLE_NAME: ragChatMessagesTable.tableName,
           RAG_ANALYTICS_TABLE_NAME: ragAnalyticsTable.tableName,
+          // MindMap DynamoDB Table
+          MINDMAP_TABLE_NAME: mindMapTable.tableName,
         },
       },
     );
@@ -293,6 +316,9 @@ export class TradingStack extends cdk.Stack {
     ragChatSessionsTable.grantReadWriteData(fn);
     ragChatMessagesTable.grantReadWriteData(fn);
     ragAnalyticsTable.grantReadWriteData(fn);
+
+    // Grant Lambda permissions for MindMap table
+    mindMapTable.grantReadWriteData(fn);
 
     // 授予Lambda对Cognito用户池的权限
     fn.addToRolePolicy(
