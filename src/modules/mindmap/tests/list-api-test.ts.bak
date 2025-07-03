@@ -1,0 +1,293 @@
+/**
+ * 脑图列表API测试
+ * 验证点：可以成功获取脑图列表
+ */
+
+import { MindMapService } from '../mindmap.service';
+import { ConfigService } from '@nestjs/config';
+import { MindMapQueryParams, MINDMAP_DEFAULTS } from '../types/mindmap.types';
+
+// 模拟存储的脑图数据
+const mockMindMapList = [
+  {
+    PK: 'USER#test-user-123',
+    SK: 'MINDMAP#mindmap-001',
+    id: 'mindmap-001',
+    userId: 'test-user-123',
+    title: '第一个脑图',
+    description: '这是第一个测试脑图',
+    layout: MINDMAP_DEFAULTS.LAYOUT,
+    theme: MINDMAP_DEFAULTS.THEME,
+    tags: ['测试', '第一个'],
+    version: MINDMAP_DEFAULTS.VERSION,
+    createdAt: '2025-07-01T10:00:00.000Z',
+    updatedAt: '2025-07-01T10:00:00.000Z',
+  },
+  {
+    PK: 'USER#test-user-123',
+    SK: 'MINDMAP#mindmap-002',
+    id: 'mindmap-002',
+    userId: 'test-user-123',
+    title: '第二个脑图',
+    description: '这是第二个测试脑图',
+    layout: 'mindMap',
+    theme: 'classic',
+    tags: ['测试', '第二个'],
+    version: MINDMAP_DEFAULTS.VERSION,
+    createdAt: '2025-07-02T10:00:00.000Z',
+    updatedAt: '2025-07-02T11:00:00.000Z',
+  },
+  {
+    PK: 'USER#test-user-123',
+    SK: 'MINDMAP#mindmap-003',
+    id: 'mindmap-003',
+    userId: 'test-user-123',
+    title: '第三个脑图',
+    description: '这是第三个测试脑图',
+    layout: MINDMAP_DEFAULTS.LAYOUT,
+    theme: MINDMAP_DEFAULTS.THEME,
+    tags: ['工作', '项目'],
+    version: MINDMAP_DEFAULTS.VERSION,
+    createdAt: '2025-07-02T12:00:00.000Z',
+    updatedAt: '2025-07-02T13:00:00.000Z',
+  },
+];
+
+// 模拟DynamoDB操作
+const mockDynamoDBDocument = {
+  put: async (params: any) => {
+    console.log('🔧 模拟DynamoDB PUT操作');
+    return { $metadata: { httpStatusCode: 200 } };
+  },
+  get: async (params: any) => {
+    console.log('🔧 模拟DynamoDB GET操作');
+    return { Item: null };
+  },
+  delete: async (params: any) => {
+    console.log('🔧 模拟DynamoDB DELETE操作');
+    return { $metadata: { httpStatusCode: 200 } };
+  },
+  query: async (params: any) => {
+    console.log('🔧 模拟DynamoDB QUERY操作:', {
+      KeyConditionExpression: params.KeyConditionExpression,
+      ExpressionAttributeValues: params.ExpressionAttributeValues,
+      FilterExpression: params.FilterExpression,
+      Limit: params.Limit,
+    });
+
+    // 模拟查询用户的脑图列表
+    if (params.KeyConditionExpression?.includes('PK = :pk') &&
+        params.ExpressionAttributeValues?.[':pk'] === 'USER#test-user-123') {
+      let items = [...mockMindMapList];
+
+      // 模拟标签过滤
+      if (params.FilterExpression?.includes('contains(tags')) {
+        // 从ExpressionAttributeValues中提取标签值
+        const filterTags = Object.keys(params.ExpressionAttributeValues)
+          .filter(key => key.startsWith(':tag'))
+          .map(key => params.ExpressionAttributeValues[key]);
+
+        items = items.filter(item =>
+          item.tags.some(tag => filterTags.includes(tag))
+        );
+      }
+
+      // 模拟分页
+      const limit = params.Limit || 10;
+      const startIndex = params.ExclusiveStartKey ? 1 : 0;
+      const endIndex = Math.min(startIndex + limit, items.length);
+      const paginatedItems = items.slice(startIndex, endIndex);
+
+      const result: any = {
+        Items: paginatedItems,
+        Count: paginatedItems.length,
+        ScannedCount: paginatedItems.length,
+      };
+
+      // 模拟分页键
+      if (endIndex < items.length) {
+        result.LastEvaluatedKey = {
+          PK: paginatedItems[paginatedItems.length - 1].PK,
+          SK: paginatedItems[paginatedItems.length - 1].SK,
+        };
+      }
+
+      return result;
+    }
+
+    return { Items: [], Count: 0 };
+  },
+};
+
+// 模拟ConfigService
+const mockConfigService = {
+  getOrThrow: (key: string) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || `mock-${key}`;
+  },
+  get: (key: string, defaultValue?: any) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || defaultValue;
+  },
+} as ConfigService;
+
+async function testListMindMapAPI() {
+  console.log('🧪 开始测试脑图列表API...');
+  
+  try {
+    // 创建服务实例
+    const mindMapService = new MindMapService(mockConfigService);
+    
+    // 模拟DynamoDB客户端
+    (mindMapService as any).db = mockDynamoDBDocument;
+    
+    // 测试1: 获取基础列表（无过滤条件）
+    console.log('\n📝 测试1: 获取基础列表');
+    const userId = 'test-user-123';
+    const basicQuery: MindMapQueryParams = {
+      page: 1,
+      pageSize: 10,
+    };
+    
+    console.log('用户ID:', userId);
+    console.log('查询参数:', basicQuery);
+    
+    console.log('🚀 调用脑图列表API...');
+    const basicResult = await mindMapService.getMindMapList(userId, basicQuery);
+    
+    console.log('✅ 获取成功！');
+    console.log('返回结果:');
+    console.log('- 总数:', basicResult.total);
+    console.log('- 当前页:', basicResult.page);
+    console.log('- 页大小:', basicResult.pageSize);
+    console.log('- 脑图数量:', basicResult.items.length);
+    console.log('- 是否有下一页:', basicResult.hasMore);
+    
+    // 验证基础列表结果
+    const basicValidations = [
+      { field: 'total', value: basicResult.total, check: (v) => v === 3 },
+      { field: 'page', value: basicResult.page, check: (v) => v === 1 },
+      { field: 'pageSize', value: basicResult.pageSize, check: (v) => v === 10 },
+      { field: 'items.length', value: basicResult.items.length, check: (v) => v === 3 },
+      { field: 'items[0].id', value: basicResult.items[0]?.id, check: (v) => v === 'mindmap-001' },
+      { field: 'items[0].title', value: basicResult.items[0]?.title, check: (v) => v === '第一个脑图' },
+    ];
+    
+    let allValid = true;
+    for (const validation of basicValidations) {
+      const isValid = validation.check(validation.value);
+      if (isValid) {
+        console.log(`✅ ${validation.field}: 验证通过`);
+      } else {
+        console.log(`❌ ${validation.field}: 验证失败`, validation.value);
+        allValid = false;
+      }
+    }
+    
+    // 测试2: 带标签过滤的列表
+    console.log('\n📝 测试2: 带标签过滤的列表');
+    const tagQuery: MindMapQueryParams = {
+      page: 1,
+      pageSize: 10,
+      tags: ['测试'],
+    };
+    
+    console.log('查询参数:', tagQuery);
+    
+    console.log('🚀 调用带标签过滤的脑图列表API...');
+    const tagResult = await mindMapService.getMindMapList(userId, tagQuery);
+    
+    console.log('✅ 获取成功！');
+    console.log('返回结果:');
+    console.log('- 总数:', tagResult.total);
+    console.log('- 脑图数量:', tagResult.items.length);
+    console.log('- 过滤后的脑图:', tagResult.items.map(item => item.title));
+    
+    // 验证标签过滤结果
+    const tagValidations = [
+      { field: 'total', value: tagResult.total, check: (v) => v === 2 }, // 只有前两个包含"测试"标签
+      { field: 'items.length', value: tagResult.items.length, check: (v) => v === 2 },
+      { field: 'filtered correctly', value: tagResult.items.every(item => item.tags?.includes('测试')), check: (v) => v === true },
+    ];
+    
+    for (const validation of tagValidations) {
+      const isValid = validation.check(validation.value);
+      if (isValid) {
+        console.log(`✅ ${validation.field}: 验证通过`);
+      } else {
+        console.log(`❌ ${validation.field}: 验证失败`, validation.value);
+        allValid = false;
+      }
+    }
+    
+    // 测试3: 分页功能
+    console.log('\n📝 测试3: 分页功能');
+    const pageQuery: MindMapQueryParams = {
+      page: 1,
+      pageSize: 2, // 限制每页2个
+    };
+    
+    console.log('查询参数:', pageQuery);
+    
+    console.log('🚀 调用分页脑图列表API...');
+    const pageResult = await mindMapService.getMindMapList(userId, pageQuery);
+    
+    console.log('✅ 获取成功！');
+    console.log('返回结果:');
+    console.log('- 总数:', pageResult.total);
+    console.log('- 当前页大小:', pageResult.pageSize);
+    console.log('- 实际返回数量:', pageResult.items.length);
+    console.log('- 是否有下一页:', pageResult.hasMore);
+
+    // 验证分页结果
+    const pageValidations = [
+      { field: 'pageSize', value: pageResult.pageSize, check: (v) => v === 2 },
+      { field: 'items.length', value: pageResult.items.length, check: (v) => v === 2 },
+      { field: 'hasNextPage', value: pageResult.hasMore, check: (v) => v === true },
+    ];
+    
+    for (const validation of pageValidations) {
+      const isValid = validation.check(validation.value);
+      if (isValid) {
+        console.log(`✅ ${validation.field}: 验证通过`);
+      } else {
+        console.log(`❌ ${validation.field}: 验证失败`, validation.value);
+        allValid = false;
+      }
+    }
+    
+    if (allValid) {
+      console.log('\n🎉 所有验证通过！脑图列表API功能正常');
+      return true;
+    } else {
+      console.log('\n❌ 部分验证失败，请检查实现');
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('❌ 测试失败:', error.message);
+    console.error('错误详情:', error);
+    return false;
+  }
+}
+
+// 运行测试
+if (require.main === module) {
+  testListMindMapAPI()
+    .then(success => {
+      console.log('\n📊 测试结果:', success ? '成功' : '失败');
+      process.exit(success ? 0 : 1);
+    })
+    .catch(error => {
+      console.error('测试执行错误:', error);
+      process.exit(1);
+    });
+}
+
+export { testListMindMapAPI };

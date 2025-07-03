@@ -1,0 +1,251 @@
+/**
+ * API错误处理测试
+ * 验证点：错误情况下返回正确的错误响应
+ */
+
+import { MindMapService } from '../mindmap.service';
+import { MindMapController } from '../mindmap.controller';
+import { ConfigService } from '@nestjs/config';
+import { NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
+
+// 模拟ConfigService
+const mockConfigService = {
+  getOrThrow: (key: string) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || `mock-${key}`;
+  },
+  get: (key: string, defaultValue?: any) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || defaultValue;
+  },
+} as ConfigService;
+
+// 模拟会抛出各种异常的DynamoDB客户端
+const createMockDynamoDBWithErrors = (errorType: string) => ({
+  put: async (params: any) => {
+    console.log('🔧 模拟DynamoDB PUT操作 - 将抛出异常:', errorType);
+    
+    switch (errorType) {
+      case 'ConditionalCheckFailedException':
+        const conditionalError = new Error('The conditional request failed');
+        conditionalError.name = 'ConditionalCheckFailedException';
+        throw conditionalError;
+      case 'ValidationException':
+        const validationError = new Error('One or more parameter values were invalid');
+        validationError.name = 'ValidationException';
+        throw validationError;
+      case 'ResourceNotFoundException':
+        const resourceError = new Error('Requested resource not found');
+        resourceError.name = 'ResourceNotFoundException';
+        throw resourceError;
+      case 'ServiceUnavailableException':
+        const serviceError = new Error('Service is temporarily unavailable');
+        serviceError.name = 'ServiceUnavailableException';
+        throw serviceError;
+      default:
+        throw new Error('Unknown database error');
+    }
+  },
+  get: async (params: any) => {
+    console.log('🔧 模拟DynamoDB GET操作 - 将抛出异常:', errorType);
+    
+    if (errorType === 'ResourceNotFoundException') {
+      const error = new Error('Requested resource not found');
+      error.name = 'ResourceNotFoundException';
+      throw error;
+    }
+    
+    return { Item: null };
+  },
+  delete: async (params: any) => {
+    console.log('🔧 模拟DynamoDB DELETE操作 - 将抛出异常:', errorType);
+    
+    if (errorType === 'ConditionalCheckFailedException') {
+      const error = new Error('The conditional request failed');
+      error.name = 'ConditionalCheckFailedException';
+      throw error;
+    }
+    
+    return { $metadata: { httpStatusCode: 200 } };
+  },
+  query: async (params: any) => {
+    console.log('🔧 模拟DynamoDB QUERY操作 - 将抛出异常:', errorType);
+    
+    if (errorType === 'ProvisionedThroughputExceededException') {
+      const error = new Error('The level of configured provisioned throughput for the table was exceeded');
+      error.name = 'ProvisionedThroughputExceededException';
+      throw error;
+    }
+    
+    return { Items: [], Count: 0 };
+  },
+});
+
+async function testErrorHandling() {
+  console.log('🧪 开始测试API错误处理...');
+  
+  let allTestsPassed = true;
+  
+  try {
+    // 测试1: NotFoundException处理
+    console.log('\n📝 测试1: NotFoundException处理');
+    const service1 = new MindMapService(mockConfigService);
+    (service1 as any).db = createMockDynamoDBWithErrors('ResourceNotFoundException');
+    
+    try {
+      await service1.getMindMapById('test-user', 'non-existent-id');
+      console.log('❌ 应该抛出NotFoundException，但没有抛出');
+      allTestsPassed = false;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        console.log('✅ 正确抛出NotFoundException');
+        console.log('- 错误消息:', error.message);
+      } else {
+        console.log('❌ 抛出了错误的异常类型:', error.constructor.name);
+        allTestsPassed = false;
+      }
+    }
+    
+    // 测试2: ConflictException处理（条件检查失败）
+    console.log('\n📝 测试2: ConflictException处理');
+    const service2 = new MindMapService(mockConfigService);
+    (service2 as any).db = createMockDynamoDBWithErrors('ConditionalCheckFailedException');
+    
+    try {
+      await service2.createMindMap('test-user', {
+        title: '测试脑图',
+        description: '测试描述',
+        data: { data: { text: '根节点' }, children: [] },
+        tags: ['测试'],
+      });
+      console.log('❌ 应该抛出ConflictException，但没有抛出');
+      allTestsPassed = false;
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        console.log('✅ 正确抛出ConflictException');
+        console.log('- 错误消息:', error.message);
+      } else {
+        console.log('❌ 抛出了错误的异常类型:', error.constructor.name);
+        console.log('- 实际错误:', error.message);
+        allTestsPassed = false;
+      }
+    }
+    
+    // 测试3: BadRequestException处理（验证异常）
+    console.log('\n📝 测试3: BadRequestException处理');
+    const service3 = new MindMapService(mockConfigService);
+    (service3 as any).db = createMockDynamoDBWithErrors('ValidationException');
+    
+    try {
+      await service3.createMindMap('test-user', {
+        title: '测试脑图',
+        description: '测试描述',
+        data: { data: { text: '根节点' }, children: [] },
+        tags: ['测试'],
+      });
+      console.log('❌ 应该抛出BadRequestException，但没有抛出');
+      allTestsPassed = false;
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        console.log('✅ 正确抛出BadRequestException');
+        console.log('- 错误消息:', error.message);
+      } else {
+        console.log('❌ 抛出了错误的异常类型:', error.constructor.name);
+        console.log('- 实际错误:', error.message);
+        allTestsPassed = false;
+      }
+    }
+    
+    // 测试4: 控制器错误处理
+    console.log('\n📝 测试4: 控制器错误处理');
+    const service4 = new MindMapService(mockConfigService);
+    (service4 as any).db = createMockDynamoDBWithErrors('ResourceNotFoundException');
+    const controller = new MindMapController(service4);
+    
+    const mockRequest = { user: { sub: 'test-user' } };
+    const response = await controller.getMindMapById('non-existent-id', mockRequest);
+    
+    console.log('控制器响应:', {
+      success: response.success,
+      message: response.message,
+      hasData: !!response.data,
+    });
+    
+    if (!response.success && response.message) {
+      console.log('✅ 控制器正确处理了错误');
+      console.log('- 错误消息:', response.message);
+    } else {
+      console.log('❌ 控制器没有正确处理错误');
+      allTestsPassed = false;
+    }
+    
+    // 测试5: 服务不可用异常处理
+    console.log('\n📝 测试5: 服务不可用异常处理');
+    const service5 = new MindMapService(mockConfigService);
+    (service5 as any).db = createMockDynamoDBWithErrors('ServiceUnavailableException');
+    
+    try {
+      await service5.createMindMap('test-user', {
+        title: '测试脑图',
+        description: '测试描述',
+        data: { data: { text: '根节点' }, children: [] },
+        tags: ['测试'],
+      });
+      console.log('❌ 应该抛出异常，但没有抛出');
+      allTestsPassed = false;
+    } catch (error) {
+      console.log('✅ 正确抛出服务异常');
+      console.log('- 异常类型:', error.constructor.name);
+      console.log('- 错误消息:', error.message);
+    }
+    
+    // 测试6: 限流异常处理
+    console.log('\n📝 测试6: 限流异常处理');
+    const service6 = new MindMapService(mockConfigService);
+    (service6 as any).db = createMockDynamoDBWithErrors('ProvisionedThroughputExceededException');
+    
+    try {
+      await service6.getMindMapList('test-user', { page: 1, pageSize: 10 });
+      console.log('❌ 应该抛出异常，但没有抛出');
+      allTestsPassed = false;
+    } catch (error) {
+      console.log('✅ 正确抛出限流异常');
+      console.log('- 异常类型:', error.constructor.name);
+      console.log('- 错误消息:', error.message);
+    }
+    
+    if (allTestsPassed) {
+      console.log('\n🎉 所有错误处理测试通过！API错误处理机制正常');
+      return true;
+    } else {
+      console.log('\n❌ 部分错误处理测试失败，请检查实现');
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('❌ 测试执行失败:', error.message);
+    console.error('错误详情:', error);
+    return false;
+  }
+}
+
+// 运行测试
+if (require.main === module) {
+  testErrorHandling()
+    .then(success => {
+      console.log('\n📊 测试结果:', success ? '成功' : '失败');
+      process.exit(success ? 0 : 1);
+    })
+    .catch(error => {
+      console.error('测试执行错误:', error);
+      process.exit(1);
+    });
+}
+
+export { testErrorHandling };

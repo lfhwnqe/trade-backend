@@ -1,0 +1,195 @@
+/**
+ * 删除脑图API测试
+ * 验证点：可以成功删除脑图记录
+ */
+
+import { MindMapService } from '../mindmap.service';
+import { ConfigService } from '@nestjs/config';
+import { MINDMAP_DEFAULTS } from '../types/mindmap.types';
+
+// 模拟存储的脑图数据
+let mockStoredData: any = {
+  'USER#test-user-123#MINDMAP#test-mindmap-123': {
+    PK: 'USER#test-user-123',
+    SK: 'MINDMAP#test-mindmap-123',
+    id: 'test-mindmap-123',
+    userId: 'test-user-123',
+    title: '待删除的脑图',
+    description: '这是一个用于测试删除功能的脑图',
+    data: JSON.stringify({
+      data: {
+        text: '根节点',
+        expand: true,
+      },
+      children: []
+    }),
+    layout: MINDMAP_DEFAULTS.LAYOUT,
+    theme: MINDMAP_DEFAULTS.THEME,
+    version: MINDMAP_DEFAULTS.VERSION,
+    createdAt: '2025-07-02T13:00:00.000Z',
+    updatedAt: '2025-07-02T13:00:00.000Z',
+  }
+};
+
+// 模拟DynamoDB操作
+const mockDynamoDBDocument = {
+  put: async (params: any) => {
+    console.log('🔧 模拟DynamoDB PUT操作:', {
+      TableName: params.TableName,
+      PK: params.Item.PK,
+      SK: params.Item.SK,
+      title: params.Item.title,
+    });
+    return { $metadata: { httpStatusCode: 200 } };
+  },
+  get: async (params: any) => {
+    console.log('🔧 模拟DynamoDB GET操作:', params.Key);
+    
+    const key = `${params.Key.PK}#${params.Key.SK}`;
+    const item = mockStoredData[key];
+    
+    return { Item: item || null };
+  },
+  delete: async (params: any) => {
+    console.log('🔧 模拟DynamoDB DELETE操作:', params.Key);
+    
+    const key = `${params.Key.PK}#${params.Key.SK}`;
+    const exists = !!mockStoredData[key];
+    
+    if (!exists && params.ConditionExpression) {
+      // 模拟条件检查失败
+      const error = new Error('The conditional request failed');
+      error.name = 'ConditionalCheckFailedException';
+      throw error;
+    }
+    
+    // 删除数据
+    delete mockStoredData[key];
+    
+    return { $metadata: { httpStatusCode: 200 } };
+  },
+  query: async (params: any) => {
+    console.log('🔧 模拟DynamoDB QUERY操作:', params.KeyConditionExpression);
+    return { Items: [], Count: 0 };
+  },
+};
+
+// 模拟ConfigService
+const mockConfigService = {
+  getOrThrow: (key: string) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || `mock-${key}`;
+  },
+  get: (key: string, defaultValue?: any) => {
+    const config = {
+      'AWS_REGION': 'us-east-1',
+      'MINDMAP_TABLE_NAME': 'mindmap-test-table',
+    };
+    return config[key] || defaultValue;
+  },
+} as ConfigService;
+
+async function testDeleteMindMapAPI() {
+  console.log('🧪 开始测试删除脑图API...');
+  
+  try {
+    // 创建服务实例
+    const mindMapService = new MindMapService(mockConfigService);
+    
+    // 模拟DynamoDB客户端
+    (mindMapService as any).db = mockDynamoDBDocument;
+    
+    // 测试1: 删除存在的脑图
+    console.log('\n📝 测试1: 删除存在的脑图');
+    const userId = 'test-user-123';
+    const mindMapId = 'test-mindmap-123';
+    
+    console.log('用户ID:', userId);
+    console.log('脑图ID:', mindMapId);
+    
+    // 验证脑图存在
+    const key = `USER#${userId}#MINDMAP#${mindMapId}`;
+    console.log('删除前脑图是否存在:', !!mockStoredData[key]);
+    
+    // 调用删除API
+    console.log('🚀 调用删除脑图API...');
+    await mindMapService.deleteMindMap(userId, mindMapId);
+    
+    // 验证删除结果
+    console.log('✅ 删除成功！');
+    console.log('删除后脑图是否存在:', !!mockStoredData[key]);
+    
+    // 验证脑图确实被删除
+    if (!mockStoredData[key]) {
+      console.log('✅ 脑图已成功从存储中删除');
+    } else {
+      console.log('❌ 脑图仍然存在于存储中');
+      return false;
+    }
+    
+    // 测试2: 删除不存在的脑图
+    console.log('\n📝 测试2: 删除不存在的脑图');
+    const nonExistentId = 'non-existent-mindmap';
+    console.log('脑图ID:', nonExistentId);
+    
+    try {
+      console.log('🚀 调用删除不存在脑图API...');
+      await mindMapService.deleteMindMap(userId, nonExistentId);
+      console.log('❌ 应该抛出NotFoundException，但没有抛出');
+      return false;
+    } catch (error) {
+      if (error.name === 'NotFoundException') {
+        console.log('✅ 正确抛出NotFoundException');
+      } else {
+        console.log('❌ 抛出了错误的异常类型:', error.name);
+        console.log('错误详情:', error.message);
+        return false;
+      }
+    }
+    
+    // 测试3: 验证删除操作的幂等性（再次删除已删除的脑图）
+    console.log('\n📝 测试3: 验证删除操作的幂等性');
+    console.log('脑图ID:', mindMapId, '(已删除)');
+    
+    try {
+      console.log('🚀 再次调用删除已删除脑图API...');
+      await mindMapService.deleteMindMap(userId, mindMapId);
+      console.log('❌ 应该抛出NotFoundException，但没有抛出');
+      return false;
+    } catch (error) {
+      if (error.name === 'NotFoundException') {
+        console.log('✅ 正确抛出NotFoundException（幂等性验证通过）');
+      } else {
+        console.log('❌ 抛出了错误的异常类型:', error.name);
+        console.log('错误详情:', error.message);
+        return false;
+      }
+    }
+    
+    console.log('\n🎉 所有验证通过！删除脑图API功能正常');
+    return true;
+    
+  } catch (error) {
+    console.error('❌ 测试失败:', error.message);
+    console.error('错误详情:', error);
+    return false;
+  }
+}
+
+// 运行测试
+if (require.main === module) {
+  testDeleteMindMapAPI()
+    .then(success => {
+      console.log('\n📊 测试结果:', success ? '成功' : '失败');
+      process.exit(success ? 0 : 1);
+    })
+    .catch(error => {
+      console.error('测试执行错误:', error);
+      process.exit(1);
+    });
+}
+
+export { testDeleteMindMapAPI };

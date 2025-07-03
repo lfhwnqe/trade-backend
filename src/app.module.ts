@@ -30,6 +30,7 @@ export class AppModule implements NestModule {
         '/svg-parser/parse-url',
         '/svg-parser/parse-file',
         '/svg-parser/validate',
+        '/api/mindmap',
       )
       .forRoutes('*');
   }

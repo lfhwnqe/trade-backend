@@ -13,8 +13,14 @@ async function testControllerImportAndCall() {
   console.log('Testing MindMapController import and method calls...');
   
   try {
+    // 模拟ConfigService
+    const mockConfigService = {
+      getOrThrow: (key: string) => `mock-${key}`,
+      get: (key: string, defaultValue?: any) => defaultValue || `mock-${key}`,
+    } as any;
+
     // 创建服务实例
-    const service = new MindMapService();
+    const service = new MindMapService(mockConfigService);
     
     // 创建控制器实例
     const controller = new MindMapController(service);

@@ -3,8 +3,8 @@
  * 处理脑图相关的业务逻辑
  */
 
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, ServiceUnavailableException, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import { ConfigService } from '../common/config.service';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { MindMapEntityClass } from './entities/mindmap.entity';
@@ -36,6 +36,28 @@ export class MindMapService {
 
     this.logger.log('MindMapService initialized');
     this.logger.log(`Using DynamoDB table: ${this.tableName}`);
+  }
+
+  /**
+   * 统一处理DynamoDB异常
+   */
+  private handleDynamoDBError(error: any, operation: string): never {
+    this.logger.error(`DynamoDB ${operation} failed: ${error.message}`, error.stack);
+
+    switch (error.name) {
+      case 'ResourceNotFoundException':
+        throw new NotFoundException('Resource not found');
+      case 'ConditionalCheckFailedException':
+        throw new ConflictException('Resource already exists or condition failed');
+      case 'ValidationException':
+        throw new BadRequestException('Invalid request parameters');
+      case 'ProvisionedThroughputExceededException':
+        throw new HttpException('Request rate too high, please try again later', HttpStatus.TOO_MANY_REQUESTS);
+      case 'ServiceUnavailableException':
+        throw new ServiceUnavailableException('Service temporarily unavailable');
+      default:
+        throw new HttpException(error.message || 'Database operation failed', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   /**
@@ -76,11 +98,7 @@ export class MindMapService {
 
       return result;
     } catch (error) {
-      this.logger.error(`Failed to create mind map: ${error.message}`, error.stack);
-      if (error.name === 'ConditionalCheckFailedException') {
-        throw new BadRequestException('Mind map already exists');
-      }
-      throw error;
+      this.handleDynamoDBError(error, 'CREATE');
     }
   }
 
@@ -111,11 +129,10 @@ export class MindMapService {
       this.logger.log(`Mind map retrieved successfully: ${mindMapData.id}`);
       return mindMapData;
     } catch (error) {
-      this.logger.error(`Failed to get mind map: ${error.message}`, error.stack);
       if (error instanceof NotFoundException) {
         throw error;
       }
-      throw error;
+      this.handleDynamoDBError(error, 'GET');
     }
   }
 
@@ -176,11 +193,10 @@ export class MindMapService {
 
       return result;
     } catch (error) {
-      this.logger.error(`Failed to update mind map: ${error.message}`, error.stack);
-      if (error.name === 'ItemNotFound') {
-        throw new NotFoundException(`Mind map not found: ${mindMapId}`);
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
       }
-      throw error;
+      this.handleDynamoDBError(error, 'UPDATE');
     }
   }
 
@@ -203,11 +219,10 @@ export class MindMapService {
 
       this.logger.log(`Mind map deleted successfully: ${mindMapId}`);
     } catch (error) {
-      this.logger.error(`Failed to delete mind map: ${error.message}`, error.stack);
       if (error.name === 'ConditionalCheckFailedException') {
         throw new NotFoundException(`Mind map not found: ${mindMapId}`);
       }
-      throw error;
+      this.handleDynamoDBError(error, 'DELETE');
     }
   }
 
@@ -243,6 +258,17 @@ export class MindMapService {
       // 添加分页支持
       if (queryParams.lastEvaluatedKey) {
         queryParams_db.ExclusiveStartKey = JSON.parse(queryParams.lastEvaluatedKey);
+      }
+
+      // 添加标签过滤
+      if (queryParams.tags && queryParams.tags.length > 0) {
+        const tagConditions = queryParams.tags.map((_, index) => `contains(tags, :tag${index})`).join(' OR ');
+        queryParams_db.FilterExpression = `(${tagConditions})`;
+
+        // 添加标签值到ExpressionAttributeValues
+        queryParams.tags.forEach((tag, index) => {
+          queryParams_db.ExpressionAttributeValues[`:tag${index}`] = tag;
+        });
       }
 
       queryParams_db.Limit = pageSize;
@@ -281,7 +307,7 @@ export class MindMapService {
       return result;
     } catch (error) {
       this.logger.error(`Failed to get mind map list: ${error.message}`, error.stack);
-      throw error;
+      this.handleDynamoDBError(error, 'QUERY');
     }
   }
 

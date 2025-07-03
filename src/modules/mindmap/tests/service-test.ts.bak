@@ -11,8 +11,14 @@ async function testServiceImportAndCall() {
   console.log('Testing MindMapService import and method calls...');
   
   try {
+    // 模拟ConfigService
+    const mockConfigService = {
+      getOrThrow: (key: string) => `mock-${key}`,
+      get: (key: string, defaultValue?: any) => defaultValue || `mock-${key}`,
+    } as any;
+
     // 测试服务类实例化
-    const service = new MindMapService();
+    const service = new MindMapService(mockConfigService);
     console.log('✅ MindMapService instantiation works');
 
     // 测试健康状态检查
