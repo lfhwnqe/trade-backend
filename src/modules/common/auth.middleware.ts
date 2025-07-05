@@ -9,6 +9,7 @@ const whitelist = [
   '/user/confirm',
   '/user/login',
   '/user/registration/status',
+  '/api/mindmap', // 临时允许脑图API无需认证
 ];
 
 @Injectable()

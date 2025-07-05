@@ -404,5 +404,38 @@ export class TradingStack extends cdk.Stack {
       value: ragAnalyticsTable.tableName,
       description: `Name of the DynamoDB table for RAG analytics in ${appName} ${envName}`,
     });
+
+    // MindMap DynamoDB Table Output
+    new cdk.CfnOutput(this, 'MINDMAP_TABLE_NAME', {
+      value: mindMapTable.tableName,
+      description: `Name of the DynamoDB table for MindMap in ${appName} ${envName}`,
+    });
+
+    // Environment Variables Output for easy copying to .env file
+    const envVarsString = `# Environment Variables for ${appName} ${envName}
+# Copy the following lines to your .env file
+
+AWS_REGION=${region}
+USER_POOL_ID=${userPool.userPoolId}
+USER_POOL_CLIENT_ID=${userPoolClient.userPoolClientId}
+IMAGE_BUCKET_NAME=${imageBucket.bucketName}
+CLOUDFRONT_DOMAIN_NAME=${distribution.distributionDomainName}
+TRANSACTIONS_TABLE_NAME=${transactionsTable.tableName}
+API_ENDPOINT_URL=${endpoint.url}
+COGNITO_ADMIN_GROUP_NAME=${adminGroupName}
+
+# RAG Module Environment Variables
+RAG_DOCUMENTS_TABLE_NAME=${ragDocumentsTable.tableName}
+RAG_CHAT_SESSIONS_TABLE_NAME=${ragChatSessionsTable.tableName}
+RAG_CHAT_MESSAGES_TABLE_NAME=${ragChatMessagesTable.tableName}
+RAG_ANALYTICS_TABLE_NAME=${ragAnalyticsTable.tableName}
+
+# MindMap Module Environment Variables
+MINDMAP_TABLE_NAME=${mindMapTable.tableName}`;
+
+    new cdk.CfnOutput(this, 'EnvironmentVariables', {
+      value: envVarsString,
+      description: 'Environment variables for .env file - copy and paste directly',
+    });
   }
 }

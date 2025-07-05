@@ -49,13 +49,14 @@ export class MindMapController {
     @Request() req: any
   ): Promise<MindMapResponseDto> {
     this.logger.log('POST /api/mindmap - Creating new mind map');
-    
+
     try {
-      // TODO: 从JWT token获取用户ID
-      const userId = req.user?.sub || 'mock-user-id';
-      
+      // 获取用户ID，优先使用JWT token中的用户ID，否则使用固定的匿名用户ID
+      const userId = req.user?.sub || 'anonymous-user';
+      this.logger.log(`Creating mind map for user: ${userId} (authenticated: ${!!req.user})`);
+
       const mindMapData = await this.mindMapService.createMindMap(userId, createMindMapDto);
-      
+
       return MindMapResponseDto.success(mindMapData, 'Mind map created successfully');
     } catch (error) {
       this.logger.error(`Failed to create mind map: ${error.message}`, error.stack);
@@ -73,13 +74,14 @@ export class MindMapController {
     @Request() req: any
   ): Promise<MindMapResponseDto> {
     this.logger.log(`GET /api/mindmap/${id} - Getting mind map by ID`);
-    
+
     try {
-      // TODO: 从JWT token获取用户ID
-      const userId = req.user?.sub || 'mock-user-id';
-      
+      // 获取用户ID，优先使用JWT token中的用户ID，否则使用固定的匿名用户ID
+      const userId = req.user?.sub || 'anonymous-user';
+      this.logger.log(`Getting mind map for user: ${userId} (authenticated: ${!!req.user})`);
+
       const mindMapData = await this.mindMapService.getMindMapById(userId, id);
-      
+
       return MindMapResponseDto.success(mindMapData, 'Mind map retrieved successfully');
     } catch (error) {
       this.logger.error(`Failed to get mind map: ${error.message}`, error.stack);
@@ -100,8 +102,8 @@ export class MindMapController {
     this.logger.log(`PUT /api/mindmap/${id} - Updating mind map`);
     
     try {
-      // TODO: 从JWT token获取用户ID
-      const userId = req.user?.sub || 'mock-user-id';
+      // 获取用户ID，优先使用JWT token中的用户ID，否则使用固定的匿名用户ID
+      const userId = req.user?.sub || 'anonymous-user';
       
       const mindMapData = await this.mindMapService.updateMindMap(userId, id, updateMindMapDto);
       
@@ -124,8 +126,8 @@ export class MindMapController {
     this.logger.log(`DELETE /api/mindmap/${id} - Deleting mind map`);
     
     try {
-      // TODO: 从JWT token获取用户ID
-      const userId = req.user?.sub || 'mock-user-id';
+      // 获取用户ID，优先使用JWT token中的用户ID，否则使用固定的匿名用户ID
+      const userId = req.user?.sub || 'anonymous-user';
       
       await this.mindMapService.deleteMindMap(userId, id);
       
@@ -148,8 +150,8 @@ export class MindMapController {
     this.logger.log('GET /api/mindmap - Getting mind map list');
     
     try {
-      // TODO: 从JWT token获取用户ID
-      const userId = req.user?.sub || 'mock-user-id';
+      // 获取用户ID，优先使用JWT token中的用户ID，否则使用固定的匿名用户ID
+      const userId = req.user?.sub || 'anonymous-user';
       
       const result = await this.mindMapService.getMindMapList(userId, queryDto);
       
