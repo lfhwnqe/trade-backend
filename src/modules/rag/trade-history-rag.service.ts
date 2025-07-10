@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../common/config.service';
 import { Index } from '@upstash/vector';
-import { openai } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { embed } from 'ai';
 import { DocumentType, VectorMetadata } from './types/rag.types';
 import { Trade } from '../trade/entities/trade.entity';
@@ -15,12 +15,18 @@ import { ERROR_CODES } from '../../base/constants/error-codes';
 export class TradeHistoryRAGService {
   private readonly logger = new Logger(TradeHistoryRAGService.name);
   private readonly vectorIndex: Index;
+  private readonly googleProvider: any;
 
   constructor(private readonly configService: ConfigService) {
     // 初始化 Upstash Vector
     this.vectorIndex = new Index({
       url: this.configService.getOrThrow('UPSTASH_VECTOR_REST_URL'),
       token: this.configService.getOrThrow('UPSTASH_VECTOR_REST_TOKEN'),
+    });
+
+    // 初始化 Google provider 并显式传递 API key
+    this.googleProvider = createGoogleGenerativeAI({
+      apiKey: this.configService.getOrThrow('GOOGLE_GENERATIVE_AI_API_KEY'),
     });
 
     this.logger.log('Trade History RAG Service initialized');
@@ -142,7 +148,10 @@ export class TradeHistoryRAGService {
   private async generateEmbedding(text: string): Promise<number[]> {
     try {
       const { embedding } = await embed({
-        model: openai.embedding('text-embedding-3-small'),
+        model: this.googleProvider.textEmbeddingModel('text-embedding-004', {
+          outputDimensionality: 1536, // 使用768维度，适合大多数向量数据库
+          taskType: 'SEMANTIC_SIMILARITY', // 语义相似性任务
+        }),
         value: text,
       });
       return embedding;

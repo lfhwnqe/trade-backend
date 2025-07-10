@@ -2,8 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '../common/config.service';
 import { MetadataService } from './metadata.service';
 import { Index } from '@upstash/vector';
-import { openai } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { embed } from 'ai';
+import { MDocument } from '@mastra/rag';
 import { CreateDocumentDto, UpdateDocumentDto, SearchQueryDto } from './dto';
 import { DocumentEntity } from './entities/document.entity';
 import { RetrievalResultDto } from './dto/rag-response.dto';
@@ -27,6 +28,7 @@ import { ERROR_CODES } from '../../base/constants/error-codes';
 export class RAGService {
   private readonly logger = new Logger(RAGService.name);
   private readonly vectorIndex: Index;
+  private readonly googleProvider: any;
 
   constructor(
     private readonly configService: ConfigService,
@@ -36,6 +38,11 @@ export class RAGService {
     this.vectorIndex = new Index({
       url: this.configService.getOrThrow('UPSTASH_VECTOR_REST_URL'),
       token: this.configService.getOrThrow('UPSTASH_VECTOR_REST_TOKEN'),
+    });
+
+    // 初始化 Google provider 并显式传递 API key
+    this.googleProvider = createGoogleGenerativeAI({
+      apiKey: this.configService.getOrThrow('GOOGLE_GENERATIVE_AI_API_KEY'),
     });
 
     this.logger.log('RAG Service initialized');
@@ -64,6 +71,7 @@ export class RAGService {
         userId,
         document.documentId,
         documentData.content,
+        documentData.documentType,
       );
 
       return document;
@@ -90,6 +98,7 @@ export class RAGService {
     userId: string,
     documentId: string,
     content: string,
+    documentType: DocumentType = DocumentType.TEXT,
   ): Promise<void> {
     try {
       this.logger.log(`Starting document processing for ${documentId}`);
@@ -98,8 +107,8 @@ export class RAGService {
       const processedContent = await this.preprocessDocument(content);
       const documentAnalysis = this.analyzeDocument(processedContent);
 
-      // 2. 智能文本分块
-      const chunks = this.splitText(processedContent);
+      // 2. 智能文本分块 - 使用 Mastra RAG
+      const chunks = await this.splitText(processedContent, documentType);
 
       // 3. 生成嵌入向量
       const embeddings = await this.generateEmbeddings(
@@ -259,38 +268,72 @@ export class RAGService {
   }
 
   /**
-   * 文本分块 - 使用增强的文本处理器
+   * 文本分块 - 使用 Mastra RAG 的 MDocument 进行优化分块
    */
-  private splitText(text: string): TextChunk[] {
+  private async splitText(text: string, documentType: DocumentType = DocumentType.TEXT): Promise<TextChunk[]> {
     const chunkSize = parseInt(
-      this.configService.get('RAG_CHUNK_SIZE') || '1000',
+      this.configService.get('RAG_CHUNK_SIZE') || '512',
     );
     const chunkOverlap = parseInt(
-      this.configService.get('RAG_CHUNK_OVERLAP') || '200',
-    );
-    const minChunkSize = parseInt(
-      this.configService.get('RAG_MIN_CHUNK_SIZE') || '100',
-    );
-    const maxChunkSize = parseInt(
-      this.configService.get('RAG_MAX_CHUNK_SIZE') || '2000',
+      this.configService.get('RAG_CHUNK_OVERLAP') || '50',
     );
 
-    // 使用增强的文本处理器进行智能分块
-    const processedChunks = TextProcessor.splitText(text, {
-      chunkSize,
-      chunkOverlap,
-      minChunkSize,
-      maxChunkSize,
-      preserveParagraphs: true,
-      preserveSentences: true,
-    });
+    try {
+      // 根据文档类型创建 MDocument
+      let mDocument: MDocument;
 
-    // 转换为 RAG 服务期望的格式
-    return processedChunks.map((chunk) => ({
-      content: chunk.content,
-      index: chunk.index,
-      tokenCount: chunk.tokenCount,
-    }));
+      switch (documentType) {
+        case DocumentType.HTML:
+          mDocument = MDocument.fromHTML(text);
+          break;
+        case DocumentType.MARKDOWN:
+          mDocument = MDocument.fromMarkdown(text);
+          break;
+        case DocumentType.JSON:
+          mDocument = MDocument.fromJSON(text);
+          break;
+        case DocumentType.TEXT:
+        case DocumentType.PDF: // PDF已转换为文本
+        default:
+          mDocument = MDocument.fromText(text);
+          break;
+      }
+
+      // 使用 Mastra 的递归分块策略
+      const chunks = await mDocument.chunk({
+        strategy: "recursive",
+        size: chunkSize,
+        overlap: chunkOverlap,
+      });
+
+      this.logger.log(`Document chunked into ${chunks.length} pieces using Mastra RAG (size: ${chunkSize}, overlap: ${chunkOverlap})`);
+
+      // 转换为 RAG 服务期望的格式
+      return chunks.map((chunk, index) => ({
+        content: chunk.text, // Mastra chunks 使用 .text 属性
+        index: index,
+        tokenCount: this.estimateTokenCount(chunk.text),
+      }));
+
+    } catch (error) {
+      this.logger.warn(`Mastra chunking failed, falling back to TextProcessor: ${error.message}`);
+
+      // 降级到原有的 TextProcessor 方法
+      const processedChunks = TextProcessor.splitText(text, {
+        chunkSize,
+        chunkOverlap,
+        minChunkSize: 50,
+        maxChunkSize: chunkSize * 2,
+        preserveParagraphs: true,
+        preserveSentences: true,
+      });
+
+      return processedChunks.map((chunk) => ({
+        content: chunk.content,
+        index: chunk.index,
+        tokenCount: chunk.tokenCount,
+      }));
+    }
   }
 
   /**
@@ -300,13 +343,48 @@ export class RAGService {
     try {
       const embeddings: number[][] = [];
 
-      // 批量处理嵌入
-      for (const text of texts) {
-        const { embedding } = await embed({
-          model: openai.embedding('text-embedding-3-small'),
-          value: text,
-        });
-        embeddings.push(embedding);
+      // 添加延迟以避免速率限制
+      const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+      // 逐个处理嵌入，添加延迟和重试机制
+      for (let i = 0; i < texts.length; i++) {
+        const text = texts[i];
+
+        // 每处理3个请求后暂停2秒，更保守的策略
+        if (i > 0 && i % 3 === 0) {
+          this.logger.log(`Processing embedding ${i}/${texts.length}, pausing to avoid rate limit...`);
+          await delay(2000);
+        }
+
+        // 重试机制
+        let retryCount = 0;
+        const maxRetries = 3;
+
+        while (retryCount < maxRetries) {
+          try {
+            const { embedding } = await embed({
+              model: this.googleProvider.textEmbeddingModel('text-embedding-004', {
+                outputDimensionality: 1536, // 使用768维度，适合大多数向量数据库
+                taskType: 'SEMANTIC_SIMILARITY', // 语义相似性任务
+              }),
+              value: text,
+            });
+            embeddings.push(embedding);
+            break; // 成功则跳出重试循环
+          } catch (retryError) {
+            retryCount++;
+            if (retryError.message.includes('Quota exceeded')) {
+              this.logger.warn(`Rate limit hit for embedding ${i}, retrying in ${5 * retryCount} seconds... (attempt ${retryCount}/${maxRetries})`);
+              await delay(5000 * retryCount); // 指数退避
+            } else {
+              throw retryError; // 非配额错误直接抛出
+            }
+
+            if (retryCount >= maxRetries) {
+              throw retryError;
+            }
+          }
+        }
       }
 
       return embeddings;

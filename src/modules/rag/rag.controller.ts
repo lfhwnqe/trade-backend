@@ -44,7 +44,20 @@ export class RAGController {
 
   // ==================== 文档管理接口 ====================
 
-  @ApiOperation({ summary: '添加文档' })
+  @ApiOperation({
+    summary: '添加文档到知识库',
+    description: `
+支持的文档类型：
+• TEXT - 纯文本文档
+• HTML - HTML格式文档
+• MARKDOWN - Markdown格式文档
+• JSON - JSON格式文档
+• PDF - PDF文档（需前端转换为文本）
+
+使用 Mastra RAG 进行智能分块处理，优化向量化效果。
+分块策略：递归分块，大小512，重叠50。
+    `
+  })
   @ApiBody({ type: CreateDocumentDto })
   @ApiResponse({ status: 201, description: '文档创建成功' })
   @Post('documents')
@@ -180,19 +193,41 @@ export class RAGController {
 
   // ==================== 统计和健康检查接口 ====================
 
-  @ApiOperation({ summary: 'RAG 系统健康检查' })
+  @ApiOperation({
+    summary: 'RAG 系统健康检查',
+    description: '检查 RAG 系统状态，包括 Mastra RAG 配置信息'
+  })
   @ApiResponse({ status: 200, description: '系统正常' })
   @Get('health')
   async healthCheck(): Promise<
-    BaseApiResponse<{ status: string; timestamp: string }>
+    BaseApiResponse<{
+      status: string;
+      timestamp: string;
+      ragConfig: {
+        chunkingEngine: string;
+        supportedTypes: string[];
+        chunkSize: number;
+        chunkOverlap: number;
+        embeddingModel: string;
+        vectorDatabase: string;
+      }
+    }>
   > {
     return {
       success: true,
       data: {
         status: 'healthy',
         timestamp: new Date().toISOString(),
+        ragConfig: {
+          chunkingEngine: 'Mastra RAG with MDocument',
+          supportedTypes: ['TEXT', 'HTML', 'MARKDOWN', 'JSON', 'PDF'],
+          chunkSize: 512,
+          chunkOverlap: 50,
+          embeddingModel: 'Google Gemini text-embedding-004',
+          vectorDatabase: 'Upstash Vector'
+        }
       },
-      message: 'RAG 系统运行正常',
+      message: 'RAG 系统运行正常 - 使用 Mastra RAG 优化分块策略',
       timestamp: new Date().toISOString(),
     };
   }

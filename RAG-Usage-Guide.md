@@ -70,7 +70,8 @@ RAG_MAX_RESULTS=10                     # 默认最大搜索结果数
 RAG_SIMILARITY_THRESHOLD=0.7           # 默认相似度阈值
 
 # AI 模型配置
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key
+GOOGLE_EMBEDDING_MODEL=text-embedding-004
 OPENAI_CHAT_MODEL=gpt-4o-mini
 
 # 缓存配置
@@ -1069,10 +1070,13 @@ export interface ModelAdapter {
   generateText(prompt: string, options: GenerationOptions): Promise<string>;
 }
 
-export class OpenAIAdapter implements ModelAdapter {
+export class GoogleAdapter implements ModelAdapter {
   async generateEmbedding(text: string): Promise<number[]> {
     const { embedding } = await embed({
-      model: openai.embedding('text-embedding-3-small'),
+      model: google.textEmbeddingModel('text-embedding-004', {
+        outputDimensionality: 768,
+        taskType: 'SEMANTIC_SIMILARITY',
+      }),
       value: text,
     });
     return embedding;

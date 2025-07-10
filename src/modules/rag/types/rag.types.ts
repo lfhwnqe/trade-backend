@@ -9,6 +9,12 @@ export enum DocumentType {
   KNOWLEDGE = 'knowledge',
   MANUAL = 'manual',
   REPORT = 'report',
+  // Mastra RAG 支持的文档类型
+  TEXT = 'text',
+  HTML = 'html',
+  MARKDOWN = 'markdown',
+  JSON = 'json',
+  PDF = 'pdf', // PDF转换为文本后处理
 }
 
 // 文档状态枚举

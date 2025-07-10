@@ -118,7 +118,19 @@ export class CreateDocumentDto {
   title: string;
 
   @ApiProperty({
-    description: '文档类型',
+    description: `文档类型 - 支持 Mastra RAG 优化分块处理
+
+支持的类型：
+• TEXT - 纯文本文档，使用递归分块策略
+• HTML - HTML格式文档，保持结构化分块
+• MARKDOWN - Markdown文档，按标题层级分块
+• JSON - JSON格式文档，保持数据结构完整性
+• PDF - PDF文档（需前端转换为文本后传入）
+• KNOWLEDGE - 知识库文档（默认文本处理）
+• MANUAL - 手册文档
+• REPORT - 报告文档
+• TRADE - 交易相关文档
+• TRADE_HISTORY - 交易历史文档`,
     enum: DocumentType,
     example: DocumentType.KNOWLEDGE,
   })

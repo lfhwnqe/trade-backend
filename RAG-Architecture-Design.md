@@ -580,9 +580,12 @@ UPSTASH_VECTOR_REST_TOKEN=your_vector_token
 UPSTASH_REDIS_REST_URL=https://your-redis.upstash.io
 UPSTASH_REDIS_REST_TOKEN=your_redis_token
 
-# OpenAI API (用于嵌入和生成)
+# Google Gemini API (用于嵌入)
+GOOGLE_GENERATIVE_AI_API_KEY=your_google_api_key
+GOOGLE_EMBEDDING_MODEL=text-embedding-004
+
+# OpenAI API (用于生成，可选)
 OPENAI_API_KEY=sk-your_openai_key
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_CHAT_MODEL=gpt-4o-mini
 
 # Mastra 配置
@@ -889,7 +892,7 @@ interface RAGConfig {
       token: string;
     };
     embedding: {
-      model: 'text-embedding-3-small';
+      model: 'text-embedding-004';
       batchSize: 100;
     };
     generation: {
@@ -905,7 +908,7 @@ interface RAGConfig {
       token: string;
     };
     embedding: {
-      model: 'text-embedding-3-large';
+      model: 'text-embedding-004';
       batchSize: 200;
     };
     generation: {

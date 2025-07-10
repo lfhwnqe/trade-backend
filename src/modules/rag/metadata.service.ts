@@ -26,7 +26,11 @@ export class MetadataService {
     this.dynamoDBClient = new DynamoDBClient({
       region: this.configService.get('AWS_REGION') || 'us-east-1',
     });
-    this.docClient = DynamoDBDocumentClient.from(this.dynamoDBClient);
+    this.docClient = DynamoDBDocumentClient.from(this.dynamoDBClient, {
+      marshallOptions: {
+        convertClassInstanceToMap: true,
+      },
+    });
 
     // 获取表名
     this.documentsTableName = this.configService.getOrThrow(
@@ -61,7 +65,7 @@ export class MetadataService {
       embeddingIds,
       chunkCount,
       totalTokens,
-      embeddingModel: 'text-embedding-3-small', // 默认模型
+      embeddingModel: 'text-embedding-004', // Google Gemini embedding模型
       metadata: documentData.metadata || {},
       status: DocumentStatus.PROCESSING,
       processingProgress: 0,
