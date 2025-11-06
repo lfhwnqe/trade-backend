@@ -55,8 +55,8 @@ export class TradingStack extends cdk.Stack {
           allowedOrigins: [
             'http://localhost:3000',
             'http://localhost:3001',
-            'https://*.maomaocong.site',
-            'https://en.maomaocong.site',
+            'https://*.maomaocong.com',
+            'https://en.maomaocong.com',
           ],
           allowedHeaders: ['*'],
           exposedHeaders: [
