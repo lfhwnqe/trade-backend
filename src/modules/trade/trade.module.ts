@@ -2,10 +2,11 @@ import { Module } from '@nestjs/common';
 import { TradeController } from './trade.controller';
 import { TradeService } from './trade.service';
 import { CommonModule } from '../common/common.module';
-import { RAGModule } from '../rag/rag.module';
+// import { RAGModule } from '../rag/rag.module';
 
 @Module({
-  imports: [CommonModule, RAGModule],
+  imports: [CommonModule],
+  // imports: [CommonModule, RAGModule],
   controllers: [TradeController],
   providers: [TradeService],
 })

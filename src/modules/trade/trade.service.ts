@@ -7,12 +7,6 @@ import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from '../common/config.service';
 import { TradeQueryDto } from './dto/trade-query.dto';
-import { TradeHistoryRAGService } from '../rag/trade-history-rag.service';
-import {
-  getCurrentRAGConfig,
-  validateRAGConfig,
-  RAGEvaluationConfig,
-} from './rag-evaluation.config';
 import {
   DynamoDBException,
   AuthorizationException,
@@ -25,23 +19,15 @@ export class TradeService {
   private readonly logger = new Logger(TradeService.name);
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
-  private readonly ragConfig: RAGEvaluationConfig;
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly tradeHistoryRAGService: TradeHistoryRAGService,
   ) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
     this.tableName = tableName;
 
-    // 初始化RAG评估配置
-    this.ragConfig = getCurrentRAGConfig();
-    if (!validateRAGConfig(this.ragConfig)) {
-      this.logger.warn('RAG评估配置验证失败，使用默认配置');
-    }
-    this.logger.log(`RAG评估配置已加载，阈值: ${this.ragConfig.threshold}分`);
     // 配置 DynamoDBDocument，添加转换选项
     this.db = DynamoDBDocument.from(new DynamoDB({ region }), {
       marshallOptions: {
@@ -130,9 +116,6 @@ export class TradeService {
         TableName: this.tableName,
         Item: newTrade,
       });
-
-      // 检查是否需要添加到交易历史RAG库
-      await this.checkAndAddToRAGHistory(newTrade);
 
       return {
         success: true,
@@ -485,9 +468,6 @@ export class TradeService {
         Item: updated,
       });
 
-      // 检查是否需要添加到交易历史RAG库
-      await this.checkAndAddToRAGHistory(updated);
-
       return {
         success: true,
         message: '更新成功',
@@ -519,16 +499,6 @@ export class TradeService {
         );
       }
 
-      // 从向量数据库删除交易历史
-      try {
-        await this.tradeHistoryRAGService.removeTradeFromHistory(transactionId);
-        this.logger.log(`Removed trade ${transactionId} from RAG history`);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to remove trade ${transactionId} from RAG history: ${error.message}`,
-        );
-        // 不阻止删除操作，只记录警告
-      }
 
       await this.db.delete({
         TableName: this.tableName,
@@ -755,366 +725,5 @@ export class TradeService {
         { originalError: error.message },
       );
     }
-  }
-
-  /**
-   * 检查交易是否需要添加到RAG历史库
-   * 使用多维度评估系统判断交易记录的价值
-   */
-  private async checkAndAddToRAGHistory(trade: Trade): Promise<void> {
-    try {
-      const shouldAddToRAG = this.evaluateTradeValueForRAG(trade);
-
-      if (shouldAddToRAG.shouldAdd) {
-        this.logger.log(
-          `Adding trade ${trade.transactionId} to RAG history - ${shouldAddToRAG.reason}`,
-        );
-        await this.tradeHistoryRAGService.addTradeToHistory(trade);
-        this.logger.log(
-          `Successfully added trade ${trade.transactionId} to RAG history`,
-        );
-      } else {
-        this.logger.debug(
-          `Skipping trade ${trade.transactionId} for RAG - ${shouldAddToRAG.reason}`,
-        );
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to add trade ${trade.transactionId} to RAG history: ${error.message}`,
-        error,
-      );
-      // 不抛出异常，避免影响主要的交易操作
-    }
-  }
-
-  /**
-   * 评估交易记录是否有价值添加到RAG系统
-   * 使用多维度评分系统进行综合判断
-   */
-  private evaluateTradeValueForRAG(trade: Trade): {
-    shouldAdd: boolean;
-    reason: string;
-    score: number;
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 1. 基础完整性检查 (必要条件)
-    if (!this.isTradeDataComplete(trade)) {
-      return {
-        shouldAdd: false,
-        reason: '交易数据不完整，缺少关键信息',
-        score: 0,
-      };
-    }
-
-    // 2. 交易状态评估 (权重: 20分)
-    const statusValue = this.assessTradeStatus(trade);
-    score += statusValue.score;
-    if (statusValue.reasons.length > 0) {
-      reasons.push(...statusValue.reasons);
-    }
-
-    // 3. 学习价值评估 (权重: 25分)
-    const learningValue = this.assessLearningValue(trade);
-    score += learningValue.score;
-    if (learningValue.reasons.length > 0) {
-      reasons.push(...learningValue.reasons);
-    }
-
-    // 4. 交易重要性评估 (权重: 15分)
-    const importanceValue = this.assessTradeImportance(trade);
-    score += importanceValue.score;
-    if (importanceValue.reasons.length > 0) {
-      reasons.push(...importanceValue.reasons);
-    }
-
-    // 5. 分析质量评估 (权重: 20分)
-    const analysisQuality = this.assessAnalysisQuality(trade);
-    score += analysisQuality.score;
-    if (analysisQuality.reasons.length > 0) {
-      reasons.push(...analysisQuality.reasons);
-    }
-
-    // 6. 交易结果多样性评估 (权重: 10分)
-    const diversityValue = this.assessResultDiversity(trade);
-    score += diversityValue.score;
-    if (diversityValue.reasons.length > 0) {
-      reasons.push(...diversityValue.reasons);
-    }
-
-    // 判断阈值：使用配置文件中的阈值
-    const threshold = this.ragConfig.threshold;
-    const shouldAdd = score >= threshold;
-
-    return {
-      shouldAdd,
-      reason: shouldAdd
-        ? `综合评分${score}/100，符合条件: ${reasons.join(', ')}`
-        : `综合评分${score}/100，未达到阈值${threshold}分`,
-      score,
-    };
-  }
-
-  /**
-   * 检查交易数据完整性
-   */
-  private isTradeDataComplete(trade: Trade): boolean {
-    // 基础必要字段检查
-    const requiredStringFields = [
-      trade.tradeSubject,
-      trade.tradeType,
-      trade.analysisTime,
-      trade.marketStructure,
-      trade.marketStructureAnalysis,
-    ];
-
-    // 检查字符串字段
-    const stringFieldsValid = requiredStringFields.every(
-      (field) => field !== undefined && field !== null && field !== '',
-    );
-
-    if (!stringFieldsValid) {
-      return false;
-    }
-
-    // 根据交易状态检查相应字段
-    if (trade.status === '已离场') {
-      // 完整交易：需要入场和离场数据
-      const requiredNumberFields = [trade.entryPrice, trade.exitPrice];
-      const numberFieldsValid = requiredNumberFields.every(
-        (field) => field !== undefined && field !== null && !isNaN(field),
-      );
-
-      const enumFieldsValid =
-        trade.entryDirection !== undefined &&
-        trade.entryDirection !== null &&
-        trade.tradeResult !== undefined &&
-        trade.tradeResult !== null;
-
-      return numberFieldsValid && enumFieldsValid;
-    } else if (trade.status === '已入场') {
-      // 已入场：需要入场数据
-      const entryFieldsValid =
-        trade.entryPrice !== undefined &&
-        trade.entryPrice !== null &&
-        !isNaN(trade.entryPrice) &&
-        trade.entryDirection !== undefined &&
-        trade.entryDirection !== null;
-
-      return entryFieldsValid;
-    } else if (trade.status === '已分析') {
-      // 纯分析：基础字段已检查，无需额外要求
-      return true;
-    }
-
-    return true;
-  }
-
-  /**
-   * 评估交易的学习价值
-   */
-  private assessLearningValue(trade: Trade): {
-    score: number;
-    reasons: string[];
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 经验总结存在且有实质内容
-    if (
-      trade.lessonsLearned &&
-      trade.lessonsLearned.trim().length >
-        this.ragConfig.textRequirements.detailedLessonsLearned
-    ) {
-      score += this.ragConfig.learningScores.detailedLessons;
-      reasons.push('包含详细经验总结');
-    } else if (trade.lessonsLearned && trade.lessonsLearned.trim().length > 0) {
-      score += this.ragConfig.learningScores.basicLessons;
-      reasons.push('包含简单经验总结');
-    }
-
-    // 心态记录存在
-    if (
-      trade.mentalityNotes &&
-      trade.mentalityNotes.trim().length >
-        this.ragConfig.textRequirements.basicMentalityNotes
-    ) {
-      score += this.ragConfig.learningScores.mentalityNotes;
-      reasons.push('包含心态记录');
-    }
-
-    // 实际路径分析存在
-    if (
-      trade.actualPathAnalysis &&
-      trade.actualPathAnalysis.trim().length >
-        this.ragConfig.textRequirements.detailedPathAnalysis
-    ) {
-      score += this.ragConfig.learningScores.pathAnalysis;
-      reasons.push('包含实际路径分析');
-    }
-
-    return { score, reasons };
-  }
-
-  /**
-   * 评估交易重要性
-   */
-  private assessTradeImportance(trade: Trade): {
-    score: number;
-    reasons: string[];
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 交易分级评估
-    if (trade.grade === '高') {
-      score += this.ragConfig.importanceScores.gradeHigh;
-      reasons.push('高重要性交易');
-    } else if (trade.grade === '中') {
-      score += this.ragConfig.importanceScores.gradeMedium;
-      reasons.push('中等重要性交易');
-    } else if (trade.grade === '低') {
-      score += this.ragConfig.importanceScores.gradeLow;
-      reasons.push('低重要性交易');
-    }
-
-    // 真实交易vs模拟交易
-    if (trade.tradeType === '真实交易') {
-      score += this.ragConfig.importanceScores.realTrade;
-      reasons.push('真实交易记录');
-    } else {
-      score += this.ragConfig.importanceScores.simulationTrade;
-      reasons.push('模拟交易记录');
-    }
-
-    return { score, reasons };
-  }
-
-  /**
-   * 评估分析质量
-   */
-  private assessAnalysisQuality(trade: Trade): {
-    score: number;
-    reasons: string[];
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 市场结构分析质量
-    if (
-      trade.marketStructureAnalysis &&
-      trade.marketStructureAnalysis.trim().length >
-        this.ragConfig.textRequirements.detailedMarketAnalysis
-    ) {
-      score += this.ragConfig.qualityScores.detailedMarketAnalysis;
-      reasons.push('详细市场结构分析');
-    } else if (
-      trade.marketStructureAnalysis &&
-      trade.marketStructureAnalysis.trim().length >
-        this.ragConfig.textRequirements.basicMarketAnalysis
-    ) {
-      score += this.ragConfig.qualityScores.basicMarketAnalysis;
-      reasons.push('基础市场结构分析');
-    }
-
-    // 预期路径分析存在
-    if (
-      trade.expectedPathAnalysis &&
-      trade.expectedPathAnalysis.trim().length >
-        this.ragConfig.textRequirements.basicPathAnalysis
-    ) {
-      score += this.ragConfig.qualityScores.expectedPathAnalysis;
-      reasons.push('包含预期路径分析');
-    }
-
-    // 入场计划完整性
-    let planCount = 0;
-    if (trade.entryPlanA?.entryReason) planCount++;
-    if (trade.entryPlanB?.entryReason) planCount++;
-    if (trade.entryPlanC?.entryReason) planCount++;
-
-    if (planCount >= 2) {
-      score += this.ragConfig.qualityScores.multiplePlans;
-      reasons.push('多套入场计划');
-    } else if (planCount === 1) {
-      score += this.ragConfig.qualityScores.singlePlan;
-      reasons.push('单套入场计划');
-    }
-
-    // 图片资源丰富度
-    const imageCount =
-      (trade.volumeProfileImages?.length || 0) +
-      (trade.expectedPathImages?.length || 0) +
-      (trade.actualPathImages?.length || 0) +
-      (trade.analysisImages?.length || 0);
-
-    if (imageCount >= this.ragConfig.imageRequirements.richImages) {
-      score += this.ragConfig.qualityScores.richImages;
-      reasons.push('丰富的图片资源');
-    } else if (imageCount >= this.ragConfig.imageRequirements.basicImages) {
-      score += this.ragConfig.qualityScores.basicImages;
-      reasons.push('基础图片资源');
-    }
-
-    return { score, reasons };
-  }
-
-  /**
-   * 评估交易结果多样性价值
-   */
-  private assessResultDiversity(trade: Trade): {
-    score: number;
-    reasons: string[];
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 亏损交易的学习价值更高
-    if (trade.tradeResult === '亏损') {
-      score += this.ragConfig.diversityScores.loss;
-      reasons.push('亏损交易具有高学习价值');
-    } else if (trade.tradeResult === '盈利') {
-      score += this.ragConfig.diversityScores.profit;
-      reasons.push('盈利交易经验');
-    } else if (trade.tradeResult === '保本') {
-      score += this.ragConfig.diversityScores.breakeven;
-      reasons.push('保本交易经验');
-    }
-
-    return { score, reasons };
-  }
-
-  /**
-   * 评估交易状态价值
-   */
-  private assessTradeStatus(trade: Trade): {
-    score: number;
-    reasons: string[];
-  } {
-    let score = 0;
-    const reasons: string[] = [];
-
-    if (trade.status === '已离场') {
-      // 完整的交易流程，包含入场和离场
-      score += this.ragConfig.statusScores.exited;
-      reasons.push('完整交易流程');
-    } else if (trade.status === '已分析') {
-      // 纯行情分析，没有实际交易但有分析价值
-      score += this.ragConfig.statusScores.analyzed;
-      reasons.push('纯行情分析');
-
-      // 对于纯分析，如果有预期路径分析或经验总结，额外加分
-      if (trade.expectedPathAnalysis || trade.lessonsLearned || trade.remarks) {
-        score += this.ragConfig.statusScores.analyzedWithDepth;
-        reasons.push('包含深度分析或总结');
-      }
-    } else if (trade.status === '已入场') {
-      // 已入场但未离场，价值相对较低
-      score += this.ragConfig.statusScores.entered;
-      reasons.push('交易进行中');
-    }
-
-    return { score, reasons };
   }
 }

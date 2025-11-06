@@ -4,7 +4,7 @@ import { UserModule } from './modules/user/user.module';
 import { TradeModule } from './modules/trade/trade.module';
 import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
-import { RAGModule } from './modules/rag/rag.module';
+// import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
   imports: [
@@ -12,7 +12,7 @@ import { RAGModule } from './modules/rag/rag.module';
     UserModule,
     TradeModule,
     ImageModule,
-    RAGModule,
+    // RAGModule,
   ],
 })
 export class AppModule implements NestModule {
