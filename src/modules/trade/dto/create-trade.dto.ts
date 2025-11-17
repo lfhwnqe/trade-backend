@@ -38,9 +38,9 @@ export enum EntryDirection {
 
 // 交易结果枚举
 export enum TradeResult {
-  PROFIT = '盈利',
-  LOSS = '亏损',
-  BREAKEVEN = '保本',
+  PROFIT = 'PROFIT',
+  LOSS = 'LOSS',
+  BREAKEVEN = 'BREAKEVEN',
 }
 
 // 交易记录状态枚举

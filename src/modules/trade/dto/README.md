@@ -69,7 +69,7 @@
 |--------|------|------|------|
 | exitPrice | number | 离场价格 | 148.7 |
 | exitTime | DateTime | 离场时间 | "2025-05-23T14:30:00+08:00" |
-| tradeResult | enum | 交易结果 | 盈利/亏损/保本 |
+| tradeResult | enum | 交易结果 | PROFIT/LOSS/BREAKEVEN（字段存储英文值） |
 | followedPlan | boolean | 是否符合入场计划 | true |
 | actualPathImages | ImageResource[] | 实际行情路径图片，最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
 | actualPathAnalysis | string | 实际行情路径分析 | "价格如预期在价值区内震荡后向上突破..." |
@@ -112,9 +112,9 @@
 
 ### 5.4 交易结果（TradeResult）
 
-- 盈利（PROFIT）
-- 亏损（LOSS）
-- 保本（BREAKEVEN）
+- PROFIT（盈利）
+- LOSS（亏损）
+- BREAKEVEN（保本）
 
 ### 5.5 验证规则说明
 
@@ -139,9 +139,9 @@
 
 ### 5.3 交易结果（TradeResult）
 
-- 盈利（PROFIT）
-- 亏损（LOSS）
-- 保本（BREAKEVEN）
+- PROFIT（盈利）
+- LOSS（亏损）
+- BREAKEVEN（保本）
 
 ## 6. 建议的查询索引
 

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTradeDto } from './dto/create-trade.dto';
+import { CreateTradeDto, TradeResult } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -20,9 +20,7 @@ export class TradeService {
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
 
-  constructor(
-    private readonly configService: ConfigService,
-  ) {
+  constructor(private readonly configService: ConfigService) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
@@ -162,9 +160,10 @@ export class TradeService {
           t.createdAt < monthEndStr &&
           t.status === '已离场',
       );
+
       const thisMonthClosedTradeCount = monthTrades.length;
       const winCount = monthTrades.filter(
-        (t) => t.tradeResult === '盈利',
+        (t) => t.tradeResult === TradeResult.PROFIT,
       ).length;
       // 避免分母为0
       const thisMonthWinRate =
@@ -498,7 +497,6 @@ export class TradeService {
           '您没有权限访问此交易记录',
         );
       }
-
 
       await this.db.delete({
         TableName: this.tableName,

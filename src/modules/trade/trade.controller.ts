@@ -126,7 +126,7 @@ export class TradeController {
         },
         tradeResult: {
           type: 'string',
-          example: '盈利',
+          example: 'PROFIT',
           description: '交易结果',
         },
       },

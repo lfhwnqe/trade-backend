@@ -58,7 +58,7 @@ export interface Trade {
   // ===== 离场后分析 =====
   exitPrice?: number; // 离场价格
   exitTime?: string; // 离场时间
-  tradeResult?: TradeResult; // 交易结果: 盈利/亏损/保本
+  tradeResult?: TradeResult; // 交易结果: PROFIT/LOSS/BREAKEVEN（英文值）
   followedPlan?: boolean; // 是否符合入场计划
   followedPlanId?: string; // 所遵循的交易计划ID
   actualPathImages?: ImageResource[]; // 实际行情路径图片
