@@ -20,6 +20,7 @@ import {
   ApiBody,
   ApiBearerAuth,
   ApiResponse,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { TradeQueryDto } from './dto/trade-query.dto';
 
@@ -79,6 +80,37 @@ export class TradeController {
       ? parseInt(String(req.query.pageSize), 10)
       : 20;
     const result = await this.tradeService.findByUserId(userId, page, pageSize);
+    return result;
+  }
+
+  @ApiOperation({ summary: '分页获取交易总结字段（lessonsLearned）' })
+  @ApiQuery({ name: 'page', required: false, description: '页码，默认1' })
+  @ApiQuery({
+    name: 'pageSize',
+    required: false,
+    description: '每页数量，默认20，最大100',
+  })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @Post('summaries')
+  async getSummaries(@Req() req: Request) {
+    
+    const userId = (req as any).user?.sub;
+    console.log('🌹getSummaries userId：', userId);
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    let page = req.query.page ? parseInt(String(req.query.page), 10) : 1;
+    if (Number.isNaN(page) || page < 1) page = 1;
+    let pageSize = req.query.pageSize
+      ? parseInt(String(req.query.pageSize), 10)
+      : 20;
+    if (Number.isNaN(pageSize) || pageSize < 1) pageSize = 20;
+    const cappedPageSize = Math.min(pageSize, 100);
+
+    const result = await this.tradeService.getTradeSummaries(
+      userId,
+      page,
+      cappedPageSize,
+    );
     return result;
   }
   // 新增：POST 方式的 list

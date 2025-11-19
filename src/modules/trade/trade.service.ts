@@ -394,6 +394,83 @@ export class TradeService {
     }
   }
 
+  /**
+   * 分页获取交易总结（lessonsLearned）列表
+   * @param userId 用户ID
+   * @param page 页码，默认为1
+   * @param pageSize 每页数量，默认为20，最大100
+   */
+  async getTradeSummaries(userId: string, page = 1, pageSize = 20) {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+
+    try {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+      });
+
+      const allTrades = (result.Items || []) as Trade[];
+      console.log('🌹allTrades：', allTrades);
+
+      // 仅保留填写了总结信息的交易，并保持最新在前
+      const summaryItems = allTrades.filter(
+        (trade) =>
+          typeof trade.lessonsLearned === 'string' &&
+          trade.lessonsLearned.trim().length > 0,
+      );
+
+      const total = summaryItems.length;
+      if (total === 0) {
+        return {
+          success: true,
+          data: {
+            items: [],
+            total,
+            page: safePage,
+            pageSize: safePageSize,
+            totalPages: 0,
+          },
+        };
+      }
+
+      const totalPages = Math.ceil(total / safePageSize);
+      const start = (safePage - 1) * safePageSize;
+      const pagedItems = summaryItems
+        .slice(start, start + safePageSize)
+        .map((trade) => ({
+          transactionId: trade.transactionId,
+          lessonsLearned: trade.lessonsLearned,
+          tradeSubject: trade.tradeSubject,
+          status: trade.status,
+          tradeResult: trade.tradeResult,
+          createdAt: trade.createdAt,
+          updatedAt: trade.updatedAt,
+        }));
+
+      return {
+        success: true,
+        data: {
+          items: pagedItems,
+          total,
+          page: safePage,
+          pageSize: safePageSize,
+          totalPages,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] getTradeSummaries error:', error);
+      throw new DynamoDBException(
+        `交易总结获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易总结获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
   async getTrade(userId: string, transactionId: string) {
     try {
       const result = await this.db.get({
