@@ -21,6 +21,7 @@ import {
   ImageResource,
   EntryPlan,
   TradeType,
+  ChecklistState,
 } from './create-trade.dto';
 import { TradeGrade } from './create-trade.dto';
 import { ApiProperty } from '@nestjs/swagger';
@@ -206,6 +207,17 @@ export class UpdateTradeDto {
   @ValidateNested()
   @Type(() => EntryPlan)
   entryPlanC?: EntryPlan;
+
+  // ===== 入场前检查 =====
+  @ApiProperty({
+    description: '入场前检查清单（待入场状态可填写）',
+    type: ChecklistState,
+    required: false,
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ChecklistState)
+  checklist?: ChecklistState;
 
   // ===== 入场记录 =====
   @ApiProperty({ description: '入场价格', example: 146.5, required: false })

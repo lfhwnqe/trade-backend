@@ -22,7 +22,7 @@
 
 | 字段名 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
-| status | enum | 交易状态 | 已分析/已入场/已离场 |
+| status | enum | 交易状态 | 已分析/待入场/已入场/已离场 |
 
 ### 3.2 入场前分析
 
@@ -43,6 +43,7 @@
 | entryPlanA | EntryPlan | 入场计划A（非必填） | {entryReason: "...", entrySignal: "...", exitSignal: "..."} |
 | entryPlanB | EntryPlan | 入场计划B（非必填） | 同上 |
 | entryPlanC | EntryPlan | 入场计划C（非必填） | 同上 |
+| checklist | ChecklistState | 入场前检查清单（待入场状态可填写） | {phaseAnalysis: true, rangeAnalysis: false} |
 
 #### 3.1.1 入场计划（EntryPlan）结构
 
@@ -51,6 +52,15 @@
 | entryReason | string | 入场理由 | "价格回调至支撑位，成交量减少，预计反弹" |
 | entrySignal | string | 入场信号 | "价格突破前高，成交量放大" |
 | exitSignal | string | 退出信号 | "价格跌破支撑位，成交量放大" |
+
+#### 3.1.2 入场前检查（ChecklistState）结构
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| phaseAnalysis | boolean | 阶段分析：判断当前行情所处阶段（震荡/趋势） | true |
+| rangeAnalysis | boolean | 震荡阶段：关键阻力点、VWAP位置、威科夫区间边缘与小溪测试行为 | true |
+| trendAnalysis | boolean | 趋势阶段：最近高成交量节点（可能回调测试点/入场价格） | true |
+| riskRewardCheck | boolean | 盈亏比计算是否完成 | true |
 
 ### 3.2 入场记录
 
@@ -96,6 +106,7 @@
 ### 5.1 交易状态（TradeStatus）
 
 - 已分析（ANALYZED）
+- 待入场（WAITING）
 - 已入场（ENTERED）
 - 已离场（EXITED）
 

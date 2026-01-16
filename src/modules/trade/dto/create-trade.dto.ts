@@ -46,6 +46,7 @@ export enum TradeResult {
 // 交易记录状态枚举
 export enum TradeStatus {
   ANALYZED = '已分析',
+  WAITING = '待入场',
   ENTERED = '已入场',
   EXITED = '已离场',
 }
@@ -99,6 +100,46 @@ export class EntryPlan {
   @IsString()
   @IsOptional()
   exitSignal: string;
+}
+
+export class ChecklistState {
+  @ApiProperty({
+    description: '阶段分析：判断当前行情所处阶段（震荡/趋势）',
+    example: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  phaseAnalysis?: boolean;
+
+  @ApiProperty({
+    description:
+      '震荡阶段：关键阻力点、VWAP位置、威科夫区间边缘与小溪测试行为',
+    example: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  rangeAnalysis?: boolean;
+
+  @ApiProperty({
+    description:
+      '趋势阶段：最近高成交量节点（可能回调测试点/入场价格）',
+    example: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  trendAnalysis?: boolean;
+
+  @ApiProperty({
+    description: '盈亏比计算是否完成',
+    example: true,
+    required: false,
+  })
+  @IsBoolean()
+  @IsOptional()
+  riskRewardCheck?: boolean;
 }
 
 export class CreateTradeDto {
@@ -231,6 +272,17 @@ export class CreateTradeDto {
   @Type(() => EntryPlan)
   @IsOptional()
   entryPlanC: EntryPlan;
+
+  // ===== 入场前检查 =====
+  @ApiProperty({
+    description: '入场前检查清单（待入场状态可填写）',
+    type: ChecklistState,
+    required: false,
+  })
+  @ValidateNested()
+  @Type(() => ChecklistState)
+  @IsOptional()
+  checklist?: ChecklistState;
 
   // ===== 入场记录 =====
   @ApiProperty({ description: '入场价格', example: 146.5 })

@@ -85,6 +85,7 @@ export class TradeService {
       entryPlanA: dto.entryPlanA,
       entryPlanB: dto.entryPlanB,
       entryPlanC: dto.entryPlanC,
+      checklist: dto.checklist,
       // ===== 入场记录 =====
       entryPrice: dto.entryPrice,
       entryTime: dto.entryTime,

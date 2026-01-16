@@ -7,6 +7,7 @@ import {
   EntryPlan,
   TradeGrade,
   TradeType,
+  ChecklistState,
 } from '../dto/create-trade.dto';
 
 /**
@@ -19,7 +20,7 @@ export interface Trade {
   userId: string; // 所属用户ID, DynamoDB partitionKey
 
   // ===== 交易状态 =====
-  status: TradeStatus; // 交易状态: 已分析/已入场/已离场
+  status: TradeStatus; // 交易状态: 已分析/待入场/已入场/已离场
 
   // ===== 交易类型 =====
   tradeType: TradeType; // 交易类型: 模拟交易/真实交易
@@ -44,6 +45,9 @@ export interface Trade {
   entryPlanA: EntryPlan; // 入场计划A
   entryPlanB?: EntryPlan; // 入场计划B
   entryPlanC?: EntryPlan; // 入场计划C
+
+  // ===== 入场前检查 =====
+  checklist?: ChecklistState; // 入场前检查清单
 
   // ===== 入场记录 =====
   entryPrice?: number; // 入场价格
