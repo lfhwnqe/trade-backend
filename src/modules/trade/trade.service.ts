@@ -395,13 +395,80 @@ export class TradeService {
     }
   }
 
+  private buildSummaryPage(
+    trades: Trade[],
+    page: number,
+    pageSize: number,
+    summaryType: 'pre' | 'post',
+  ) {
+    const items = trades
+      .filter((trade) => {
+        if (summaryType === 'pre') {
+          return (
+            typeof trade.preEntrySummary === 'string' &&
+            trade.preEntrySummary.trim().length > 0
+          );
+        }
+        return (
+          typeof trade.lessonsLearned === 'string' &&
+          trade.lessonsLearned.trim().length > 0
+        );
+      })
+      .map((trade) => {
+        const time = Date.parse(trade.updatedAt || trade.createdAt || '');
+        return {
+          transactionId: trade.transactionId,
+          text:
+            summaryType === 'pre'
+              ? trade.preEntrySummary ?? ''
+              : trade.lessonsLearned ?? '',
+          importance:
+            summaryType === 'pre'
+              ? trade.preEntrySummaryImportance ?? 0
+              : trade.lessonsLearnedImportance ?? 0,
+          sortTime: Number.isNaN(time) ? 0 : time,
+        };
+      })
+      .sort((a, b) => {
+        if (b.importance !== a.importance) {
+          return b.importance - a.importance;
+        }
+        return b.sortTime - a.sortTime;
+      });
+
+    const total = items.length;
+    if (total === 0) {
+      return {
+        items: [],
+        total: 0,
+        totalPages: 0,
+      };
+    }
+
+    const totalPages = Math.ceil(total / pageSize) || 0;
+    const start = (page - 1) * pageSize;
+    const pagedItems = items
+      .slice(start, start + pageSize)
+      .map(({ transactionId, text, importance }) => ({
+        transactionId,
+        text,
+        importance,
+      }));
+
+    return {
+      items: pagedItems,
+      total,
+      totalPages,
+    };
+  }
+
   /**
-   * 分页获取交易总结（lessonsLearned）列表
+   * 分页获取交易事前总结列表
    * @param userId 用户ID
    * @param page 页码，默认为1
    * @param pageSize 每页数量，默认为20，最大100
    */
-  async getTradeSummaries(userId: string, page = 1, pageSize = 20) {
+  async getPreEntrySummaries(userId: string, page = 1, pageSize = 20) {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(Math.max(pageSize, 1), 100);
 
@@ -414,47 +481,17 @@ export class TradeService {
       });
 
       const allTrades = (result.Items || []) as Trade[];
-      console.log('🌹allTrades：', allTrades);
-
-      // 仅保留填写了总结信息的交易，并保持最新在前
-      const summaryItems = allTrades.filter(
-        (trade) =>
-          typeof trade.lessonsLearned === 'string' &&
-          trade.lessonsLearned.trim().length > 0,
+      const { items, total, totalPages } = this.buildSummaryPage(
+        allTrades,
+        safePage,
+        safePageSize,
+        'pre',
       );
-
-      const total = summaryItems.length;
-      if (total === 0) {
-        return {
-          success: true,
-          data: {
-            items: [],
-            total,
-            page: safePage,
-            pageSize: safePageSize,
-            totalPages: 0,
-          },
-        };
-      }
-
-      const totalPages = Math.ceil(total / safePageSize);
-      const start = (safePage - 1) * safePageSize;
-      const pagedItems = summaryItems
-        .slice(start, start + safePageSize)
-        .map((trade) => ({
-          transactionId: trade.transactionId,
-          lessonsLearned: trade.lessonsLearned,
-          tradeSubject: trade.tradeSubject,
-          status: trade.status,
-          tradeResult: trade.tradeResult,
-          createdAt: trade.createdAt,
-          updatedAt: trade.updatedAt,
-        }));
 
       return {
         success: true,
         data: {
-          items: pagedItems,
+          items,
           total,
           page: safePage,
           pageSize: safePageSize,
@@ -462,11 +499,58 @@ export class TradeService {
         },
       };
     } catch (error) {
-      console.error('[TradeService] getTradeSummaries error:', error);
+      console.error('[TradeService] getPreEntrySummaries error:', error);
       throw new DynamoDBException(
-        `交易总结获取失败: ${error.message}`,
+        `交易事前总结获取失败: ${error.message}`,
         ERROR_CODES.DYNAMODB_OPERATION_FAILED,
-        '交易总结获取失败，请稍后重试',
+        '交易事前总结获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
+  /**
+   * 分页获取交易事后总结列表
+   * @param userId 用户ID
+   * @param page 页码，默认为1
+   * @param pageSize 每页数量，默认为20，最大100
+   */
+  async getPostTradeSummaries(userId: string, page = 1, pageSize = 20) {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(Math.max(pageSize, 1), 100);
+
+    try {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+      });
+
+      const allTrades = (result.Items || []) as Trade[];
+      const { items, total, totalPages } = this.buildSummaryPage(
+        allTrades,
+        safePage,
+        safePageSize,
+        'post',
+      );
+
+      return {
+        success: true,
+        data: {
+          items,
+          total,
+          page: safePage,
+          pageSize: safePageSize,
+          totalPages,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] getPostTradeSummaries error:', error);
+      throw new DynamoDBException(
+        `交易事后总结获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易事后总结获取失败，请稍后重试',
         { originalError: error.message },
       );
     }
