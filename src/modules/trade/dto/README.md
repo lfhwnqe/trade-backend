@@ -38,6 +38,8 @@
 | keyPriceLevels | string | 其他关键价格点 | "日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2" |
 | marketStructure | enum | 市场结构判断 | 平衡/失衡/未见过 |
 | marketStructureAnalysis | string | 市场结构详细分析 | "市场处于平衡状态，价格在价值区内震荡..." |
+| preEntrySummary | string | 入场前分析总结 | "当前市场结构偏平衡，关注价值区上沿突破机会" |
+| preEntrySummaryImportance | number | 入场前总结重要性评分（1-5） | 3 |
 | expectedPathImages | ImageResource[] | 预计路径图片，最多5张 | [{key: "images/path1.jpg", url: "https://..."}, ...] |
 | expectedPathAnalysis | string | 预计路径分析 | "预计价格将在价值区内震荡，随后向上突破..." |
 | entryPlanA | EntryPlan | 入场计划A（非必填） | {entryReason: "...", entrySignal: "...", exitSignal: "..."} |
@@ -85,6 +87,7 @@
 | actualPathAnalysis | string | 实际行情路径分析 | "价格如预期在价值区内震荡后向上突破..." |
 | remarks | string | 备注 | "这次交易整体执行较好，但离场时机可以更优化" |
 | lessonsLearned | string | 需要总结的经验 | "1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化..." |
+| lessonsLearnedImportance | number | 交易完成后总结重要性评分（1-5） | 4 |
 | analysisImages | ImageResource[] | 分析图，最多5张 | [{key: "images/analysis1.jpg", url: "https://..."}, ...] |
 
 ### 3.4 计算字段

@@ -40,11 +40,13 @@ export interface Trade {
   keyPriceLevels?: string; // 其他关键价格点
   marketStructure: MarketStructure; // 市场结构判断: 平衡/失衡/未见过
   marketStructureAnalysis: string; // 市场结构详细分析
+  preEntrySummary?: string; // 入场前分析总结
   expectedPathImages?: ImageResource[]; // 预计路径图片
   expectedPathAnalysis?: string; // 预计路径分析
   entryPlanA: EntryPlan; // 入场计划A
   entryPlanB?: EntryPlan; // 入场计划B
   entryPlanC?: EntryPlan; // 入场计划C
+  preEntrySummaryImportance?: number; // 入场前总结重要性评分
 
   // ===== 入场前检查 =====
   checklist?: ChecklistState; // 入场前检查清单
@@ -69,6 +71,7 @@ export interface Trade {
   actualPathAnalysis?: string; // 实际行情路径分析
   remarks?: string; // 备注
   lessonsLearned?: string; // 需要总结的经验
+  lessonsLearnedImportance?: number; // 交易完成后总结重要性评分
   analysisImages?: ImageResource[]; // 分析图，最多5张
 
   // 基础计算字段

@@ -228,6 +228,15 @@ export class CreateTradeDto {
   marketStructureAnalysis: string;
 
   @ApiProperty({
+    description: '入场前分析总结',
+    example: '当前市场结构偏平衡，关注价值区上沿突破机会',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  preEntrySummary: string;
+
+  @ApiProperty({
     description: '预计路径图片',
     type: [ImageResource],
     maxItems: 5,
@@ -272,6 +281,18 @@ export class CreateTradeDto {
   @Type(() => EntryPlan)
   @IsOptional()
   entryPlanC: EntryPlan;
+
+  @ApiProperty({
+    description: '入场前总结重要性评分（1-5）',
+    example: 3,
+    required: false,
+  })
+  @IsNumber()
+  @Type(() => Number)
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  preEntrySummaryImportance: number;
 
   // ===== 入场前检查 =====
   @ApiProperty({
@@ -437,6 +458,18 @@ export class CreateTradeDto {
   @IsString()
   @IsOptional()
   lessonsLearned: string;
+
+  @ApiProperty({
+    description: '交易完成后总结重要性评分（1-5）',
+    example: 4,
+    required: false,
+  })
+  @IsNumber()
+  @Type(() => Number)
+  @Min(1)
+  @Max(5)
+  @IsOptional()
+  lessonsLearnedImportance: number;
 
   @ApiProperty({
     description: '分析图，最多5张',
