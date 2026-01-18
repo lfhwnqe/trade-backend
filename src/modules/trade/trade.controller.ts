@@ -140,6 +140,16 @@ export class TradeController {
     );
     return result;
   }
+
+  @ApiOperation({ summary: '随机获取五星交易总结（事前/事后）' })
+  @ApiResponse({ status: 200, description: '获取成功' })
+  @Post('summaries/random')
+  async getRandomFiveStarSummaries(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.getRandomFiveStarSummaries(userId);
+    return result;
+  }
   // 新增：POST 方式的 list
   @ApiOperation({ summary: '查询用户所有交易记录(POST方式)' })
   @ApiBody({

@@ -462,6 +462,51 @@ export class TradeService {
     };
   }
 
+  private buildFiveStarSummaryCandidates(trades: Trade[]) {
+    const items: Array<{
+      transactionId: string;
+      summary: string;
+      summaryType: 'pre' | 'post';
+    }> = [];
+
+    trades.forEach((trade) => {
+      if (
+        trade.preEntrySummaryImportance === 5 &&
+        typeof trade.preEntrySummary === 'string' &&
+        trade.preEntrySummary.trim().length > 0
+      ) {
+        items.push({
+          transactionId: trade.transactionId,
+          summary: trade.preEntrySummary,
+          summaryType: 'pre',
+        });
+      }
+
+      if (
+        trade.lessonsLearnedImportance === 5 &&
+        typeof trade.lessonsLearned === 'string' &&
+        trade.lessonsLearned.trim().length > 0
+      ) {
+        items.push({
+          transactionId: trade.transactionId,
+          summary: trade.lessonsLearned,
+          summaryType: 'post',
+        });
+      }
+    });
+
+    return items;
+  }
+
+  private shuffleItems<T>(items: T[]) {
+    const shuffled = [...items];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }
+
   /**
    * 分页获取交易事前总结列表
    * @param userId 用户ID
@@ -551,6 +596,50 @@ export class TradeService {
         `交易事后总结获取失败: ${error.message}`,
         ERROR_CODES.DYNAMODB_OPERATION_FAILED,
         '交易事后总结获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
+  /**
+   * 随机获取五星交易总结（事前/事后）
+   * @param userId 用户ID
+   * @param sampleSize 随机抽取数量，默认5
+   * @param returnSize 返回数量，默认3
+   */
+  async getRandomFiveStarSummaries(
+    userId: string,
+    sampleSize = 5,
+    returnSize = 3,
+  ) {
+    const safeSampleSize = Math.max(1, sampleSize);
+    const safeReturnSize = Math.max(1, returnSize);
+
+    try {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+      });
+
+      const allTrades = (result.Items || []) as Trade[];
+      const candidates = this.buildFiveStarSummaryCandidates(allTrades);
+      const sampled = this.shuffleItems(candidates).slice(0, safeSampleSize);
+      const items = this.shuffleItems(sampled).slice(0, safeReturnSize);
+
+      return {
+        success: true,
+        data: {
+          items,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] getRandomFiveStarSummaries error:', error);
+      throw new DynamoDBException(
+        `随机交易总结获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '随机交易总结获取失败，请稍后重试',
         { originalError: error.message },
       );
     }
