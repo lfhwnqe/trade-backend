@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTradeDto, TradeResult } from './dto/create-trade.dto';
+import { CreateTradeDto, TradeResult, TradeType } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -526,6 +526,103 @@ export class TradeService {
       (trade) => trade.tradeResult === TradeResult.PROFIT,
     ).length;
     return Math.round((winCount / total) * 100);
+  }
+
+  private normalizeDateKey(date: Date) {
+    return date.toISOString().split('T')[0];
+  }
+
+  private buildDateRange(range: '7d' | '30d' | '3m') {
+    const now = new Date();
+    const startDate = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const endDate = new Date(startDate);
+    endDate.setUTCHours(23, 59, 59, 999);
+
+    if (range === '3m') {
+      startDate.setUTCMonth(startDate.getUTCMonth() - 3);
+    } else {
+      const days = range === '7d' ? 7 : 30;
+      startDate.setUTCDate(startDate.getUTCDate() - (days - 1));
+    }
+
+    const dates: string[] = [];
+    for (
+      let cursor = new Date(startDate);
+      cursor <= endDate;
+      cursor.setUTCDate(cursor.getUTCDate() + 1)
+    ) {
+      dates.push(this.normalizeDateKey(cursor));
+    }
+
+    return { startDate, endDate, dates };
+  }
+
+  async getWinRateTrend(userId: string, range: '7d' | '30d' | '3m') {
+    try {
+      const { startDate, endDate, dates } = this.buildDateRange(range);
+      const startIso = startDate.toISOString();
+      const endIso = endDate.toISOString();
+
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+      });
+
+      const items = (result.Items || []) as Trade[];
+      const buckets = {
+        simulation: new Map<string, { wins: number; total: number }>(),
+        real: new Map<string, { wins: number; total: number }>(),
+      };
+
+      items.forEach((trade) => {
+        if (!trade.tradeResult) return;
+        const time = trade.exitTime || trade.createdAt;
+        if (!time) return;
+        if (time < startIso || time > endIso) return;
+
+        const dateKey = this.normalizeDateKey(new Date(time));
+        const target =
+          trade.tradeType === TradeType.REAL ? buckets.real : buckets.simulation;
+        const current = target.get(dateKey) || { wins: 0, total: 0 };
+        current.total += 1;
+        if (trade.tradeResult === TradeResult.PROFIT) {
+          current.wins += 1;
+        }
+        target.set(dateKey, current);
+      });
+
+      const buildSeries = (bucket: Map<string, { wins: number; total: number }>) =>
+        dates.map((date) => {
+          const stats = bucket.get(date);
+          if (!stats || stats.total === 0) {
+            return { date, winRate: 0 };
+          }
+          return {
+            date,
+            winRate: Math.round((stats.wins / stats.total) * 100),
+          };
+        });
+
+      return {
+        success: true,
+        data: {
+          range,
+          simulation: buildSeries(buckets.simulation),
+          real: buildSeries(buckets.real),
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] getWinRateTrend error:', error);
+      throw new DynamoDBException(
+        `交易胜率趋势获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易胜率趋势获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
   }
 
   /**

@@ -8,6 +8,8 @@ import {
   Param,
   Req,
   NotFoundException,
+  Query,
+  BadRequestException,
 } from '@nestjs/common';
 import { TradeService } from './trade.service';
 import { CreateTradeDto } from './dto/create-trade.dto';
@@ -47,6 +49,29 @@ export class TradeController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     const result = await this.tradeService.getDashboardData(userId);
+    return result;
+  }
+
+  @ApiOperation({ summary: '获取最近时间段交易胜率趋势' })
+  @ApiQuery({
+    name: 'range',
+    required: false,
+    description: '时间范围: 7d | 30d | 3m',
+    example: '7d',
+  })
+  @ApiResponse({ status: 200, description: '胜率趋势获取成功' })
+  @Get('win-rate')
+  async getWinRateTrend(@Req() req: Request, @Query('range') range?: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const normalizedRange = range ?? '7d';
+    if (!['7d', '30d', '3m'].includes(normalizedRange)) {
+      throw new BadRequestException('range 参数不合法');
+    }
+    const result = await this.tradeService.getWinRateTrend(
+      userId,
+      normalizedRange as '7d' | '30d' | '3m',
+    );
     return result;
   }
 
