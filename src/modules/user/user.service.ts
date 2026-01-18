@@ -197,7 +197,13 @@ export class UserService {
 
   async login(
     loginUserDto: LoginUserDto,
-  ): Promise<{ accessToken: string; refreshToken: string; idToken: string }> {
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    idToken: string;
+    username: string;
+    email: string;
+  }> {
     const { email, password } = loginUserDto;
     try {
       const command = new InitiateAuthCommand({
@@ -211,10 +217,33 @@ export class UserService {
       const response = await this.cognitoClient.send(command);
       if (response.AuthenticationResult) {
         this.logger.log(`User ${email} logged in successfully.`);
+        let username = email;
+        try {
+          const listUsersCommand = new ListUsersCommand({
+            UserPoolId: this.userPoolId,
+            Filter: `email = "${email}"`,
+            Limit: 1,
+          });
+          const listResponse = await this.cognitoClient.send(listUsersCommand);
+          const matchedUser = listResponse.Users?.[0];
+          if (matchedUser?.Username) {
+            username = matchedUser.Username;
+          } else {
+            this.logger.warn(
+              `User lookup by email returned no username for ${email}.`,
+            );
+          }
+        } catch (lookupError: any) {
+          this.logger.warn(
+            `Failed to resolve username by email for ${email}: ${lookupError.message}`,
+          );
+        }
         return {
           accessToken: response.AuthenticationResult.AccessToken!,
           refreshToken: response.AuthenticationResult.RefreshToken!,
           idToken: response.AuthenticationResult.IdToken!,
+          username,
+          email,
         };
       } else {
         // 通常 InitiateAuthCommand 成功时会返回 AuthenticationResult
