@@ -507,6 +507,27 @@ export class TradeService {
     return shuffled;
   }
 
+  private getTradeSortTime(trade: Trade) {
+    const time = trade.exitTime || trade.updatedAt || trade.createdAt;
+    const parsed = Date.parse(time || '');
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  private getCreatedSortTime(trade: Trade) {
+    const parsed = Date.parse(trade.createdAt || '');
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  private calculateWinRate(trades: Trade[]) {
+    const eligible = trades.filter((trade) => trade.tradeResult);
+    const total = eligible.length;
+    if (total === 0) return 0;
+    const winCount = eligible.filter(
+      (trade) => trade.tradeResult === TradeResult.PROFIT,
+    ).length;
+    return Math.round((winCount / total) * 100);
+  }
+
   /**
    * 分页获取交易事前总结列表
    * @param userId 用户ID
@@ -640,6 +661,93 @@ export class TradeService {
         `随机交易总结获取失败: ${error.message}`,
         ERROR_CODES.DYNAMODB_OPERATION_FAILED,
         '随机交易总结获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
+  async getDashboardData(userId: string) {
+    try {
+      const now = new Date();
+      const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+      const lastMonthStartIso = lastMonthStart.toISOString();
+      const nextMonthStartIso = nextMonthStart.toISOString();
+
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeNames: {
+          '#exitTime': 'exitTime',
+        },
+        ExpressionAttributeValues: {
+          ':userId': userId,
+          ':lastMonthStart': lastMonthStartIso,
+          ':nextMonthStart': nextMonthStartIso,
+        },
+        FilterExpression: '#exitTime >= :lastMonthStart AND #exitTime < :nextMonthStart',
+      });
+
+      const allTrades = (result.Items || []) as Trade[];
+
+      const thisMonthStartMs = thisMonthStart.getTime();
+      const nextMonthStartMs = nextMonthStart.getTime();
+      const lastMonthStartMs = lastMonthStart.getTime();
+
+      let thisMonthTradeCount = 0;
+      let lastMonthTradeCount = 0;
+
+      allTrades.forEach((trade) => {
+        const exitTimeMs = Date.parse(trade.exitTime || '');
+        if (Number.isNaN(exitTimeMs)) return;
+        if (exitTimeMs >= thisMonthStartMs && exitTimeMs < nextMonthStartMs) {
+          thisMonthTradeCount += 1;
+        } else if (
+          exitTimeMs >= lastMonthStartMs &&
+          exitTimeMs < thisMonthStartMs
+        ) {
+          lastMonthTradeCount += 1;
+        }
+      });
+
+      const closedTrades = allTrades.filter(
+        (trade) => trade.status === '已离场',
+      );
+      const sortedClosedTrades = [...closedTrades].sort(
+        (a, b) => this.getTradeSortTime(b) - this.getTradeSortTime(a),
+      );
+      const recent30Trades = sortedClosedTrades.slice(0, 30);
+      const previous30Trades = sortedClosedTrades.slice(30, 60);
+
+      const recent30WinRate = this.calculateWinRate(recent30Trades);
+      const previous30WinRate = this.calculateWinRate(previous30Trades);
+
+      const summaryResult = await this.getRandomFiveStarSummaries(userId);
+      const summaryHighlights = summaryResult.data?.items ?? [];
+
+      const recentTrades = [...allTrades]
+        .sort((a, b) => this.getCreatedSortTime(b) - this.getCreatedSortTime(a))
+        .slice(0, 5);
+
+      return {
+        success: true,
+        data: {
+          thisMonthTradeCount,
+          lastMonthTradeCount,
+          recent30WinRate,
+          previous30WinRate,
+          summaryHighlights,
+          recentTrades,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] getDashboardData error:', error);
+      throw new DynamoDBException(
+        `仪表盘数据获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '仪表盘数据获取失败，请稍后重试',
         { originalError: error.message },
       );
     }

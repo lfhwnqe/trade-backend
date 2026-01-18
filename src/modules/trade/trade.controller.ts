@@ -40,6 +40,16 @@ export class TradeController {
     return { success: true, data };
   }
 
+  @ApiOperation({ summary: '获取交易仪表盘数据' })
+  @ApiResponse({ status: 200, description: '仪表盘数据获取成功' })
+  @Get('dashboard')
+  async getDashboard(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.getDashboardData(userId);
+    return result;
+  }
+
   // 创建交易记录
   @ApiOperation({ summary: '创建交易记录' })
   @ApiBody({ type: CreateTradeDto })
