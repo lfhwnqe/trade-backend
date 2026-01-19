@@ -599,22 +599,30 @@ export class TradeService {
       const simulationItems = (simulationResult.Items || []) as Trade[];
       const realItems = (realResult.Items || []) as Trade[];
       const buckets = {
-        simulation: new Map<string, { wins: number; total: number }>(),
-        real: new Map<string, { wins: number; total: number }>(),
+        simulation: new Map<
+          string,
+          { wins: number; losses: number; total: number }
+        >(),
+        real: new Map<
+          string,
+          { wins: number; losses: number; total: number }
+        >(),
       };
 
       const applyTrade = (
         trade: Trade,
         time: string | undefined,
-        target: Map<string, { wins: number; total: number }>,
+        target: Map<string, { wins: number; losses: number; total: number }>,
       ) => {
         if (!trade.tradeResult) return;
         if (!time) return;
         const dateKey = this.normalizeDateKey(new Date(time));
-        const current = target.get(dateKey) || { wins: 0, total: 0 };
+        const current = target.get(dateKey) || { wins: 0, losses: 0, total: 0 };
         current.total += 1;
         if (trade.tradeResult === TradeResult.PROFIT) {
           current.wins += 1;
+        } else if (trade.tradeResult === TradeResult.LOSS) {
+          current.losses += 1;
         }
         target.set(dateKey, current);
       };
@@ -626,15 +634,20 @@ export class TradeService {
         applyTrade(trade, trade.exitTime, buckets.real),
       );
 
-      const buildSeries = (bucket: Map<string, { wins: number; total: number }>) =>
+      const buildSeries = (
+        bucket: Map<string, { wins: number; losses: number; total: number }>,
+      ) =>
         dates.map((date) => {
           const stats = bucket.get(date);
           if (!stats || stats.total === 0) {
-            return { date, winRate: 0 };
+            return { date, winRate: 0, total: 0, profit: 0, loss: 0 };
           }
           return {
             date,
             winRate: Math.round((stats.wins / stats.total) * 100),
+            total: stats.total,
+            profit: stats.wins,
+            loss: stats.losses,
           };
         });
 
