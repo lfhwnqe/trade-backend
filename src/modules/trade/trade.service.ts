@@ -565,34 +565,66 @@ export class TradeService {
       const startIso = startDate.toISOString();
       const endIso = endDate.toISOString();
 
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-      });
+      const [simulationResult, realResult] = await Promise.all([
+        this.db.query({
+          TableName: this.tableName,
+          IndexName: 'userId-createdAt-index',
+          KeyConditionExpression: 'userId = :userId AND createdAt BETWEEN :start AND :end',
+          FilterExpression: 'tradeType = :simulation',
+          ExpressionAttributeValues: {
+            ':userId': userId,
+            ':start': startIso,
+            ':end': endIso,
+            ':simulation': TradeType.SIMULATION,
+          },
+        }),
+        this.db.query({
+          TableName: this.tableName,
+          IndexName: 'userId-exitTime-index',
+          KeyConditionExpression:
+            'userId = :userId AND #exitTime BETWEEN :start AND :end',
+          FilterExpression: 'tradeType = :real',
+          ExpressionAttributeNames: {
+            '#exitTime': 'exitTime',
+          },
+          ExpressionAttributeValues: {
+            ':userId': userId,
+            ':start': startIso,
+            ':end': endIso,
+            ':real': TradeType.REAL,
+          },
+        }),
+      ]);
 
-      const items = (result.Items || []) as Trade[];
+      const simulationItems = (simulationResult.Items || []) as Trade[];
+      const realItems = (realResult.Items || []) as Trade[];
       const buckets = {
         simulation: new Map<string, { wins: number; total: number }>(),
         real: new Map<string, { wins: number; total: number }>(),
       };
 
-      items.forEach((trade) => {
+      const applyTrade = (
+        trade: Trade,
+        time: string | undefined,
+        target: Map<string, { wins: number; total: number }>,
+      ) => {
         if (!trade.tradeResult) return;
-        const time = trade.exitTime || trade.createdAt;
         if (!time) return;
-        if (time < startIso || time > endIso) return;
-
         const dateKey = this.normalizeDateKey(new Date(time));
-        const target =
-          trade.tradeType === TradeType.REAL ? buckets.real : buckets.simulation;
         const current = target.get(dateKey) || { wins: 0, total: 0 };
         current.total += 1;
         if (trade.tradeResult === TradeResult.PROFIT) {
           current.wins += 1;
         }
         target.set(dateKey, current);
-      });
+      };
+
+      simulationItems.forEach((trade) =>
+        applyTrade(trade, trade.createdAt, buckets.simulation),
+      );
+      realItems.forEach((trade) =>
+        applyTrade(trade, trade.exitTime, buckets.real),
+      );
 
       const buildSeries = (bucket: Map<string, { wins: number; total: number }>) =>
         dates.map((date) => {
@@ -795,6 +827,8 @@ export class TradeService {
 
       let thisMonthTradeCount = 0;
       let lastMonthTradeCount = 0;
+      let thisMonthSimulationTradeCount = 0;
+      let lastMonthSimulationTradeCount = 0;
 
       allTrades.forEach((trade) => {
         const exitTimeMs = Date.parse(trade.exitTime || '');
@@ -821,6 +855,41 @@ export class TradeService {
       const recent30WinRate = this.calculateWinRate(recent30Trades);
       const previous30WinRate = this.calculateWinRate(previous30Trades);
 
+      allTrades.forEach((trade) => {
+        if (trade.tradeType !== TradeType.SIMULATION) return;
+        const createdAtMs = Date.parse(trade.createdAt || '');
+        if (Number.isNaN(createdAtMs)) return;
+        if (
+          createdAtMs >= thisMonthStartMs &&
+          createdAtMs < nextMonthStartMs
+        ) {
+          thisMonthSimulationTradeCount += 1;
+        } else if (
+          createdAtMs >= lastMonthStartMs &&
+          createdAtMs < thisMonthStartMs
+        ) {
+          lastMonthSimulationTradeCount += 1;
+        }
+      });
+
+      const closedSimulationTrades = closedTrades.filter(
+        (trade) => trade.tradeType === TradeType.SIMULATION,
+      );
+      const sortedClosedSimulationTrades = [...closedSimulationTrades].sort(
+        (a, b) => this.getCreatedSortTime(b) - this.getCreatedSortTime(a),
+      );
+      const recent30SimulationTrades =
+        sortedClosedSimulationTrades.slice(0, 30);
+      const previous30SimulationTrades =
+        sortedClosedSimulationTrades.slice(30, 60);
+
+      const recent30SimulationWinRate = this.calculateWinRate(
+        recent30SimulationTrades,
+      );
+      const previous30SimulationWinRate = this.calculateWinRate(
+        previous30SimulationTrades,
+      );
+
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
 
@@ -835,6 +904,10 @@ export class TradeService {
           lastMonthTradeCount,
           recent30WinRate,
           previous30WinRate,
+          thisMonthSimulationTradeCount,
+          lastMonthSimulationTradeCount,
+          recent30SimulationWinRate,
+          previous30SimulationWinRate,
           summaryHighlights,
           recentTrades,
         },
