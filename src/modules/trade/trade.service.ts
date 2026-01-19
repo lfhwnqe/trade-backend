@@ -805,22 +805,6 @@ export class TradeService {
       const lastMonthStartIso = lastMonthStart.toISOString();
       const nextMonthStartIso = nextMonthStart.toISOString();
 
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeNames: {
-          '#exitTime': 'exitTime',
-        },
-        ExpressionAttributeValues: {
-          ':userId': userId,
-          ':lastMonthStart': lastMonthStartIso,
-          ':nextMonthStart': nextMonthStartIso,
-        },
-        FilterExpression: '#exitTime >= :lastMonthStart AND #exitTime < :nextMonthStart',
-      });
-
-      const allTrades = (result.Items || []) as Trade[];
-
       const thisMonthStartMs = thisMonthStart.getTime();
       const nextMonthStartMs = nextMonthStart.getTime();
       const lastMonthStartMs = lastMonthStart.getTime();
@@ -830,7 +814,44 @@ export class TradeService {
       let thisMonthSimulationTradeCount = 0;
       let lastMonthSimulationTradeCount = 0;
 
-      allTrades.forEach((trade) => {
+      const [realTradesByExitTime, simulationTradesByCreatedAt] =
+        await Promise.all([
+          this.db.query({
+            TableName: this.tableName,
+            IndexName: 'userId-exitTime-index',
+            KeyConditionExpression:
+              'userId = :userId AND #exitTime BETWEEN :lastMonthStart AND :nextMonthStart',
+            ExpressionAttributeNames: {
+              '#exitTime': 'exitTime',
+            },
+            ExpressionAttributeValues: {
+              ':userId': userId,
+              ':lastMonthStart': lastMonthStartIso,
+              ':nextMonthStart': nextMonthStartIso,
+              ':real': TradeType.REAL,
+            },
+            FilterExpression: 'tradeType = :real',
+          }),
+          this.db.query({
+            TableName: this.tableName,
+            IndexName: 'userId-createdAt-index',
+            KeyConditionExpression:
+              'userId = :userId AND createdAt BETWEEN :lastMonthStart AND :nextMonthStart',
+            ExpressionAttributeValues: {
+              ':userId': userId,
+              ':lastMonthStart': lastMonthStartIso,
+              ':nextMonthStart': nextMonthStartIso,
+              ':simulation': TradeType.SIMULATION,
+            },
+            FilterExpression: 'tradeType = :simulation',
+          }),
+        ]);
+
+      const realTrades = (realTradesByExitTime.Items || []) as Trade[];
+      const simulationTrades = (simulationTradesByCreatedAt.Items ||
+        []) as Trade[];
+
+      realTrades.forEach((trade) => {
         const exitTimeMs = Date.parse(trade.exitTime || '');
         if (Number.isNaN(exitTimeMs)) return;
         if (exitTimeMs >= thisMonthStartMs && exitTimeMs < nextMonthStartMs) {
@@ -843,20 +864,7 @@ export class TradeService {
         }
       });
 
-      const closedTrades = allTrades.filter(
-        (trade) => trade.status === '已离场',
-      );
-      const sortedClosedTrades = [...closedTrades].sort(
-        (a, b) => this.getTradeSortTime(b) - this.getTradeSortTime(a),
-      );
-      const recent30Trades = sortedClosedTrades.slice(0, 30);
-      const previous30Trades = sortedClosedTrades.slice(30, 60);
-
-      const recent30WinRate = this.calculateWinRate(recent30Trades);
-      const previous30WinRate = this.calculateWinRate(previous30Trades);
-
-      allTrades.forEach((trade) => {
-        if (trade.tradeType !== TradeType.SIMULATION) return;
+      simulationTrades.forEach((trade) => {
         const createdAtMs = Date.parse(trade.createdAt || '');
         if (Number.isNaN(createdAtMs)) return;
         if (
@@ -872,16 +880,61 @@ export class TradeService {
         }
       });
 
-      const closedSimulationTrades = closedTrades.filter(
-        (trade) => trade.tradeType === TradeType.SIMULATION,
-      );
-      const sortedClosedSimulationTrades = [...closedSimulationTrades].sort(
-        (a, b) => this.getCreatedSortTime(b) - this.getCreatedSortTime(a),
-      );
+      const fetchRecentClosedTrades = async (
+        indexName: string,
+        tradeType: TradeType,
+        maxItems: number,
+      ) => {
+        const items: Trade[] = [];
+        let lastKey: Record<string, any> | undefined;
+        do {
+          const pageSize = 100;
+          const result = await this.db.query({
+            TableName: this.tableName,
+            IndexName: indexName,
+            KeyConditionExpression: 'userId = :userId',
+            FilterExpression:
+              '#status = :exited AND tradeType = :tradeType',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+              ':userId': userId,
+              ':exited': '已离场',
+              ':tradeType': tradeType,
+            },
+            ScanIndexForward: false,
+            Limit: pageSize,
+            ExclusiveStartKey: lastKey,
+          });
+          const pageItems = (result.Items || []) as Trade[];
+          items.push(...pageItems);
+          lastKey = result.LastEvaluatedKey;
+        } while (lastKey && items.length < maxItems);
+
+        return items.slice(0, maxItems);
+      };
+
+      const [recentClosedRealTrades, recentClosedSimulationTrades] =
+        await Promise.all([
+          fetchRecentClosedTrades('userId-exitTime-index', TradeType.REAL, 60),
+          fetchRecentClosedTrades(
+            'userId-createdAt-index',
+            TradeType.SIMULATION,
+            60,
+          ),
+        ]);
+
+      const recent30Trades = recentClosedRealTrades.slice(0, 30);
+      const previous30Trades = recentClosedRealTrades.slice(30, 60);
+
+      const recent30WinRate = this.calculateWinRate(recent30Trades);
+      const previous30WinRate = this.calculateWinRate(previous30Trades);
+
       const recent30SimulationTrades =
-        sortedClosedSimulationTrades.slice(0, 30);
+        recentClosedSimulationTrades.slice(0, 30);
       const previous30SimulationTrades =
-        sortedClosedSimulationTrades.slice(30, 60);
+        recentClosedSimulationTrades.slice(30, 60);
 
       const recent30SimulationWinRate = this.calculateWinRate(
         recent30SimulationTrades,
@@ -893,9 +946,17 @@ export class TradeService {
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
 
-      const recentTrades = [...allTrades]
-        .sort((a, b) => this.getCreatedSortTime(b) - this.getCreatedSortTime(a))
-        .slice(0, 5);
+      const recentTradesResult = await this.db.query({
+        TableName: this.tableName,
+        IndexName: 'userId-createdAt-index',
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': userId,
+        },
+        ScanIndexForward: false,
+        Limit: 5,
+      });
+      const recentTrades = (recentTradesResult.Items || []) as Trade[];
 
       return {
         success: true,
