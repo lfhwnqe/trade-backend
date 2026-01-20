@@ -49,6 +49,7 @@ export enum TradeStatus {
   WAITING = '待入场',
   ENTERED = '已入场',
   EXITED = '已离场',
+  ANALYZED_NOT_ENTERED = '未入场', // 新增的状态
 }
 
 // 交易重要性分级枚举
@@ -113,8 +114,7 @@ export class ChecklistState {
   phaseAnalysis?: boolean;
 
   @ApiProperty({
-    description:
-      '震荡阶段：关键阻力点、VWAP位置、威科夫区间边缘与小溪测试行为',
+    description: '震荡阶段：关键阻力点、VWAP位置、威科夫区间边缘与小溪测试行为',
     example: true,
     required: false,
   })
@@ -123,8 +123,7 @@ export class ChecklistState {
   rangeAnalysis?: boolean;
 
   @ApiProperty({
-    description:
-      '趋势阶段：最近高成交量节点（可能回调测试点/入场价格）',
+    description: '趋势阶段：最近高成交量节点（可能回调测试点/入场价格）',
     example: true,
     required: false,
   })
