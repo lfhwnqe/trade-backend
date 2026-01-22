@@ -4,6 +4,7 @@ import { UserModule } from './modules/user/user.module';
 import { TradeModule } from './modules/trade/trade.module';
 import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
+import { RoleModule } from './modules/role/role.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -12,6 +13,7 @@ import { ImageModule } from './modules/image/image.module';
     UserModule,
     TradeModule,
     ImageModule,
+    RoleModule,
     // RAGModule,
   ],
 })
