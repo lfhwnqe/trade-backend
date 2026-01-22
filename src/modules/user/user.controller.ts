@@ -97,8 +97,8 @@ export class UserController {
   })
   @ApiResponse({ status: HttpStatus.OK, description: '获取用户列表成功' })
   @ApiBearerAuth()
-  // @UseGuards(RolesGuard)
-  // @Roles(Role.Admin, Role.SuperAdmin)
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Get('list')
   @HttpCode(HttpStatus.OK)
   async listUsers(
