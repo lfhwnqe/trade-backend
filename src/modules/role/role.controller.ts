@@ -3,12 +3,17 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
+  Put,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -41,5 +46,21 @@ export class RoleController {
   @HttpCode(HttpStatus.OK)
   async listRoles() {
     return this.roleService.listRoles();
+  }
+
+  @ApiOperation({ summary: '根据用户ID修改用户角色' })
+  @ApiParam({ name: 'userId', description: '用户ID', required: true })
+  @ApiQuery({ name: 'role', description: '角色名称', required: true })
+  @ApiResponse({ status: HttpStatus.OK, description: '用户角色更新成功' })
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
+  @Put('user/:userId/role')
+  @HttpCode(HttpStatus.OK)
+  async updateUserRole(
+    @Param('userId') userId: string,
+    @Query('role') role: Role,
+  ) {
+    return this.roleService.updateUserRole(userId, role);
   }
 }

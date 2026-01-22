@@ -16,8 +16,10 @@ import {
   InitiateAuthCommand,
   ListUsersCommand,
   AdminAddUserToGroupCommand,
+  AdminListGroupsForUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { Role } from '../../common/decorators/roles.decorator';
 
 @Injectable()
 export class UserService {
@@ -26,6 +28,12 @@ export class UserService {
   private readonly userPoolId: string;
   private readonly clientId: string;
   private registrationGloballyEnabled: boolean = true; // Default to true
+  private readonly rolePriority = [
+    Role.SuperAdmin,
+    Role.Admin,
+    Role.ProPlan,
+    Role.FreePlan,
+  ];
 
   constructor(private readonly configService: ConfigService) {
     this.userPoolId = this.configService.get('USER_POOL_ID'); // Changed to uppercase
@@ -179,6 +187,15 @@ export class UserService {
         );
       }
 
+      try {
+        await this.adminAddUserToGroup(username, Role.FreePlan);
+      } catch (groupError: any) {
+        this.logger.error(
+          `Failed to add user ${username} to default group ${Role.FreePlan}: ${groupError.message}`,
+          groupError.stack,
+        );
+      }
+
       return { userId: response.UserSub!, confirmed: response.UserConfirmed };
     } catch (error: any) {
       this.logger.error(
@@ -304,10 +321,39 @@ export class UserService {
           lastModifiedAt: user.UserLastModifiedDate,
         })) || [];
 
-      this.logger.log(
-        `Successfully listed users. Count: ${users.length}, NextToken: ${response.PaginationToken}`,
+      const usersWithRole = await Promise.all(
+        users.map(async (user) => {
+          if (!user.userId) {
+            return { ...user, role: undefined };
+          }
+          try {
+            const groupResponse = await this.cognitoClient.send(
+              new AdminListGroupsForUserCommand({
+                UserPoolId: this.userPoolId,
+                Username: user.userId,
+              }),
+            );
+            const groupNames =
+              groupResponse.Groups?.map((group) => group.GroupName).filter(
+                Boolean,
+              ) || [];
+            const role =
+              this.rolePriority.find((item) => groupNames.includes(item)) ||
+              groupNames[0];
+            return { ...user, role };
+          } catch (groupError: any) {
+            this.logger.warn(
+              `Failed to fetch groups for user ${user.userId}: ${groupError.message}`,
+            );
+            return { ...user, role: undefined };
+          }
+        }),
       );
-      return { users, nextToken: response.PaginationToken };
+
+      this.logger.log(
+        `Successfully listed users. Count: ${usersWithRole.length}, NextToken: ${response.PaginationToken}`,
+      );
+      return { users: usersWithRole, nextToken: response.PaginationToken };
     } catch (error: any) {
       this.logger.error(`Error listing users: ${error.message}`, error.stack);
       throw new CognitoException(
@@ -322,19 +368,23 @@ export class UserService {
   async adminAddUserToAdminGroup(username: string): Promise<void> {
     const adminGroupName =
       this.configService.get('COGNITO_ADMIN_GROUP_NAME') || 'Admins';
+    await this.adminAddUserToGroup(username, adminGroupName);
+  }
+
+  async adminAddUserToGroup(username: string, groupName: string): Promise<void> {
     try {
       const command = new AdminAddUserToGroupCommand({
         UserPoolId: this.userPoolId,
         Username: username,
-        GroupName: adminGroupName,
+        GroupName: groupName,
       });
       await this.cognitoClient.send(command);
       this.logger.log(
-        `Successfully added user ${username} to group ${adminGroupName}.`,
+        `Successfully added user ${username} to group ${groupName}.`,
       );
     } catch (error: any) {
       this.logger.error(
-        `Error adding user ${username} to group ${adminGroupName}: ${error.message}`,
+        `Error adding user ${username} to group ${groupName}: ${error.message}`,
         error.stack,
       );
       // 特定错误处理，例如 UserNotFoundException, GroupNotFoundException
@@ -348,20 +398,20 @@ export class UserService {
       }
       if (error.name === 'GroupNotFoundException') {
         this.logger.error(
-          `Cognito group "${adminGroupName}" not found. Please create it in the AWS Cognito console.`,
+          `Cognito group "${groupName}" not found. Please create it in the AWS Cognito console.`,
         );
         throw new CognitoException(
-          `Admin group "${adminGroupName}" not found`,
+          `Group "${groupName}" not found`,
           ERROR_CODES.COGNITO_GROUP_NOT_FOUND,
-          `管理员组"${adminGroupName}"不存在`,
-          { adminGroupName },
+          `用户组"${groupName}"不存在`,
+          { groupName },
         );
       }
       throw new CognitoException(
-        `Failed to add user ${username} to admin group: ${error.message}`,
+        `Failed to add user ${username} to group ${groupName}: ${error.message}`,
         ERROR_CODES.COGNITO_ADD_USER_TO_GROUP_FAILED,
-        '添加用户到管理员组失败，请稍后重试',
-        { username, adminGroupName, error: error.name },
+        '添加用户到用户组失败，请稍后重试',
+        { username, groupName, error: error.name },
       );
     }
   }

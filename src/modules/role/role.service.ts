@@ -10,6 +10,9 @@ import {
   CognitoIdentityProviderClient,
   CreateGroupCommand,
   GetGroupCommand,
+  AdminListGroupsForUserCommand,
+  AdminRemoveUserFromGroupCommand,
+  AdminAddUserToGroupCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { Role } from '../../common/decorators/roles.decorator';
 
@@ -171,5 +174,80 @@ export class RoleService {
     }
 
     return { created, existing };
+  }
+
+  async updateUserRole(userId: string, role: Role) {
+    if (!userId) {
+      throw new ValidationException(
+        'UserId is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '用户ID不能为空',
+      );
+    }
+    this.ensureAllowedRole(role);
+
+    try {
+      const groupResponse = await this.cognitoClient.send(
+        new AdminListGroupsForUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: userId,
+        }),
+      );
+      const existingGroups =
+        groupResponse.Groups?.map((group) => group.GroupName).filter(Boolean) ||
+        [];
+
+      const allowedGroups = existingGroups.filter((groupName) =>
+        this.allowedRoles.includes(groupName as Role),
+      );
+
+      for (const groupName of allowedGroups) {
+        if (groupName === role) {
+          continue;
+        }
+        await this.cognitoClient.send(
+          new AdminRemoveUserFromGroupCommand({
+            UserPoolId: this.userPoolId,
+            Username: userId,
+            GroupName: groupName,
+          }),
+        );
+      }
+
+      if (!existingGroups.includes(role)) {
+        await this.cognitoClient.send(
+          new AdminAddUserToGroupCommand({
+            UserPoolId: this.userPoolId,
+            Username: userId,
+            GroupName: role,
+          }),
+        );
+      }
+
+      return { userId, role };
+    } catch (error: any) {
+      if (error.name === 'UserNotFoundException') {
+        throw new ResourceNotFoundException(
+          `User not found: ${userId}`,
+          ERROR_CODES.COGNITO_USER_NOT_FOUND,
+          '用户不存在',
+          { userId },
+        );
+      }
+      if (error.name === 'GroupNotFoundException') {
+        throw new CognitoException(
+          `Group "${role}" not found`,
+          ERROR_CODES.COGNITO_GROUP_NOT_FOUND,
+          '用户组不存在',
+          { role },
+        );
+      }
+      throw new CognitoException(
+        `Failed to update user role: ${error.message}`,
+        ERROR_CODES.COGNITO_ADD_USER_TO_GROUP_FAILED,
+        '更新用户角色失败，请稍后重试',
+        { userId, role, error: error.name },
+      );
+    }
   }
 }
