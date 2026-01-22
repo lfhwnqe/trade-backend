@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Get,
   Query,
+  UseGuards,
   Patch,
 } from '@nestjs/common';
 import { UserService } from './user.service';
@@ -21,6 +22,8 @@ import {
   ApiQuery,
   ApiBearerAuth,
 } from '@nestjs/swagger';
+import { Roles, Role } from '../../base/decorators/roles.decorator';
+import { RolesGuard } from '../../base/guards/roles.guard';
 
 @ApiTags('用户管理')
 @Controller('user')
@@ -94,6 +97,8 @@ export class UserController {
   })
   @ApiResponse({ status: HttpStatus.OK, description: '获取用户列表成功' })
   @ApiBearerAuth()
+  // @UseGuards(RolesGuard)
+  // @Roles(Role.Admin, Role.SuperAdmin)
   @Get('list')
   @HttpCode(HttpStatus.OK)
   async listUsers(

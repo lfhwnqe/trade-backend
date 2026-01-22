@@ -9,3 +9,7 @@ export * from './exceptions/custom.exceptions';
 
 // 过滤器
 export * from './filters/http-exception.filter';
+
+// 权限
+export * from './decorators/roles.decorator';
+export * from './guards/roles.guard';
