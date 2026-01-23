@@ -132,6 +132,20 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // DynamoDB Table for common config
+    const configTable = new dynamodb.Table(
+      this,
+      `${appName}ConfigTable${envName}`,
+      {
+        tableName: `${appName}-config-${envName.toLowerCase()}`,
+        partitionKey: {
+          name: 'configKey',
+          type: dynamodb.AttributeType.STRING,
+        },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -193,6 +207,7 @@ export class TradingStack extends cdk.Stack {
           IMAGE_BUCKET_NAME: imageBucket.bucketName,
           CLOUDFRONT_DOMAIN_NAME: distribution.distributionDomainName,
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
+          CONFIG_TABLE_NAME: configTable.tableName,
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
@@ -204,6 +219,7 @@ export class TradingStack extends cdk.Stack {
     // Grant Lambda permissions
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
+    configTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 
@@ -257,6 +273,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TRANSACTIONS_TABLE_NAME', {
       value: transactionsTable.tableName,
       description: `Name of the DynamoDB table for transactions in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'CONFIG_TABLE_NAME', {
+      value: configTable.tableName,
+      description: `Name of the DynamoDB table for common config in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'USER_POOL_ID', {

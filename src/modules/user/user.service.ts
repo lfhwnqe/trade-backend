@@ -5,6 +5,7 @@ import {
   BusinessException,
   AuthenticationException,
   ResourceNotFoundException,
+  DynamoDBException,
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 import { ConfigService } from '../common/config.service';
@@ -21,6 +22,8 @@ import {
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { Role } from '../../common/decorators/roles.decorator';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 
 @Injectable()
 export class UserService {
@@ -28,7 +31,9 @@ export class UserService {
   private readonly cognitoClient: CognitoIdentityProviderClient;
   private readonly userPoolId: string;
   private readonly clientId: string;
-  private registrationGloballyEnabled: boolean = true; // Default to true
+  private readonly db: DynamoDBDocument;
+  private readonly configTableName: string;
+  private readonly registrationConfigKey = 'registrationEnabled';
   constructor(private readonly configService: ConfigService) {
     this.userPoolId = this.configService.get('USER_POOL_ID'); // Changed to uppercase
     this.clientId = this.configService.get('USER_POOL_CLIENT_ID'); // Changed to uppercase
@@ -37,10 +42,13 @@ export class UserService {
     console.log(`ClientId: ${this.clientId}`);
 
     const region = this.configService.get('AWS_REGION');
+    this.configTableName =
+      this.configService.getOrThrow('CONFIG_TABLE_NAME');
     console.log(`UserService Initializing with Config (using console.log):`);
     console.log(`- AWS_REGION: ${region}`);
     console.log(`- USER_POOL_ID: ${this.userPoolId}`);
     console.log(`- USER_POOL_CLIENT_ID: ${this.clientId}`);
+    console.log(`- CONFIG_TABLE_NAME: ${this.configTableName}`);
 
     if (!this.userPoolId || !this.clientId || !region) {
       console.error(
@@ -56,6 +64,11 @@ export class UserService {
 
     this.cognitoClient = new CognitoIdentityProviderClient({
       region: region,
+    });
+    this.db = DynamoDBDocument.from(new DynamoDB({ region }), {
+      marshallOptions: {
+        convertClassInstanceToMap: true,
+      },
     });
   }
 
@@ -112,7 +125,8 @@ export class UserService {
   async register(
     createUserDto: CreateUserDto,
   ): Promise<{ userId: string; confirmed: boolean }> {
-    if (!this.registrationGloballyEnabled) {
+    const registrationEnabled = await this.getRegistrationEnabled();
+    if (!registrationEnabled) {
       this.logger.warn(
         'User registration is globally disabled. Blocking registration attempt.',
       );
@@ -486,11 +500,58 @@ export class UserService {
   }
 
   async setRegistrationStatus(enable: boolean): Promise<{ status: boolean }> {
-    this.registrationGloballyEnabled = enable;
+    try {
+      await this.db.put({
+        TableName: this.configTableName,
+        Item: {
+          configKey: this.registrationConfigKey,
+          enabled: enable,
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to update registration status: ${error.message}`,
+        error.stack,
+      );
+      throw new DynamoDBException(
+        `Failed to update registration status: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '更新注册开关失败，请稍后重试',
+        { configKey: this.registrationConfigKey },
+      );
+    }
     this.logger.log(`User registration status set to: ${enable}`);
-    return { status: this.registrationGloballyEnabled };
+    return { status: enable };
   }
-  getRegistrationStatus(): { enable: boolean } {
-    return { enable: this.registrationGloballyEnabled };
+  async getRegistrationStatus(): Promise<{ enable: boolean }> {
+    const enable = await this.getRegistrationEnabled();
+    return { enable };
+  }
+
+  private async getRegistrationEnabled(): Promise<boolean> {
+    try {
+      const result = await this.db.get({
+        TableName: this.configTableName,
+        Key: {
+          configKey: this.registrationConfigKey,
+        },
+      });
+      const enabled = result.Item?.enabled;
+      if (typeof enabled === 'boolean') {
+        return enabled;
+      }
+      return true;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to read registration status: ${error.message}`,
+        error.stack,
+      );
+      throw new DynamoDBException(
+        `Failed to read registration status: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '读取注册开关失败，请稍后重试',
+        { configKey: this.registrationConfigKey },
+      );
+    }
   }
 }
