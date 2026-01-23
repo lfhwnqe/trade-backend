@@ -13,6 +13,7 @@ import {
   AdminListGroupsForUserCommand,
   AdminRemoveUserFromGroupCommand,
   AdminAddUserToGroupCommand,
+  AdminUpdateUserAttributesCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { Role } from '../../common/decorators/roles.decorator';
 
@@ -222,6 +223,28 @@ export class RoleService {
             GroupName: role,
           }),
         );
+      }
+
+      try {
+        await this.cognitoClient.send(
+          new AdminUpdateUserAttributesCommand({
+            UserPoolId: this.userPoolId,
+            Username: userId,
+            UserAttributes: [{ Name: 'custom:role', Value: role }],
+          }),
+        );
+      } catch (attributeError: any) {
+        if (
+          String(attributeError?.message || '').includes(
+            'Attribute does not exist in the schema',
+          )
+        ) {
+          this.logger.warn(
+            'custom:role attribute not found in user pool schema, skipping attribute update.',
+          );
+        } else {
+          throw attributeError;
+        }
       }
 
       return { userId, role };

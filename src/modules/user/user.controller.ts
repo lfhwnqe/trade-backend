@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Patch,
+  Param,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -21,6 +22,7 @@ import {
   ApiResponse,
   ApiQuery,
   ApiBearerAuth,
+  ApiParam,
 } from '@nestjs/swagger';
 import { Roles, Role } from '../../base/decorators/roles.decorator';
 import { RolesGuard } from '../../base/guards/roles.guard';
@@ -107,6 +109,18 @@ export class UserController {
   ) {
     const numericLimit = parseInt(limit, 10);
     return this.userService.listUsers(numericLimit, paginationToken);
+  }
+
+  @ApiOperation({ summary: '查看用户详情（含角色组信息）' })
+  @ApiParam({ name: 'userId', description: '用户ID', required: true })
+  @ApiResponse({ status: HttpStatus.OK, description: '获取用户详情成功' })
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
+  @Get(':userId')
+  @HttpCode(HttpStatus.OK)
+  async getUserDetail(@Param('userId') userId: string) {
+    return this.userService.getUserDetail(userId);
   }
 
   // 这是一个示例性的关闭注册的接口，实际中可能通过环境变量或配置服务控制

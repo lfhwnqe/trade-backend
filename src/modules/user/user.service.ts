@@ -16,6 +16,7 @@ import {
   InitiateAuthCommand,
   ListUsersCommand,
   AdminAddUserToGroupCommand,
+  AdminGetUserCommand,
   AdminListGroupsForUserCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
@@ -28,13 +29,6 @@ export class UserService {
   private readonly userPoolId: string;
   private readonly clientId: string;
   private registrationGloballyEnabled: boolean = true; // Default to true
-  private readonly rolePriority = [
-    Role.SuperAdmin,
-    Role.Admin,
-    Role.ProPlan,
-    Role.FreePlan,
-  ];
-
   constructor(private readonly configService: ConfigService) {
     this.userPoolId = this.configService.get('USER_POOL_ID'); // Changed to uppercase
     this.clientId = this.configService.get('USER_POOL_CLIENT_ID'); // Changed to uppercase
@@ -132,11 +126,15 @@ export class UserService {
     const { username, email, password } = createUserDto;
     this.logger.log(`Registering user: ${username} with email: ${email}`);
     try {
+      const defaultRole = Role.FreePlan;
       const command = new SignUpCommand({
         ClientId: this.clientId,
         Username: username, // Use username for Cognito Username
         Password: password,
-        UserAttributes: [{ Name: 'email', Value: email }], // email attribute remains as email
+        UserAttributes: [
+          { Name: 'email', Value: email },
+          { Name: 'custom:role', Value: defaultRole },
+        ], // email attribute remains as email
       });
       const response = await this.cognitoClient.send(command);
       this.logger.log(
@@ -188,10 +186,10 @@ export class UserService {
       }
 
       try {
-        await this.adminAddUserToGroup(username, Role.FreePlan);
+        await this.adminAddUserToGroup(username, defaultRole);
       } catch (groupError: any) {
         this.logger.error(
-          `Failed to add user ${username} to default group ${Role.FreePlan}: ${groupError.message}`,
+          `Failed to add user ${username} to default group ${defaultRole}: ${groupError.message}`,
           groupError.stack,
         );
       }
@@ -314,46 +312,17 @@ export class UserService {
       const users =
         response.Users?.map((user) => ({
           userId: user.Username,
-          attributes: user.Attributes,
+          attributes: user.Attributes || [],
           enabled: user.Enabled,
           userStatus: user.UserStatus,
           createdAt: user.UserCreateDate,
           lastModifiedAt: user.UserLastModifiedDate,
         })) || [];
 
-      const usersWithRole = await Promise.all(
-        users.map(async (user) => {
-          if (!user.userId) {
-            return { ...user, role: undefined };
-          }
-          try {
-            const groupResponse = await this.cognitoClient.send(
-              new AdminListGroupsForUserCommand({
-                UserPoolId: this.userPoolId,
-                Username: user.userId,
-              }),
-            );
-            const groupNames =
-              groupResponse.Groups?.map((group) => group.GroupName).filter(
-                Boolean,
-              ) || [];
-            const role =
-              this.rolePriority.find((item) => groupNames.includes(item)) ||
-              groupNames[0];
-            return { ...user, role };
-          } catch (groupError: any) {
-            this.logger.warn(
-              `Failed to fetch groups for user ${user.userId}: ${groupError.message}`,
-            );
-            return { ...user, role: undefined };
-          }
-        }),
-      );
-
       this.logger.log(
-        `Successfully listed users. Count: ${usersWithRole.length}, NextToken: ${response.PaginationToken}`,
+        `Successfully listed users. Count: ${users.length}, NextToken: ${response.PaginationToken}`,
       );
-      return { users: usersWithRole, nextToken: response.PaginationToken };
+      return { users, nextToken: response.PaginationToken };
     } catch (error: any) {
       this.logger.error(`Error listing users: ${error.message}`, error.stack);
       throw new CognitoException(
@@ -361,6 +330,66 @@ export class UserService {
         ERROR_CODES.COGNITO_USER_LIST_FAILED,
         '获取用户列表失败，请稍后重试',
         { error: error.name },
+      );
+    }
+  }
+
+  async getUserDetail(userId: string): Promise<{
+    userId: string;
+    attributes: { Name?: string; Value?: string }[];
+    enabled?: boolean;
+    userStatus?: string;
+    createdAt?: Date;
+    lastModifiedAt?: Date;
+    groups: string[];
+  }> {
+    if (!userId) {
+      throw new ValidationException(
+        'UserId is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '用户ID不能为空',
+      );
+    }
+    try {
+      const userResponse = await this.cognitoClient.send(
+        new AdminGetUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: userId,
+        }),
+      );
+      const groupResponse = await this.cognitoClient.send(
+        new AdminListGroupsForUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: userId,
+        }),
+      );
+      const groups =
+        groupResponse.Groups?.map((group) => group.GroupName).filter(Boolean) ||
+        [];
+
+      return {
+        userId,
+        attributes: userResponse.UserAttributes || [],
+        enabled: userResponse.Enabled,
+        userStatus: userResponse.UserStatus,
+        createdAt: userResponse.UserCreateDate,
+        lastModifiedAt: userResponse.UserLastModifiedDate,
+        groups,
+      };
+    } catch (error: any) {
+      if (error.name === 'UserNotFoundException') {
+        throw new ResourceNotFoundException(
+          `User not found: ${userId}`,
+          ERROR_CODES.COGNITO_USER_NOT_FOUND,
+          '用户不存在',
+          { userId },
+        );
+      }
+      throw new CognitoException(
+        `Failed to get user detail: ${error.message}`,
+        ERROR_CODES.COGNITO_USER_LIST_FAILED,
+        '获取用户详情失败，请稍后重试',
+        { userId, error: error.name },
       );
     }
   }
