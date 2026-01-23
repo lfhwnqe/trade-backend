@@ -34,9 +34,9 @@ export interface Trade {
 
   // ===== 入场前分析 =====
   volumeProfileImages: ImageResource[]; // 成交量分布图，最多5张图
-  poc: number; // 成交量分布图POC价格
-  val: number; // 价值区下沿价格
-  vah: number; // 价值区上沿价格
+  poc?: number; // 成交量分布图POC价格
+  val?: number; // 价值区下沿价格
+  vah?: number; // 价值区上沿价格
   keyPriceLevels?: string; // 其他关键价格点
   marketStructure: MarketStructure; // 市场结构判断: 平衡/失衡/未见过
   marketStructureAnalysis: string; // 市场结构详细分析

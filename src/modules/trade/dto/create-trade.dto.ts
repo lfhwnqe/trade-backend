@@ -181,20 +181,35 @@ export class CreateTradeDto {
   @ArrayMaxSize(5)
   volumeProfileImages: ImageResource[];
 
-  @ApiProperty({ description: '成交量分布图POC价格', example: 147.8 })
+  @ApiProperty({
+    description: '成交量分布图POC价格',
+    example: 147.8,
+    required: false,
+  })
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  poc: number;
+  poc?: number;
 
-  @ApiProperty({ description: '价值区下沿价格', example: 145.2 })
+  @ApiProperty({
+    description: '价值区下沿价格',
+    example: 145.2,
+    required: false,
+  })
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  val: number;
+  val?: number;
 
-  @ApiProperty({ description: '价值区上沿价格', example: 150.5 })
+  @ApiProperty({
+    description: '价值区上沿价格',
+    example: 150.5,
+    required: false,
+  })
+  @IsOptional()
   @IsNumber()
   @Type(() => Number)
-  vah: number;
+  vah?: number;
 
   @ApiProperty({
     description: '其他关键价格点',
