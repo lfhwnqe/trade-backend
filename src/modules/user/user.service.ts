@@ -210,14 +210,13 @@ export class UserService {
     }
   }
 
-  async login(
-    loginUserDto: LoginUserDto,
-  ): Promise<{
+  async login(loginUserDto: LoginUserDto): Promise<{
     accessToken: string;
     refreshToken: string;
     idToken: string;
     username: string;
     email: string;
+    role: string;
   }> {
     const { email, password } = loginUserDto;
     try {
@@ -233,6 +232,7 @@ export class UserService {
       if (response.AuthenticationResult) {
         this.logger.log(`User ${email} logged in successfully.`);
         let username = email;
+        let role: Role | string = Role.FreePlan;
         try {
           const listUsersCommand = new ListUsersCommand({
             UserPoolId: this.userPoolId,
@@ -248,6 +248,42 @@ export class UserService {
               `User lookup by email returned no username for ${email}.`,
             );
           }
+          const roleAttribute = matchedUser?.Attributes?.find(
+            (attribute) => attribute.Name === 'custom:role',
+          );
+          if (roleAttribute?.Value) {
+            role = roleAttribute.Value;
+          }
+          if (matchedUser?.Username) {
+            try {
+              const groupResponse = await this.cognitoClient.send(
+                new AdminListGroupsForUserCommand({
+                  UserPoolId: this.userPoolId,
+                  Username: matchedUser.Username,
+                }),
+              );
+              const groupNames =
+                groupResponse.Groups?.map((group) => group.GroupName).filter(
+                  Boolean,
+                ) || [];
+              const prioritizedRoles = [
+                Role.SuperAdmin,
+                Role.Admin,
+                Role.ProPlan,
+                Role.FreePlan,
+              ];
+              const groupRole = prioritizedRoles.find((candidateRole) =>
+                groupNames.includes(candidateRole),
+              );
+              if (groupRole) {
+                role = groupRole;
+              }
+            } catch (groupError: any) {
+              this.logger.warn(
+                `Failed to resolve groups for ${email}: ${groupError.message}`,
+              );
+            }
+          }
         } catch (lookupError: any) {
           this.logger.warn(
             `Failed to resolve username by email for ${email}: ${lookupError.message}`,
@@ -259,6 +295,7 @@ export class UserService {
           idToken: response.AuthenticationResult.IdToken!,
           username,
           email,
+          role,
         };
       } else {
         // 通常 InitiateAuthCommand 成功时会返回 AuthenticationResult
@@ -400,7 +437,10 @@ export class UserService {
     await this.adminAddUserToGroup(username, adminGroupName);
   }
 
-  async adminAddUserToGroup(username: string, groupName: string): Promise<void> {
+  async adminAddUserToGroup(
+    username: string,
+    groupName: string,
+  ): Promise<void> {
     try {
       const command = new AdminAddUserToGroupCommand({
         UserPoolId: this.userPoolId,
