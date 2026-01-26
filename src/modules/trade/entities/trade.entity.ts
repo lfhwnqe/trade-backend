@@ -20,7 +20,7 @@ export interface Trade {
   userId: string; // 所属用户ID, DynamoDB partitionKey
 
   // ===== 交易状态 =====
-  status: TradeStatus; // 交易状态: 已分析/待入场/已入场/已离场
+  status: TradeStatus; // 交易状态: 已分析/待入场/已入场/已离场/提前离场
 
   // ===== 交易类型 =====
   tradeType: TradeType; // 交易类型: 模拟交易/真实交易
@@ -59,6 +59,7 @@ export interface Trade {
   takeProfit?: number; // 止盈点
   entryReason?: string; // 入场理由
   exitReason?: string; // 离场理由
+  earlyExitReason?: string; // 提前离场原因
   mentalityNotes?: string; // 交易过程中心态记录
 
   // ===== 离场后分析 =====

@@ -49,6 +49,7 @@ export enum TradeStatus {
   WAITING = '待入场',
   ENTERED = '已入场',
   EXITED = '已离场',
+  EARLY_EXITED = '提前离场',
   ANALYZED_NOT_ENTERED = '未入场', // 新增的状态
 }
 
@@ -324,7 +325,10 @@ export class CreateTradeDto {
   @IsNumber()
   @Type(() => Number)
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   entryPrice: number;
 
@@ -334,7 +338,10 @@ export class CreateTradeDto {
   })
   @IsDateString({ strict: true })
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   entryTime: string;
 
@@ -345,7 +352,10 @@ export class CreateTradeDto {
   })
   @IsEnum(EntryDirection)
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   entryDirection: EntryDirection;
 
@@ -353,7 +363,10 @@ export class CreateTradeDto {
   @IsNumber()
   @Type(() => Number)
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   stopLoss: number;
 
@@ -361,7 +374,10 @@ export class CreateTradeDto {
   @IsNumber()
   @Type(() => Number)
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   takeProfit: number;
 
@@ -371,7 +387,10 @@ export class CreateTradeDto {
   })
   @IsString()
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   entryReason: string;
 
@@ -381,9 +400,22 @@ export class CreateTradeDto {
   })
   @IsString()
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   exitReason: string;
+
+  @ApiProperty({
+    description: '提前离场原因',
+    example: '风险事件触发，提前止损离场',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  @ValidateIf((o) => o.status === TradeStatus.EARLY_EXITED)
+  earlyExitReason?: string;
 
   @ApiProperty({
     description: '交易过程中心态记录',
@@ -392,7 +424,10 @@ export class CreateTradeDto {
   })
   @IsString()
   @ValidateIf(
-    (o) => o.status === TradeStatus.ENTERED || o.status === TradeStatus.EXITED,
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
   )
   mentalityNotes: string;
 
@@ -400,7 +435,11 @@ export class CreateTradeDto {
   @ApiProperty({ description: '离场价格', example: 148.7 })
   @IsNumber()
   @Type(() => Number)
-  @ValidateIf((o) => o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
   exitPrice: number;
 
   @ApiProperty({
@@ -408,7 +447,11 @@ export class CreateTradeDto {
     example: '2025-05-23T14:30:00+08:00',
   })
   @IsDateString({ strict: true })
-  @ValidateIf((o) => o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
   exitTime: string;
 
   @ApiProperty({
@@ -417,7 +460,11 @@ export class CreateTradeDto {
     example: TradeResult.PROFIT,
   })
   @IsEnum(TradeResult)
-  @ValidateIf((o) => o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
   tradeResult: TradeResult;
 
   @ApiProperty({
@@ -425,7 +472,11 @@ export class CreateTradeDto {
     example: true,
   })
   @IsBoolean()
-  @ValidateIf((o) => o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
   followedPlan: boolean;
 
   @ApiProperty({
@@ -433,7 +484,12 @@ export class CreateTradeDto {
     example: 'planA',
   })
   @IsString()
-  @ValidateIf((o) => o.status === TradeStatus.EXITED && o.followedPlan === true)
+  @ValidateIf(
+    (o) =>
+      (o.status === TradeStatus.EXITED ||
+        o.status === TradeStatus.EARLY_EXITED) &&
+      o.followedPlan === true,
+  )
   followedPlanId: string;
 
   @ApiProperty({
@@ -453,7 +509,11 @@ export class CreateTradeDto {
     example: '价格如预期在价值区内震荡后向上突破，但突破力度不及预期',
   })
   @IsString()
-  @ValidateIf((o) => o.status === TradeStatus.EXITED)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
   actualPathAnalysis: string;
 
   @ApiProperty({

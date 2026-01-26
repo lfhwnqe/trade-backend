@@ -297,6 +297,15 @@ export class UpdateTradeDto {
   exitReason?: string;
 
   @ApiProperty({
+    description: '提前离场原因',
+    example: '风险事件触发，提前止损离场',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  earlyExitReason?: string;
+
+  @ApiProperty({
     description: '交易过程中心态记录',
     example:
       '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',

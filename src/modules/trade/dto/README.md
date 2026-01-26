@@ -22,7 +22,7 @@
 
 | 字段名 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
-| status | enum | 交易状态 | 已分析/待入场/已入场/已离场 |
+| status | enum | 交易状态 | 已分析/待入场/已入场/已离场/提前离场 |
 
 ### 3.2 入场前分析
 
@@ -81,6 +81,7 @@
 |--------|------|------|------|
 | exitPrice | number | 离场价格 | 148.7 |
 | exitTime | DateTime | 离场时间 | "2025-05-23T14:30:00+08:00" |
+| earlyExitReason | string | 提前离场原因（非必填） | "风险事件触发，提前止损离场" |
 | tradeResult | enum | 交易结果 | PROFIT/LOSS/BREAKEVEN（字段存储英文值） |
 | followedPlan | boolean | 是否符合入场计划 | true |
 | actualPathImages | ImageResource[] | 实际行情路径图片，最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
@@ -112,6 +113,7 @@
 - 待入场（WAITING）
 - 已入场（ENTERED）
 - 已离场（EXITED）
+- 提前离场（EARLY_EXITED）
 
 ### 5.2 市场结构（MarketStructure）
 
@@ -133,8 +135,9 @@
 ### 5.5 验证规则说明
 
 - 所有图片数组字段（volumeProfileImages, expectedPathImages, actualPathImages, analysisImages）最多5张
-- 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场或已离场时必填
-- 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场时必填
+- 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场/已离场/提前离场时必填
+- 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场或提前离场时必填
+- 提前离场原因（earlyExitReason）仅在交易状态为提前离场时可填写（非必填）
 - 所有数字类型字段均需进行类型验证和数值范围验证
 - 所有时间字段需符合ISO 8601格式
 - 所有枚举类型字段需严格匹配预定义值
