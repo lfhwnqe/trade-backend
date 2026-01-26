@@ -179,7 +179,7 @@ export class CreateTradeDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   volumeProfileImages: ImageResource[];
 
   @ApiProperty({
@@ -500,7 +500,7 @@ export class CreateTradeDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   @IsOptional()
   actualPathImages: ImageResource[];
 
@@ -553,7 +553,7 @@ export class CreateTradeDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   @IsOptional()
   analysisImages: ImageResource[];
 
