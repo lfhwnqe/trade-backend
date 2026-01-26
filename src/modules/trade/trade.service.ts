@@ -93,6 +93,7 @@ export class TradeService {
       stopLoss: dto.stopLoss,
       takeProfit: dto.takeProfit,
       mentalityNotes: dto.mentalityNotes,
+      entryAnalysisImages: dto.entryAnalysisImages,
       // ===== 离场后分析 =====
       exitPrice: dto.exitPrice,
       exitTime: dto.exitTime,

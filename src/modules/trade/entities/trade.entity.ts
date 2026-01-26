@@ -61,6 +61,7 @@ export interface Trade {
   exitReason?: string; // 离场理由
   earlyExitReason?: string; // 提前离场原因
   mentalityNotes?: string; // 交易过程中心态记录
+  entryAnalysisImages?: ImageResource[]; // 已入场分析图，最多5张
 
   // ===== 离场后分析 =====
   exitPrice?: number; // 离场价格

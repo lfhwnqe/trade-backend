@@ -315,6 +315,19 @@ export class UpdateTradeDto {
   @IsString()
   mentalityNotes?: string;
 
+  @ApiProperty({
+    description: '已入场分析图，最多10张',
+    type: [ImageResource],
+    maxItems: 10,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImageResource)
+  @ArrayMaxSize(10)
+  entryAnalysisImages?: ImageResource[];
+
   // ===== 离场后分析 =====
   @ApiProperty({ description: '离场价格', example: 148.7, required: false })
   @IsOptional()

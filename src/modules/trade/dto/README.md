@@ -74,6 +74,7 @@
 | stopLoss | number | 止损点 | 145.0 |
 | takeProfit | number | 止盈点 | 149.5 |
 | mentalityNotes | string | 交易过程中心态记录 | "入场后价格快速下跌，感到紧张但坚持止损点..." |
+| entryAnalysisImages | ImageResource[] | 已入场分析图，最多10张 | [{key: "images/entry-analysis1.jpg", url: "https://..."}, ...] |
 
 ### 3.3 离场后分析
 
@@ -134,7 +135,7 @@
 
 ### 5.5 验证规则说明
 
-- 所有图片数组字段（volumeProfileImages, expectedPathImages, actualPathImages, analysisImages）最多5张
+- 所有图片数组字段（volumeProfileImages, expectedPathImages, entryAnalysisImages, actualPathImages, analysisImages）最多5张
 - 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场/已离场/提前离场时必填
 - 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场或提前离场时必填
 - 提前离场原因（earlyExitReason）仅在交易状态为提前离场时可填写（非必填）
