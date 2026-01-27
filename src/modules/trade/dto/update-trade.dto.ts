@@ -46,6 +46,16 @@ export class UpdateTradeDto {
   analysisTime: string;
 
   @ApiProperty({
+    description:
+      '分析周期（可选：15分钟/30分钟/1小时/4小时/1天，也可自定义输入）',
+    example: '1小时',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  analysisPeriod?: string;
+
+  @ApiProperty({
     description: '交易标的',
     example: 'eth',
   })

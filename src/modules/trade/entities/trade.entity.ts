@@ -16,6 +16,7 @@ import {
  */
 export interface Trade {
   analysisTime?: string; // 行情分析时间
+  analysisPeriod?: string; // 分析周期：15分钟/30分钟/1小时/4小时/1天，或自定义
   transactionId: string; // 本次复盘唯一标识(UUID), DynamoDB sortKey
   userId: string; // 所属用户ID, DynamoDB partitionKey
 

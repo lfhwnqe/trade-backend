@@ -218,6 +218,12 @@ export class TradeController {
           example: false,
           description: '分析是否过期',
         },
+        analysisPeriod: {
+          type: 'string',
+          example: '1小时',
+          description:
+            '分析周期（15分钟/30分钟/1小时/4小时/1天，也支持自定义）',
+        },
         dateFrom: {
           type: 'string',
           example: '2025-01-01',

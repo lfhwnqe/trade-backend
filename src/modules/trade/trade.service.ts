@@ -71,6 +71,7 @@ export class TradeService {
       tradeSubject: dto.tradeSubject,
       grade: dto.grade,
       analysisTime: dto.analysisTime, // 行情分析时间
+      analysisPeriod: dto.analysisPeriod, // 分析周期
       // ===== 交易状态 =====
       status: dto.status,
       // ===== 入场前分析 =====
@@ -264,6 +265,7 @@ export class TradeService {
       tradeResult,
       dateTimeRange,
       tradeType,
+      analysisPeriod,
       dateFrom,
       dateTo,
     } = dto;
@@ -278,6 +280,8 @@ export class TradeService {
         items = items.filter((t) => t.tradeType === tradeType);
       else if (type && type !== 'all')
         items = items.filter((t) => t.tradeType === type);
+      if (analysisPeriod && analysisPeriod !== 'all')
+        items = items.filter((t) => t.analysisPeriod === analysisPeriod);
       if (grade && grade !== 'all')
         items = items.filter((t) => t.grade === grade);
       if (marketStructure && marketStructure !== 'all')

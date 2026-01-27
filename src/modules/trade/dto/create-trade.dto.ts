@@ -142,6 +142,14 @@ export class ChecklistState {
   riskRewardCheck?: boolean;
 }
 
+export const ANALYSIS_PERIOD_PRESETS = [
+  '15分钟',
+  '30分钟',
+  '1小时',
+  '4小时',
+  '1天',
+] as const;
+
 export class CreateTradeDto {
   @ApiProperty({
     description: '行情分析时间',
@@ -150,6 +158,16 @@ export class CreateTradeDto {
   })
   @IsDateString({ strict: true })
   analysisTime: string;
+
+  @ApiProperty({
+    description:
+      '分析周期（可选：15分钟/30分钟/1小时/4小时/1天，也可自定义输入）',
+    example: '1小时',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  analysisPeriod?: string;
 
   // ===== 交易类型 =====
   @ApiProperty({
