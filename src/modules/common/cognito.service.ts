@@ -1,12 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CognitoJwtVerifier } from 'aws-jwt-verify';
 import { ConfigService } from './config.service';
 import { CognitoException } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
+import {
+  CognitoIdentityProviderClient,
+  InitiateAuthCommand,
+} from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
 export class CognitoService {
+  private readonly logger = new Logger(CognitoService.name);
   private verifier: ReturnType<typeof CognitoJwtVerifier.create> | null = null;
+  private cognitoClient: CognitoIdentityProviderClient | null = null;
+  private clientId: string | null = null;
+  private region: string | null = null;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -19,6 +27,9 @@ export class CognitoService {
         const region = this.configService.getOrThrow('AWS_REGION');
         const userPoolId = this.configService.getOrThrow('USER_POOL_ID');
         const clientId = this.configService.getOrThrow('USER_POOL_CLIENT_ID');
+
+        this.region = region;
+        this.clientId = clientId;
 
         this.verifier = CognitoJwtVerifier.create({
           userPoolId,
@@ -36,6 +47,21 @@ export class CognitoService {
       }
     }
     return this.verifier;
+  }
+
+  /**
+   * 获取或延迟初始化 CognitoIdentityProviderClient
+   */
+  private getCognitoClient() {
+    if (!this.cognitoClient) {
+      const region = this.region || this.configService.getOrThrow('AWS_REGION');
+      this.region = region;
+      this.cognitoClient = new CognitoIdentityProviderClient({ region });
+    }
+    if (!this.clientId) {
+      this.clientId = this.configService.getOrThrow('USER_POOL_CLIENT_ID');
+    }
+    return { client: this.cognitoClient, clientId: this.clientId };
   }
 
   /**
@@ -78,6 +104,66 @@ export class CognitoService {
           { originalError: e?.message },
         );
       }
+    }
+  }
+
+  /**
+   * 使用 refresh token 续签 access / id token。
+   * 注意：Cognito 通常不会返回新的 refresh token，因此默认沿用旧的。
+   */
+  async refreshTokens(refreshToken: string): Promise<{
+    accessToken: string;
+    idToken: string;
+    refreshToken: string;
+  }> {
+    if (!refreshToken) {
+      throw new CognitoException(
+        'Refresh token is required',
+        ERROR_CODES.AUTH_TOKEN_MISSING,
+        '缺少 refresh token，请重新登录',
+      );
+    }
+
+    try {
+      const { client, clientId } = this.getCognitoClient();
+      const response = await client.send(
+        new InitiateAuthCommand({
+          AuthFlow: 'REFRESH_TOKEN_AUTH',
+          ClientId: clientId,
+          AuthParameters: {
+            REFRESH_TOKEN: refreshToken,
+          },
+        }),
+      );
+
+      const result = response.AuthenticationResult;
+      if (!result?.AccessToken || !result?.IdToken) {
+        this.logger.error(
+          'Refresh token succeeded but AuthenticationResult was incomplete.',
+        );
+        throw new CognitoException(
+          'Refresh token response missing tokens',
+          ERROR_CODES.AUTH_VERIFICATION_FAILED,
+          '续签失败，请重新登录',
+        );
+      }
+
+      return {
+        accessToken: result.AccessToken,
+        idToken: result.IdToken,
+        refreshToken: result.RefreshToken || refreshToken,
+      };
+    } catch (error: any) {
+      this.logger.warn(
+        `Refresh token failed: ${error?.name || 'UnknownError'} ${error?.message || ''}`,
+      );
+
+      throw new CognitoException(
+        `Refresh token failed: ${error?.message || 'Unknown error'}`,
+        ERROR_CODES.AUTH_TOKEN_INVALID,
+        '登录状态已过期，请重新登录',
+        { error: error?.name, message: error?.message },
+      );
     }
   }
 }

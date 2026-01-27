@@ -180,6 +180,9 @@ export class TradingStack extends cdk.Stack {
           userPassword: true,
           adminUserPassword: true,
         },
+        accessTokenValidity: cdk.Duration.hours(1),
+        idTokenValidity: cdk.Duration.hours(1),
+        refreshTokenValidity: cdk.Duration.days(30),
       },
     );
 
@@ -237,6 +240,7 @@ export class TradingStack extends cdk.Stack {
           'cognito-idp:AdminUpdateUserAttributes',
           'cognito-idp:AdminInitiateAuth',
           'cognito-idp:AdminRespondToAuthChallenge',
+          'cognito-idp:InitiateAuth',
         ],
         resources: [userPool.userPoolArn],
       }),

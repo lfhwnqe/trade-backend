@@ -9,6 +9,8 @@ import {
   UseGuards,
   Patch,
   Param,
+  Res,
+  Req,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -26,11 +28,55 @@ import {
 } from '@nestjs/swagger';
 import { Roles, Role } from '../../base/decorators/roles.decorator';
 import { RolesGuard } from '../../base/guards/roles.guard';
+import { CognitoService } from '../common/cognito.service';
+import { Request, Response } from 'express';
 
 @ApiTags('用户管理')
 @Controller('user')
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  private readonly isProd = process.env.APP_ENV === 'prod';
+  private readonly accessTokenMaxAgeMs = 60 * 60 * 1000;
+  private readonly refreshTokenMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
+  constructor(
+    private readonly userService: UserService,
+    private readonly cognitoService: CognitoService,
+  ) {}
+
+  private getCookieValue(req: Request, name: string): string | undefined {
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) return undefined;
+    const cookie = cookieHeader
+      .split(';')
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${name}=`));
+    return cookie?.split('=')[1];
+  }
+
+  private setAuthCookies(
+    res: Response,
+    tokens: { accessToken: string; refreshToken: string; idToken: string },
+  ) {
+    const baseOptions = {
+      httpOnly: true,
+      secure: this.isProd,
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+
+    res.cookie('token', tokens.accessToken, {
+      ...baseOptions,
+      maxAge: this.accessTokenMaxAgeMs,
+    });
+    res.cookie('refreshToken', tokens.refreshToken, {
+      ...baseOptions,
+      maxAge: this.refreshTokenMaxAgeMs,
+    });
+    res.cookie('idToken', tokens.idToken, {
+      ...baseOptions,
+      maxAge: this.accessTokenMaxAgeMs,
+    });
+  }
 
   @ApiOperation({ summary: '用户注册' })
   @ApiBody({ type: CreateUserDto })
@@ -68,8 +114,29 @@ export class UserController {
   @ApiResponse({ status: HttpStatus.OK, description: '登录成功，返回token' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() loginUserDto: LoginUserDto) {
-    return this.userService.login(loginUserDto);
+  async login(
+    @Body() loginUserDto: LoginUserDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.userService.login(loginUserDto);
+    this.setAuthCookies(res, result);
+    return result;
+  }
+
+  @ApiOperation({ summary: '刷新登录态（使用 refresh token 续签）' })
+  @ApiResponse({ status: HttpStatus.OK, description: '续签成功，返回新token' })
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(
+    @Req() req: Request,
+    @Body('refreshToken') refreshTokenFromBody: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const refreshToken =
+      refreshTokenFromBody || this.getCookieValue(req, 'refreshToken');
+    const tokens = await this.cognitoService.refreshTokens(refreshToken || '');
+    this.setAuthCookies(res, tokens);
+    return tokens;
   }
 
   // 任务要求：第一个用户默认为管理员 - 这部分逻辑通常在 UserService.register 中处理，或者有一个专门的初始化脚本。

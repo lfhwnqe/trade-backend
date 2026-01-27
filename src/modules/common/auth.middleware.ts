@@ -8,12 +8,52 @@ const whitelist = [
   '/user/register',
   '/user/confirm',
   '/user/login',
+  '/user/refresh',
   '/user/registration/status',
 ];
 
 @Injectable()
 export class AuthMiddleware implements NestMiddleware {
+  private readonly isProd = process.env.APP_ENV === 'prod';
+  private readonly accessTokenMaxAgeMs = 60 * 60 * 1000;
+  private readonly refreshTokenMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
+
   constructor(private readonly cognitoService: CognitoService) {}
+
+  private getCookieValue(req: Request, name: string): string | undefined {
+    const cookieHeader = req.headers.cookie;
+    if (!cookieHeader) return undefined;
+    const cookie = cookieHeader
+      .split(';')
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${name}=`));
+    return cookie?.split('=')[1];
+  }
+
+  private setAuthCookies(
+    res: Response,
+    tokens: { accessToken: string; refreshToken: string; idToken: string },
+  ) {
+    const baseOptions = {
+      httpOnly: true,
+      secure: this.isProd,
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+
+    res.cookie('token', tokens.accessToken, {
+      ...baseOptions,
+      maxAge: this.accessTokenMaxAgeMs,
+    });
+    res.cookie('refreshToken', tokens.refreshToken, {
+      ...baseOptions,
+      maxAge: this.refreshTokenMaxAgeMs,
+    });
+    res.cookie('idToken', tokens.idToken, {
+      ...baseOptions,
+      maxAge: this.accessTokenMaxAgeMs,
+    });
+  }
 
   async use(req: Request, res: Response, next: NextFunction) {
     try {
@@ -21,12 +61,7 @@ export class AuthMiddleware implements NestMiddleware {
         console.log('[AuthMiddleware] 命中白名单，放行');
         return next();
       }
-      const cookie = req.headers.cookie || '';
-      const token = cookie
-        .split(';')
-        .map((item) => item.trim())
-        .find((item) => item.startsWith('token='))
-        ?.split('=')[1];
+      const token = this.getCookieValue(req, 'token');
 
       if (!token) {
         console.log('[AuthMiddleware] 缺少 token');
@@ -37,14 +72,39 @@ export class AuthMiddleware implements NestMiddleware {
         );
       }
       let user = null;
+      let verifyError: any = null;
       try {
         user = await this.cognitoService.verifyAccessToken(token);
-      } catch (err) {
+      } catch (err: any) {
+        verifyError = err;
         console.log(
           '[AuthMiddleware] verifyAccessToken抛出异常:',
           err?.message || err,
         );
       }
+
+      const isExpired =
+        verifyError?.errorCode === ERROR_CODES.AUTH_TOKEN_EXPIRED ||
+        (typeof verifyError?.message === 'string' &&
+          verifyError.message.toLowerCase().includes('expired'));
+
+      if (!user && isExpired) {
+        const refreshToken = this.getCookieValue(req, 'refreshToken');
+        if (!refreshToken) {
+          console.log('[AuthMiddleware] access token 过期且缺少 refresh token');
+          throw new AuthenticationException(
+            'Refresh token missing while access token expired',
+            ERROR_CODES.AUTH_TOKEN_EXPIRED,
+            '登录已过期，请重新登录',
+          );
+        }
+
+        console.log('[AuthMiddleware] access token 过期，尝试 refresh');
+        const tokens = await this.cognitoService.refreshTokens(refreshToken);
+        this.setAuthCookies(res, tokens);
+        user = await this.cognitoService.verifyAccessToken(tokens.accessToken);
+      }
+
       if (!user) {
         console.log('[AuthMiddleware] token校验失败');
         throw new AuthenticationException(
