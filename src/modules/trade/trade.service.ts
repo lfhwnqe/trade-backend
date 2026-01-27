@@ -19,6 +19,7 @@ export class TradeService {
   private readonly logger = new Logger(TradeService.name);
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
+  private readonly createdAtIndexName = 'userId-createdAt-index';
 
   constructor(private readonly configService: ConfigService) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
@@ -190,49 +191,46 @@ export class TradeService {
 
   async findByUserId(userId: string, page = 1, pageSize = 20) {
     try {
-      // 先获取总数
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+
+      // 基于 createdAt 索引获取总数
       const countResult = await this.db.query({
         TableName: this.tableName,
+        IndexName: this.createdAtIndexName,
         KeyConditionExpression: 'userId = :userId',
         ExpressionAttributeValues: { ':userId': userId },
         Select: 'COUNT',
       });
-
       const total = countResult.Count || 0;
-      const totalPages = Math.ceil(total / pageSize);
 
       if (total === 0) {
         return {
           success: true,
           data: {
             items: [],
-            total,
-            page,
-            pageSize,
+            total: 0,
+            page: safePage,
+            pageSize: safePageSize,
             totalPages: 0,
           },
         };
       }
 
-      // 这里只做简单分页，如果需要准确游标分页，建议基于 LastEvaluatedKey 实现
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-        Limit: pageSize,
-        ScanIndexForward: false,
-      });
-
-      // 直接返回结果，不需要映射字段名称
-      const mappedItems = result.Items as Trade[];
+      const totalPages = Math.ceil(total / safePageSize);
+      const pagedItems = await this.queryCreatedAtIndexPage(
+        userId,
+        safePage,
+        safePageSize,
+      );
 
       return {
         success: true,
         data: {
-          items: mappedItems,
+          items: pagedItems,
           total,
-          page,
-          pageSize,
+          page: safePage,
+          pageSize: safePageSize,
           totalPages,
         },
       };
@@ -272,22 +270,8 @@ export class TradeService {
     pageSize = limit ?? pageSize ?? 20;
 
     try {
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-        // 设置 ScanIndexForward 为 false，使结果按创建时间降序排列（从最新到最旧）
-        ScanIndexForward: false,
-      });
-
-      let items = (result.Items || []) as Trade[];
-
-      // 确保按照 createdAt 降序排序
-      items.sort((a, b) => {
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      });
+      // 使用 createdAt 索引按创建时间倒序拉取（顺序由索引保证）
+      let items = await this.queryAllByCreatedAtDesc(userId);
 
       // u4f7fu7528 tradeType u53c2u6570u8fdbu884cu8fc7u6ee4uff0cu4f18u5148u7ea7u9ad8u4e8e type u53c2u6570
       if (tradeType && tradeType !== 'all')
@@ -416,7 +400,6 @@ export class TradeService {
         );
       })
       .map((trade) => {
-        const time = Date.parse(trade.updatedAt || trade.createdAt || '');
         return {
           transactionId: trade.transactionId,
           text:
@@ -427,14 +410,7 @@ export class TradeService {
             summaryType === 'pre'
               ? trade.preEntrySummaryImportance ?? 0
               : trade.lessonsLearnedImportance ?? 0,
-          sortTime: Number.isNaN(time) ? 0 : time,
         };
-      })
-      .sort((a, b) => {
-        if (b.importance !== a.importance) {
-          return b.importance - a.importance;
-        }
-        return b.sortTime - a.sortTime;
       });
 
     const total = items.length;
@@ -461,6 +437,66 @@ export class TradeService {
       total,
       totalPages,
     };
+  }
+
+  private async queryAllByCreatedAtDesc(userId: string) {
+    const items: Trade[] = [];
+    let lastKey: Record<string, any> | undefined;
+
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        IndexName: this.createdAtIndexName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+        ExclusiveStartKey: lastKey,
+      });
+
+      items.push(...((result.Items || []) as Trade[]));
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+
+    return items;
+  }
+
+  /**
+   * 基于 createdAt 索引，按创建时间倒序获取指定页。
+   * 由于接口使用 page/pageSize，这里通过 ExclusiveStartKey 逐页推进到目标页。
+   */
+  private async queryCreatedAtIndexPage(
+    userId: string,
+    page: number,
+    pageSize: number,
+  ) {
+    let currentPage = 1;
+    let lastKey: Record<string, any> | undefined;
+
+    while (currentPage <= page) {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        IndexName: this.createdAtIndexName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+        Limit: pageSize,
+        ExclusiveStartKey: lastKey,
+      });
+
+      const pageItems = (result.Items || []) as Trade[];
+      if (currentPage === page) {
+        return pageItems;
+      }
+
+      lastKey = result.LastEvaluatedKey;
+      if (!lastKey) {
+        return [];
+      }
+
+      currentPage += 1;
+    }
+
+    return [];
   }
 
   private buildFiveStarSummaryCandidates(trades: Trade[]) {
@@ -682,14 +718,7 @@ export class TradeService {
     const safePageSize = Math.min(Math.max(pageSize, 1), 100);
 
     try {
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-        ScanIndexForward: false,
-      });
-
-      const allTrades = (result.Items || []) as Trade[];
+      const allTrades = await this.queryAllByCreatedAtDesc(userId);
       const { items, total, totalPages } = this.buildSummaryPage(
         allTrades,
         safePage,
@@ -729,14 +758,7 @@ export class TradeService {
     const safePageSize = Math.min(Math.max(pageSize, 1), 100);
 
     try {
-      const result = await this.db.query({
-        TableName: this.tableName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-        ScanIndexForward: false,
-      });
-
-      const allTrades = (result.Items || []) as Trade[];
+      const allTrades = await this.queryAllByCreatedAtDesc(userId);
       const { items, total, totalPages } = this.buildSummaryPage(
         allTrades,
         safePage,
