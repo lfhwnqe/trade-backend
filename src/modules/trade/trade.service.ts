@@ -26,7 +26,6 @@ export class TradeService {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
-    this.logger.log(`🌹[TradeService] DynamoDB region=${region}`);
     this.tableName = tableName;
 
     // 配置 DynamoDBDocument，添加转换选项
@@ -1142,9 +1141,6 @@ export class TradeService {
 
   async getSharedTradeByShareId(shareId: string) {
     try {
-      this.logger.log(
-        `🌹[TradeService] getSharedTradeByShareId start table=${this.tableName} shareId=${shareId}`,
-      );
       const result = await this.db.query({
         TableName: this.tableName,
         IndexName: this.shareIdIndexName,
@@ -1160,9 +1156,6 @@ export class TradeService {
         },
         Limit: 1,
       });
-      this.logger.log(
-        `🌹[TradeService] getSharedTradeByShareId query table=${this.tableName} count=${result.Count ?? 0} scanned=${result.ScannedCount ?? 0}`,
-      );
 
       const item = (result.Items || [])[0] as Trade | undefined;
       const isShareable = item?.isShareable === true;
