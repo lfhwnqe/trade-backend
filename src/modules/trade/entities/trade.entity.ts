@@ -33,6 +33,10 @@ export interface Trade {
   // ========== 分析是否过期 ==========
   analysisExpired?: boolean; // 分析是否过期，由用户手动标记
 
+  // ===== 分享相关 =====
+  isShareable?: boolean; // 是否可分享
+  shareId?: string; // 分享ID（对外使用，唯一）
+
   // ===== 入场前分析 =====
   volumeProfileImages: ImageResource[]; // 成交量分布图，最多5张图
   poc?: number; // 成交量分布图POC价格

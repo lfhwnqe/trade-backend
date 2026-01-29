@@ -20,11 +20,13 @@ export class TradeService {
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
   private readonly createdAtIndexName = 'userId-createdAt-index';
+  private readonly shareIdIndexName = 'shareId-index';
 
   constructor(private readonly configService: ConfigService) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
+    this.logger.log(`🌹[TradeService] DynamoDB region=${region}`);
     this.tableName = tableName;
 
     // 配置 DynamoDBDocument，添加转换选项
@@ -72,6 +74,8 @@ export class TradeService {
       grade: dto.grade,
       analysisTime: dto.analysisTime, // 行情分析时间
       analysisPeriod: dto.analysisPeriod, // 分析周期
+      // ===== 分享相关 =====
+      isShareable: false,
       // ===== 交易状态 =====
       status: dto.status,
       // ===== 入场前分析 =====
@@ -408,12 +412,12 @@ export class TradeService {
           transactionId: trade.transactionId,
           text:
             summaryType === 'pre'
-              ? trade.preEntrySummary ?? ''
-              : trade.lessonsLearned ?? '',
+              ? (trade.preEntrySummary ?? '')
+              : (trade.lessonsLearned ?? ''),
           importance:
             summaryType === 'pre'
-              ? trade.preEntrySummaryImportance ?? 0
-              : trade.lessonsLearnedImportance ?? 0,
+              ? (trade.preEntrySummaryImportance ?? 0)
+              : (trade.lessonsLearnedImportance ?? 0),
         };
       });
 
@@ -610,7 +614,8 @@ export class TradeService {
         this.db.query({
           TableName: this.tableName,
           IndexName: 'userId-createdAt-index',
-          KeyConditionExpression: 'userId = :userId AND createdAt BETWEEN :start AND :end',
+          KeyConditionExpression:
+            'userId = :userId AND createdAt BETWEEN :start AND :end',
           FilterExpression: 'tradeType = :simulation',
           ExpressionAttributeValues: {
             ':userId': userId,
@@ -907,10 +912,7 @@ export class TradeService {
       simulationTrades.forEach((trade) => {
         const createdAtMs = Date.parse(trade.createdAt || '');
         if (Number.isNaN(createdAtMs)) return;
-        if (
-          createdAtMs >= thisMonthStartMs &&
-          createdAtMs < nextMonthStartMs
-        ) {
+        if (createdAtMs >= thisMonthStartMs && createdAtMs < nextMonthStartMs) {
           thisMonthSimulationTradeCount += 1;
         } else if (
           createdAtMs >= lastMonthStartMs &&
@@ -933,8 +935,7 @@ export class TradeService {
             TableName: this.tableName,
             IndexName: indexName,
             KeyConditionExpression: 'userId = :userId',
-            FilterExpression:
-              '#status = :exited AND tradeType = :tradeType',
+            FilterExpression: '#status = :exited AND tradeType = :tradeType',
             ExpressionAttributeNames: {
               '#status': 'status',
             },
@@ -971,10 +972,14 @@ export class TradeService {
       const recent30WinRate = this.calculateWinRate(recent30Trades);
       const previous30WinRate = this.calculateWinRate(previous30Trades);
 
-      const recent30SimulationTrades =
-        recentClosedSimulationTrades.slice(0, 30);
-      const previous30SimulationTrades =
-        recentClosedSimulationTrades.slice(30, 60);
+      const recent30SimulationTrades = recentClosedSimulationTrades.slice(
+        0,
+        30,
+      );
+      const previous30SimulationTrades = recentClosedSimulationTrades.slice(
+        30,
+        60,
+      );
 
       const recent30SimulationWinRate = this.calculateWinRate(
         recent30SimulationTrades,
@@ -1058,6 +1063,130 @@ export class TradeService {
         `单个交易获取失败: ${error.message}`,
         ERROR_CODES.DYNAMODB_OPERATION_FAILED,
         '交易记录获取失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
+  async shareTrade(userId: string, transactionId: string) {
+    const result = await this.updateShareable(userId, transactionId, true);
+    return {
+      success: true,
+      message: '分享成功',
+      data: result.data,
+    };
+  }
+
+  async updateShareable(
+    userId: string,
+    transactionId: string,
+    isShareable: boolean,
+  ) {
+    try {
+      this.logger.log(
+        `[TradeService] updateShareable start table=${this.tableName}`,
+      );
+      const oldRes = await this.getTrade(userId, transactionId);
+      if (!oldRes.success) {
+        throw new ResourceNotFoundException(
+          `交易记录不存在: userId=${userId}, transactionId=${transactionId}`,
+          ERROR_CODES.TRADE_NOT_FOUND,
+          '交易记录不存在',
+        );
+      }
+
+      const existingTrade = oldRes.data as Trade;
+      const now = new Date().toISOString();
+      const updated: Trade = {
+        ...existingTrade,
+        isShareable,
+        updatedAt: now,
+      };
+
+      if (isShareable) {
+        updated.shareId = existingTrade.shareId ?? uuidv4();
+      } else if (updated.shareId) {
+        delete updated.shareId;
+      }
+
+      await this.db.put({
+        TableName: this.tableName,
+        Item: updated,
+      });
+      this.logger.log(
+        `[TradeService] updateShareable done table=${this.tableName} transactionId=${updated.transactionId} shareId=${updated.shareId} isShareable=${updated.isShareable}`,
+      );
+
+      return {
+        success: true,
+        message: '更新成功',
+        data: {
+          transactionId: updated.transactionId,
+          isShareable: updated.isShareable ?? false,
+          shareId: updated.shareId,
+        },
+      };
+    } catch (error) {
+      console.error('[TradeService] updateShareable error:', error);
+      if (error instanceof ResourceNotFoundException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `交易分享状态更新失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '交易分享状态更新失败，请稍后重试',
+        { originalError: error.message },
+      );
+    }
+  }
+
+  async getSharedTradeByShareId(shareId: string) {
+    try {
+      this.logger.log(
+        `🌹[TradeService] getSharedTradeByShareId start table=${this.tableName} shareId=${shareId}`,
+      );
+      const result = await this.db.query({
+        TableName: this.tableName,
+        IndexName: this.shareIdIndexName,
+        KeyConditionExpression: '#shareId = :shareId',
+        FilterExpression: '#isShareable = :shareable',
+        ExpressionAttributeNames: {
+          '#shareId': 'shareId',
+          '#isShareable': 'isShareable',
+        },
+        ExpressionAttributeValues: {
+          ':shareId': shareId,
+          ':shareable': true,
+        },
+        Limit: 1,
+      });
+      this.logger.log(
+        `🌹[TradeService] getSharedTradeByShareId query table=${this.tableName} count=${result.Count ?? 0} scanned=${result.ScannedCount ?? 0}`,
+      );
+
+      const item = (result.Items || [])[0] as Trade | undefined;
+      const isShareable = item?.isShareable === true;
+      if (!item || !isShareable) {
+        throw new ResourceNotFoundException(
+          `分享交易不存在: shareId=${shareId}`,
+          ERROR_CODES.TRADE_NOT_FOUND,
+          '分享交易不存在或未开启分享',
+        );
+      }
+
+      return {
+        success: true,
+        data: item,
+      };
+    } catch (error) {
+      console.error('[TradeService] getSharedTradeByShareId error:', error);
+      if (error instanceof ResourceNotFoundException) {
+        throw error;
+      }
+      throw new DynamoDBException(
+        `分享交易获取失败: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '分享交易获取失败，请稍后重试',
         { originalError: error.message },
       );
     }
@@ -1184,9 +1313,14 @@ export class TradeService {
         ...originalTrade,
         transactionId: newTransactionId, // 新的交易ID
         analysisExpired: false, // 将分析已过期字段设置为未过期
+        isShareable: false,
         createdAt: now,
         updatedAt: now,
       };
+
+      if (newTrade.shareId) {
+        delete newTrade.shareId;
+      }
 
       // 保存新的交易记录
       await this.db.put({

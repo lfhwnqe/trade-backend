@@ -132,6 +132,12 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    transactionsTable.addGlobalSecondaryIndex({
+      indexName: 'shareId-index',
+      partitionKey: { name: 'shareId', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // DynamoDB Table for common config
     const configTable = new dynamodb.Table(
       this,
@@ -158,6 +164,9 @@ export class TradingStack extends cdk.Stack {
         standardAttributes: {
           email: { required: true, mutable: true },
         },
+        customAttributes: {
+          role: new cognito.StringAttribute({ mutable: true }),
+        },
         passwordPolicy: {
           minLength: 8,
           requireLowercase: true,
@@ -180,6 +189,12 @@ export class TradingStack extends cdk.Stack {
           userPassword: true,
           adminUserPassword: true,
         },
+        readAttributes: new cognito.ClientAttributes()
+          .withStandardAttributes({ email: true })
+          .withCustomAttributes('role'),
+        writeAttributes: new cognito.ClientAttributes()
+          .withStandardAttributes({ email: true })
+          .withCustomAttributes('role'),
         accessTokenValidity: cdk.Duration.hours(1),
         idTokenValidity: cdk.Duration.hours(1),
         refreshTokenValidity: cdk.Duration.days(30),

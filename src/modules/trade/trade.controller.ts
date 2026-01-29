@@ -15,6 +15,7 @@ import { TradeService } from './trade.service';
 import { CreateTradeDto } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Request } from 'express';
+import { UpdateShareableDto } from './dto/share-trade.dto';
 import {
   ApiTags,
   ApiOperation,
@@ -84,6 +85,57 @@ export class TradeController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     const result = await this.tradeService.createTrade(userId, dto);
+    return result;
+  }
+
+  // 分享交易（生成分享ID并设置为可分享）
+  @ApiOperation({ summary: '分享交易（生成分享ID）' })
+  @ApiParam({ name: 'transactionId', description: '交易ID' })
+  @ApiResponse({ status: 200, description: '分享成功' })
+  @Post(':transactionId/share')
+  async shareTrade(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.shareTrade(userId, transactionId);
+    return result;
+  }
+
+  // 设置交易是否可分享
+  @ApiOperation({ summary: '设置交易是否可分享' })
+  @ApiParam({ name: 'transactionId', description: '交易ID' })
+  @ApiBody({ type: UpdateShareableDto })
+  @ApiResponse({ status: 200, description: '更新成功' })
+  @Patch(':transactionId/shareable')
+  async updateShareable(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+    @Body() dto: UpdateShareableDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.updateShareable(
+      userId,
+      transactionId,
+      dto.isShareable,
+    );
+    return result;
+  }
+
+  // 分享查看（非本用户订单）
+  @ApiOperation({ summary: '通过分享ID查看交易（非本用户订单）' })
+  @ApiParam({ name: 'shareId', description: '分享ID' })
+  @ApiResponse({ status: 200, description: '查询成功' })
+  @Get('shared/:shareId')
+  async getSharedTrade(
+    @Req() req: Request,
+    @Param('shareId') shareId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const result = await this.tradeService.getSharedTradeByShareId(shareId);
     return result;
   }
 
