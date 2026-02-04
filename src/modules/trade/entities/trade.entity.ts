@@ -4,6 +4,7 @@ import {
   TradeResult,
   TradeStatus,
   ImageResource,
+  MarketStructureAnalysisImage,
   EntryPlan,
   TradeGrade,
   TradeType,
@@ -38,7 +39,7 @@ export interface Trade {
   shareId?: string; // 分享ID（对外使用，唯一）
 
   // ===== 入场前分析 =====
-  volumeProfileImages: ImageResource[]; // 成交量分布图，最多5张图
+  marketStructureAnalysisImages: MarketStructureAnalysisImage[]; // 市场结构分析图片，最多5张图
   poc?: number; // 成交量分布图POC价格
   val?: number; // 价值区下沿价格
   vah?: number; // 价值区上沿价格

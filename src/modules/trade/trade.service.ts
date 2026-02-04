@@ -78,7 +78,7 @@ export class TradeService {
       // ===== 交易状态 =====
       status: dto.status,
       // ===== 入场前分析 =====
-      volumeProfileImages: dto.volumeProfileImages,
+      marketStructureAnalysisImages: dto.marketStructureAnalysisImages,
       poc: dto.poc,
       val: dto.val,
       vah: dto.vah,

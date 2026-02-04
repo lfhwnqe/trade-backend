@@ -31,7 +31,7 @@
 | 字段名 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
 | analysisTime | DateTime | 行情分析时间 | "2025-05-23T09:30:00+08:00" |
-| volumeProfileImages | ImageResource[] | 成交量分布图，最多5张 | [{key: "images/vol1.jpg", url: "https://..."}, ...] |
+| marketStructureAnalysisImages | MarketStructureAnalysisImage[] | 市场结构分析图片，最多5张 | [{image: {key: "images/ms1.jpg", url: "https://..."}, title: "15分钟结构图", analysis: "..."}, ...] |
 | poc | number | 成交量分布图POC价格（Point of Control） | 147.8 |
 | val | number | 价值区下沿价格（Value Area Low） | 145.2 |
 | vah | number | 价值区上沿价格（Value Area High） | 150.5 |
@@ -106,7 +106,15 @@
 | key | string | 图片资源ID/键值 | "images/2023-05-23/user123/image1.jpg" |
 | url | string | 图片完整URL | "https://example.com/images/image1.jpg" |
 
-## 5. 枚举类型
+## 5. 市场结构分析图片（MarketStructureAnalysisImage）结构
+
+| 字段名 | 类型 | 说明 | 示例 |
+|--------|------|------|------|
+| image | ImageResource | 图片资源 | {key: "images/ms1.jpg", url: "https://..."} |
+| title | string | 图片标题 | "15分钟结构图" |
+| analysis | string | 图片解析 | "价格在区间内震荡..." |
+
+## 6. 枚举类型
 
 ### 5.1 交易状态（TradeStatus）
 
@@ -133,9 +141,9 @@
 - LOSS（亏损）
 - BREAKEVEN（保本）
 
-### 5.5 验证规则说明
+### 6.5 验证规则说明
 
-- 所有图片数组字段（volumeProfileImages, expectedPathImages, entryAnalysisImages, actualPathImages, analysisImages）最多5张
+- 所有图片数组字段（marketStructureAnalysisImages, expectedPathImages, entryAnalysisImages, actualPathImages, analysisImages）最多5张
 - 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场/已离场/提前离场时必填
 - 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场或提前离场时必填
 - 提前离场原因（earlyExitReason）仅在交易状态为提前离场时可填写（非必填）

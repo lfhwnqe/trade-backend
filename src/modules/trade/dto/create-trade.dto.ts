@@ -77,6 +77,30 @@ export class ImageResource {
   url: string;
 }
 
+export class MarketStructureAnalysisImage {
+  @ApiProperty({
+    description: '图片资源',
+    type: ImageResource,
+  })
+  @ValidateNested()
+  @Type(() => ImageResource)
+  image: ImageResource;
+
+  @ApiProperty({
+    description: '图片标题',
+    example: '15分钟市场结构图',
+  })
+  @IsString()
+  title: string;
+
+  @ApiProperty({
+    description: '图片解析',
+    example: '价格在区间内震荡，成交量集中在中间价位',
+  })
+  @IsString()
+  analysis: string;
+}
+
 // 入场计划接口
 export class EntryPlan {
   @ApiProperty({
@@ -190,15 +214,15 @@ export class CreateTradeDto {
 
   // ===== 入场前分析 =====
   @ApiProperty({
-    description: '成交量分布图，最多5张图',
-    type: [ImageResource],
+    description: '市场结构分析图片，最多5张图',
+    type: [MarketStructureAnalysisImage],
     maxItems: 5,
   })
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => ImageResource)
-  @ArrayMaxSize(10)
-  volumeProfileImages: ImageResource[];
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(5)
+  marketStructureAnalysisImages: MarketStructureAnalysisImage[];
 
   @ApiProperty({
     description: '成交量分布图POC价格',

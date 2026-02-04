@@ -19,6 +19,7 @@ import {
   TradeResult,
   TradeStatus,
   ImageResource,
+  MarketStructureAnalysisImage,
   EntryPlan,
   TradeType,
   ChecklistState,
@@ -75,17 +76,17 @@ export class UpdateTradeDto {
 
   // ===== 入场前分析 =====
   @ApiProperty({
-    description: '成交量分布图，最多5张图',
-    type: [ImageResource],
+    description: '市场结构分析图片，最多5张图',
+    type: [MarketStructureAnalysisImage],
     maxItems: 5,
     required: false,
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
-  @Type(() => ImageResource)
+  @Type(() => MarketStructureAnalysisImage)
   @ArrayMaxSize(5)
-  volumeProfileImages?: ImageResource[];
+  marketStructureAnalysisImages?: MarketStructureAnalysisImage[];
 
   @ApiProperty({
     description: '成交量分布图POC价格',
