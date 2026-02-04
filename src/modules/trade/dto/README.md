@@ -92,6 +92,7 @@
 | actualPathImages | ImageResource[] | 实际行情路径图片（旧字段），最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
 | actualPathImagesDetailed | MarketStructureAnalysisImage[] | 实际行情路径图片（新字段），最多5张 | [{image: {key: "images/actual1.jpg", url: "https://..."}, title: "实际路径", analysis: "..."}, ...] |
 | actualPathAnalysis | string | 实际行情路径分析 | "价格如预期在价值区内震荡后向上突破..." |
+| tradeTags | string[] | 交易标签（用户自定义，用于回测/统计） | ["突破", "趋势跟随"] |
 | remarks | string | 备注 | "这次交易整体执行较好，但离场时机可以更优化" |
 | lessonsLearned | string | 需要总结的经验 | "1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化..." |
 | lessonsLearnedImportance | number | 交易完成后总结重要性评分（1-5） | 4 |
@@ -104,6 +105,7 @@
 |--------|------|------|------|
 | profitLossPercentage | number | 盈亏百分比 | 2.5 |
 | riskRewardRatio | string | 风险回报比 | "1:3" |
+| followedSystemStrictly | boolean | 是否严格遵守交易系统 | true |
 
 ## 4. 图片资源（ImageResource）结构
 

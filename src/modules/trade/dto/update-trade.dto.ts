@@ -472,6 +472,16 @@ export class UpdateTradeDto {
   actualPathAnalysis?: string;
 
   @ApiProperty({
+    description: '交易标签（用户自定义，用于回测/统计）',
+    example: ['突破', '趋势跟随'],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tradeTags?: string[];
+
+  @ApiProperty({
     description: '备注',
     example: '这次交易整体执行较好，但离场时机可以更优化',
     required: false,
@@ -539,4 +549,13 @@ export class UpdateTradeDto {
   @IsOptional()
   @IsString()
   riskRewardRatio?: string;
+
+  @ApiProperty({
+    description: '是否严格遵守交易系统',
+    example: true,
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  followedSystemStrictly?: boolean;
 }

@@ -114,6 +114,7 @@ export class TradeService {
       actualPathImages: dto.actualPathImages,
       actualPathImagesDetailed: dto.actualPathImagesDetailed,
       actualPathAnalysis: dto.actualPathAnalysis,
+      tradeTags: dto.tradeTags,
       remarks: dto.remarks,
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
@@ -121,6 +122,7 @@ export class TradeService {
       // 基础计算字段
       profitLossPercentage: dto.profitLossPercentage,
       riskRewardRatio: dto.riskRewardRatio,
+      followedSystemStrictly: dto.followedSystemStrictly,
       createdAt: now,
       updatedAt: now,
     };

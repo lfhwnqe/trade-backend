@@ -82,6 +82,7 @@ export interface Trade {
   actualPathImages?: ImageResource[]; // 实际行情路径图片（旧字段）
   actualPathImagesDetailed?: MarketStructureAnalysisImage[]; // 实际行情路径图片（新字段）
   actualPathAnalysis?: string; // 实际行情路径分析
+  tradeTags?: string[]; // 交易标签（用户自定义，用于回测/统计）
   remarks?: string; // 备注
   lessonsLearned?: string; // 需要总结的经验
   lessonsLearnedImportance?: number; // 交易完成后总结重要性评分
@@ -91,6 +92,7 @@ export interface Trade {
   // 基础计算字段
   profitLossPercentage?: number; // 盈亏百分比
   riskRewardRatio?: string; // 风险回报比
+  followedSystemStrictly?: boolean; // 是否严格遵守交易系统
 
   createdAt: string; // 记录创建时间 (ISO 8601)
   updatedAt: string; // 记录最后更新时间 (ISO 8601)
