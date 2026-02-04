@@ -1,10 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  CreateTradeDto,
-  ImageResource,
-  MarketStructureAnalysisImage,
-  TradeResult,
-  TradeType,
+  CreateTradeDto, TradeResult,
+  TradeType
 } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
