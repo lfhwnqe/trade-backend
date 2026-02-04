@@ -5,6 +5,8 @@ import {
   IsString,
   ValidateNested,
   IsObject,
+  IsArray,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -68,6 +70,23 @@ export class TradeQueryDto {
   @IsOptional()
   @IsString()
   tradeResult?: string;
+
+  @ApiPropertyOptional({
+    description: '是否严格遵守交易系统',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  followedSystemStrictly?: boolean;
+
+  @ApiPropertyOptional({
+    description: '交易标签（用户自定义）',
+    example: ['突破', '趋势跟随'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tradeTags?: string[];
 
   @ApiPropertyOptional({ description: '交易类型', example: '模拟交易' })
   @IsOptional()

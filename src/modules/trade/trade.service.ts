@@ -277,6 +277,8 @@ export class TradeService {
       entryDirection,
       tradeStatus,
       tradeResult,
+      followedSystemStrictly,
+      tradeTags,
       dateTimeRange,
       tradeType,
       analysisPeriod,
@@ -306,6 +308,15 @@ export class TradeService {
         items = items.filter((t) => t.status === tradeStatus);
       if (tradeResult && tradeResult !== 'all')
         items = items.filter((t) => t.tradeResult === tradeResult);
+      if (typeof followedSystemStrictly === 'boolean')
+        items = items.filter(
+          (t) => t.followedSystemStrictly === followedSystemStrictly,
+        );
+      if (tradeTags && tradeTags.length > 0)
+        items = items.filter((t) => {
+          const tags = t.tradeTags || [];
+          return tradeTags.some((tag) => tags.includes(tag));
+        });
       // 处理日期范围查询 - 支持两种方式：dateTimeRange 对象或 dateFrom/dateTo 参数
       let fromDate = '';
       let toDate = '';
