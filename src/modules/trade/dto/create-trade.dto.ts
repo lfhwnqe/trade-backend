@@ -214,15 +214,43 @@ export class CreateTradeDto {
 
   // ===== 入场前分析 =====
   @ApiProperty({
+    description: '成交量分布图（旧字段），最多5张图',
+    type: [ImageResource],
+    maxItems: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ImageResource)
+  @ArrayMaxSize(5)
+  volumeProfileImages?: ImageResource[];
+
+  @ApiProperty({
     description: '市场结构分析图片，最多5张图',
     type: [MarketStructureAnalysisImage],
     maxItems: 5,
+    required: false,
   })
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MarketStructureAnalysisImage)
   @ArrayMaxSize(5)
-  marketStructureAnalysisImages: MarketStructureAnalysisImage[];
+  marketStructureAnalysisImages?: MarketStructureAnalysisImage[];
+
+  @ApiProperty({
+    description: '走势分析图（市场结构分析后的走势），最多5张图',
+    type: [MarketStructureAnalysisImage],
+    maxItems: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(5)
+  trendAnalysisImages?: MarketStructureAnalysisImage[];
 
   @ApiProperty({
     description: '成交量分布图POC价格',
@@ -294,7 +322,7 @@ export class CreateTradeDto {
   preEntrySummary: string;
 
   @ApiProperty({
-    description: '预计路径图片',
+    description: '预计路径图片，最多5张图',
     type: [ImageResource],
     maxItems: 5,
   })
@@ -304,6 +332,19 @@ export class CreateTradeDto {
   @ArrayMaxSize(5)
   @IsOptional()
   expectedPathImages: ImageResource[];
+
+  @ApiProperty({
+    description: '预计路径图片（新字段，含标题与解析），最多5张图',
+    type: [MarketStructureAnalysisImage],
+    maxItems: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(5)
+  expectedPathImagesDetailed?: MarketStructureAnalysisImage[];
 
   @ApiProperty({
     description: '预计路径分析',
@@ -486,6 +527,19 @@ export class CreateTradeDto {
   @ArrayMaxSize(10)
   entryAnalysisImages?: ImageResource[];
 
+  @ApiProperty({
+    description: '已入场分析图（新字段，含标题与解析），最多10张',
+    type: [MarketStructureAnalysisImage],
+    maxItems: 10,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(10)
+  entryAnalysisImagesDetailed?: MarketStructureAnalysisImage[];
+
   // ===== 离场后分析 =====
   @ApiProperty({ description: '离场价格', example: 148.7 })
   @IsNumber()
@@ -560,6 +614,19 @@ export class CreateTradeDto {
   actualPathImages: ImageResource[];
 
   @ApiProperty({
+    description: '实际行情路径图片（新字段，含标题与解析），最多5张',
+    type: [MarketStructureAnalysisImage],
+    maxItems: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(5)
+  actualPathImagesDetailed?: MarketStructureAnalysisImage[];
+
+  @ApiProperty({
     description: '实际行情路径分析',
     example: '价格如预期在价值区内震荡后向上突破，但突破力度不及预期',
   })
@@ -611,6 +678,19 @@ export class CreateTradeDto {
   @ArrayMaxSize(10)
   @IsOptional()
   analysisImages: ImageResource[];
+
+  @ApiProperty({
+    description: '分析图（新字段，含标题与解析），最多5张',
+    type: [MarketStructureAnalysisImage],
+    maxItems: 5,
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => MarketStructureAnalysisImage)
+  @ArrayMaxSize(5)
+  analysisImagesDetailed?: MarketStructureAnalysisImage[];
 
   // 保留一些基础计算字段
   @ApiProperty({ description: '盈亏百分比', example: 2.5 })

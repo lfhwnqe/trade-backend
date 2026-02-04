@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTradeDto, TradeResult, TradeType } from './dto/create-trade.dto';
+import {
+  CreateTradeDto,
+  ImageResource,
+  MarketStructureAnalysisImage,
+  TradeResult,
+  TradeType,
+} from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -78,7 +84,9 @@ export class TradeService {
       // ===== 交易状态 =====
       status: dto.status,
       // ===== 入场前分析 =====
+      volumeProfileImages: dto.volumeProfileImages,
       marketStructureAnalysisImages: dto.marketStructureAnalysisImages,
+      trendAnalysisImages: dto.trendAnalysisImages,
       poc: dto.poc,
       val: dto.val,
       vah: dto.vah,
@@ -86,6 +94,7 @@ export class TradeService {
       marketStructure: dto.marketStructure,
       marketStructureAnalysis: dto.marketStructureAnalysis,
       expectedPathImages: dto.expectedPathImages,
+      expectedPathImagesDetailed: dto.expectedPathImagesDetailed,
       expectedPathAnalysis: dto.expectedPathAnalysis,
       entryPlanA: dto.entryPlanA,
       entryPlanB: dto.entryPlanB,
@@ -99,16 +108,19 @@ export class TradeService {
       takeProfit: dto.takeProfit,
       mentalityNotes: dto.mentalityNotes,
       entryAnalysisImages: dto.entryAnalysisImages,
+      entryAnalysisImagesDetailed: dto.entryAnalysisImagesDetailed,
       // ===== 离场后分析 =====
       exitPrice: dto.exitPrice,
       exitTime: dto.exitTime,
       tradeResult: dto.tradeResult,
       followedPlan: dto.followedPlan,
       actualPathImages: dto.actualPathImages,
+      actualPathImagesDetailed: dto.actualPathImagesDetailed,
       actualPathAnalysis: dto.actualPathAnalysis,
       remarks: dto.remarks,
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
+      analysisImagesDetailed: dto.analysisImagesDetailed,
       // 基础计算字段
       profitLossPercentage: dto.profitLossPercentage,
       riskRewardRatio: dto.riskRewardRatio,

@@ -39,7 +39,9 @@ export interface Trade {
   shareId?: string; // 分享ID（对外使用，唯一）
 
   // ===== 入场前分析 =====
-  marketStructureAnalysisImages: MarketStructureAnalysisImage[]; // 市场结构分析图片，最多5张图
+  volumeProfileImages?: ImageResource[]; // 成交量分布图（旧字段），最多5张图
+  marketStructureAnalysisImages?: MarketStructureAnalysisImage[]; // 市场结构分析图片，最多5张图
+  trendAnalysisImages?: MarketStructureAnalysisImage[]; // 走势分析图（市场结构分析后的走势），最多5张图
   poc?: number; // 成交量分布图POC价格
   val?: number; // 价值区下沿价格
   vah?: number; // 价值区上沿价格
@@ -47,7 +49,8 @@ export interface Trade {
   marketStructure: MarketStructure; // 市场结构判断: 平衡/失衡/未见过
   marketStructureAnalysis: string; // 市场结构详细分析
   preEntrySummary?: string; // 入场前分析总结
-  expectedPathImages?: ImageResource[]; // 预计路径图片
+  expectedPathImages?: ImageResource[]; // 预计路径图片（旧字段）
+  expectedPathImagesDetailed?: MarketStructureAnalysisImage[]; // 预计路径图片（新字段）
   expectedPathAnalysis?: string; // 预计路径分析
   entryPlanA: EntryPlan; // 入场计划A
   entryPlanB?: EntryPlan; // 入场计划B
@@ -67,7 +70,8 @@ export interface Trade {
   exitReason?: string; // 离场理由
   earlyExitReason?: string; // 提前离场原因
   mentalityNotes?: string; // 交易过程中心态记录
-  entryAnalysisImages?: ImageResource[]; // 已入场分析图，最多5张
+  entryAnalysisImages?: ImageResource[]; // 已入场分析图（旧字段），最多5张
+  entryAnalysisImagesDetailed?: MarketStructureAnalysisImage[]; // 已入场分析图（新字段），最多5张
 
   // ===== 离场后分析 =====
   exitPrice?: number; // 离场价格
@@ -75,12 +79,14 @@ export interface Trade {
   tradeResult?: TradeResult; // 交易结果: PROFIT/LOSS/BREAKEVEN（英文值）
   followedPlan?: boolean; // 是否符合入场计划
   followedPlanId?: string; // 所遵循的交易计划ID
-  actualPathImages?: ImageResource[]; // 实际行情路径图片
+  actualPathImages?: ImageResource[]; // 实际行情路径图片（旧字段）
+  actualPathImagesDetailed?: MarketStructureAnalysisImage[]; // 实际行情路径图片（新字段）
   actualPathAnalysis?: string; // 实际行情路径分析
   remarks?: string; // 备注
   lessonsLearned?: string; // 需要总结的经验
   lessonsLearnedImportance?: number; // 交易完成后总结重要性评分
-  analysisImages?: ImageResource[]; // 分析图，最多5张
+  analysisImages?: ImageResource[]; // 分析图（旧字段），最多5张
+  analysisImagesDetailed?: MarketStructureAnalysisImage[]; // 分析图（新字段），最多5张
 
   // 基础计算字段
   profitLossPercentage?: number; // 盈亏百分比

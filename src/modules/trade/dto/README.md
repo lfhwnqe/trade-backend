@@ -31,7 +31,9 @@
 | 字段名 | 类型 | 说明 | 示例 |
 |--------|------|------|------|
 | analysisTime | DateTime | 行情分析时间 | "2025-05-23T09:30:00+08:00" |
-| marketStructureAnalysisImages | MarketStructureAnalysisImage[] | 市场结构分析图片，最多5张 | [{image: {key: "images/ms1.jpg", url: "https://..."}, title: "15分钟结构图", analysis: "..."}, ...] |
+| volumeProfileImages | ImageResource[] | 成交量分布图（旧字段），最多5张 | [{key: "images/vol1.jpg", url: "https://..."}, ...] |
+| marketStructureAnalysisImages | MarketStructureAnalysisImage[] | 市场结构分析图片（新字段），最多5张 | [{image: {key: "images/ms1.jpg", url: "https://..."}, title: "15分钟结构图", analysis: "..."}, ...] |
+| trendAnalysisImages | MarketStructureAnalysisImage[] | 走势分析图（市场结构分析后的走势），最多5张 | [{image: {key: "images/trend1.jpg", url: "https://..."}, title: "走势分析", analysis: "..."}, ...] |
 | poc | number | 成交量分布图POC价格（Point of Control） | 147.8 |
 | val | number | 价值区下沿价格（Value Area Low） | 145.2 |
 | vah | number | 价值区上沿价格（Value Area High） | 150.5 |
@@ -40,7 +42,8 @@
 | marketStructureAnalysis | string | 市场结构详细分析 | "市场处于平衡状态，价格在价值区内震荡..." |
 | preEntrySummary | string | 入场前分析总结 | "当前市场结构偏平衡，关注价值区上沿突破机会" |
 | preEntrySummaryImportance | number | 入场前总结重要性评分（1-5） | 3 |
-| expectedPathImages | ImageResource[] | 预计路径图片，最多5张 | [{key: "images/path1.jpg", url: "https://..."}, ...] |
+| expectedPathImages | ImageResource[] | 预计路径图片（旧字段），最多5张 | [{key: "images/path1.jpg", url: "https://..."}, ...] |
+| expectedPathImagesDetailed | MarketStructureAnalysisImage[] | 预计路径图片（新字段），最多5张 | [{image: {key: "images/path1.jpg", url: "https://..."}, title: "预计路径", analysis: "..."}, ...] |
 | expectedPathAnalysis | string | 预计路径分析 | "预计价格将在价值区内震荡，随后向上突破..." |
 | entryPlanA | EntryPlan | 入场计划A（非必填） | {entryReason: "...", entrySignal: "...", exitSignal: "..."} |
 | entryPlanB | EntryPlan | 入场计划B（非必填） | 同上 |
@@ -74,7 +77,8 @@
 | stopLoss | number | 止损点 | 145.0 |
 | takeProfit | number | 止盈点 | 149.5 |
 | mentalityNotes | string | 交易过程中心态记录 | "入场后价格快速下跌，感到紧张但坚持止损点..." |
-| entryAnalysisImages | ImageResource[] | 已入场分析图，最多10张 | [{key: "images/entry-analysis1.jpg", url: "https://..."}, ...] |
+| entryAnalysisImages | ImageResource[] | 已入场分析图（旧字段），最多10张 | [{key: "images/entry-analysis1.jpg", url: "https://..."}, ...] |
+| entryAnalysisImagesDetailed | MarketStructureAnalysisImage[] | 已入场分析图（新字段），最多10张 | [{image: {key: "images/entry-analysis1.jpg", url: "https://..."}, title: "入场后结构", analysis: "..."}, ...] |
 
 ### 3.3 离场后分析
 
@@ -85,12 +89,14 @@
 | earlyExitReason | string | 提前离场原因（非必填） | "风险事件触发，提前止损离场" |
 | tradeResult | enum | 交易结果 | PROFIT/LOSS/BREAKEVEN（字段存储英文值） |
 | followedPlan | boolean | 是否符合入场计划 | true |
-| actualPathImages | ImageResource[] | 实际行情路径图片，最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
+| actualPathImages | ImageResource[] | 实际行情路径图片（旧字段），最多5张 | [{key: "images/actual1.jpg", url: "https://..."}, ...] |
+| actualPathImagesDetailed | MarketStructureAnalysisImage[] | 实际行情路径图片（新字段），最多5张 | [{image: {key: "images/actual1.jpg", url: "https://..."}, title: "实际路径", analysis: "..."}, ...] |
 | actualPathAnalysis | string | 实际行情路径分析 | "价格如预期在价值区内震荡后向上突破..." |
 | remarks | string | 备注 | "这次交易整体执行较好，但离场时机可以更优化" |
 | lessonsLearned | string | 需要总结的经验 | "1. 在价值区内入场多单风险较小\n2. 应该更关注成交量变化..." |
 | lessonsLearnedImportance | number | 交易完成后总结重要性评分（1-5） | 4 |
-| analysisImages | ImageResource[] | 分析图，最多5张 | [{key: "images/analysis1.jpg", url: "https://..."}, ...] |
+| analysisImages | ImageResource[] | 分析图（旧字段），最多5张 | [{key: "images/analysis1.jpg", url: "https://..."}, ...] |
+| analysisImagesDetailed | MarketStructureAnalysisImage[] | 分析图（新字段），最多5张 | [{image: {key: "images/analysis1.jpg", url: "https://..."}, title: "复盘分析", analysis: "..."}, ...] |
 
 ### 3.4 计算字段
 
@@ -143,7 +149,7 @@
 
 ### 6.5 验证规则说明
 
-- 所有图片数组字段（marketStructureAnalysisImages, expectedPathImages, entryAnalysisImages, actualPathImages, analysisImages）最多5张
+- 图片数组字段默认最多5张；入场分析图（entryAnalysisImages, entryAnalysisImagesDetailed）最多10张
 - 入场相关字段（entryPrice, entryTime, entryDirection, stopLoss, takeProfit, entryReason, exitReason, mentalityNotes）仅在交易状态为已入场/已离场/提前离场时必填
 - 离场相关字段（exitPrice, exitTime, tradeResult, followedPlan）仅在交易状态为已离场或提前离场时必填
 - 提前离场原因（earlyExitReason）仅在交易状态为提前离场时可填写（非必填）
