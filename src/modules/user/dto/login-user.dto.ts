@@ -1,8 +1,8 @@
-import { IsEmail, IsNotEmpty, MinLength } from 'class-validator';
+import { IsNotEmpty, MinLength, IsString } from 'class-validator';
 
 export class LoginUserDto {
-  @IsNotEmpty({ message: '邮箱不能为空' })
-  @IsEmail({}, { message: '请输入有效的邮箱地址' })
+  @IsNotEmpty({ message: '账号不能为空' })
+  @IsString({ message: '账号必须为字符串' })
   email!: string;
 
   @IsNotEmpty({ message: '密码不能为空' })
