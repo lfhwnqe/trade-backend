@@ -56,8 +56,12 @@ export class WebhookController {
       (req as any).user?.groups ||
       [];
 
+    // NOTE: Role enum values are group names: Admin='Admins', SuperAdmin='SuperAdmins'
     const isAdmin =
-      role === 'Admin' || role === 'SuperAdmin' || groups.includes('Admins');
+      role === 'Admins' ||
+      role === 'SuperAdmins' ||
+      groups.includes('Admins') ||
+      groups.includes('SuperAdmins');
     const isPro = role === 'ProPlan';
 
     const activeCount = await this.webhookService.countActiveHooks(userId);
