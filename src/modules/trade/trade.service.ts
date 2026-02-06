@@ -1030,11 +1030,19 @@ export class TradeService {
 
       const calculateAvgProfitLossPercentage = (trades: Trade[]) => {
         if (trades.length === 0) return 0;
+
         const sum = trades.reduce((acc, trade) => {
-          const value = trade.profitLossPercentage;
-          if (typeof value !== 'number' || !Number.isFinite(value)) return acc;
-          return acc + value;
+          const value = (trade as any).profitLossPercentage;
+          // 兼容历史数据：可能是 number，也可能是可解析的字符串
+          if (typeof value === 'number' && Number.isFinite(value)) return acc + value;
+          if (typeof value === 'string') {
+            const parsed = Number(value);
+            if (Number.isFinite(parsed)) return acc + parsed;
+          }
+          // 缺失/不合法：按 0 处理
+          return acc;
         }, 0);
+
         // 保留2位小数，方便图表展示
         return Math.round((sum / trades.length) * 100) / 100;
       };
