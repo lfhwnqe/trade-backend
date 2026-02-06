@@ -239,8 +239,14 @@ export class UserService {
     // If user logs in with: test_linuo / test_linuo_888
     // - ensure cognito user exists (admin create)
     // - then proceed with normal auth flow
-    if (email === 'test_linuo' && password === 'test_linuo_888') {
-      await this.ensureTestAccount();
+    // Note: Cognito password policy requires uppercase, so we map the dev password
+    // to a compliant one internally.
+    const isTestAccountLogin =
+      email === 'test_linuo' && password === 'test_linuo_888';
+    const effectivePassword = isTestAccountLogin ? 'Test_linuo_888' : password;
+
+    if (isTestAccountLogin) {
+      await this.ensureTestAccount(effectivePassword);
     }
 
     try {
@@ -249,7 +255,7 @@ export class UserService {
         ClientId: this.clientId,
         AuthParameters: {
           USERNAME: email,
-          PASSWORD: password,
+          PASSWORD: effectivePassword,
         },
       });
       const response = await this.cognitoClient.send(command);
@@ -565,9 +571,8 @@ export class UserService {
     }
   }
 
-  private async ensureTestAccount() {
+  private async ensureTestAccount(password: string) {
     const username = 'test_linuo';
-    const password = 'test_linuo_888';
 
     try {
       // If exists, no-op
