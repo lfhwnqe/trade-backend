@@ -6,6 +6,7 @@ import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
 import { RoleModule } from './modules/role/role.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
+import { WebhookModule } from './modules/webhook/webhook.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { TelegramModule } from './modules/telegram/telegram.module';
     ImageModule,
     RoleModule,
     TelegramModule,
+    WebhookModule,
     // RAGModule,
   ],
 })
@@ -35,6 +37,7 @@ export class AppModule implements NestModule {
         // Webhooks (must bypass cookie/api-token auth)
         '/webhook/telegram',
         '/webhook/trade-alert',
+        '/webhook/trade-alert/:hookId',
       )
       .forRoutes('*');
   }
