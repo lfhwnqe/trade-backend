@@ -10,6 +10,7 @@ import {
   Post,
   Query,
   Req,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
@@ -61,16 +62,17 @@ export class WebhookController {
 
     const activeCount = await this.webhookService.countActiveHooks(userId);
     const limit = isAdmin ? 5 : isPro ? 1 : 0;
+
+    // Use 403 so frontend won't treat it as "need login".
+    if (limit === 0) {
+      throw new ForbiddenException('Free 用户无法创建 webhook，请升级 Pro');
+    }
+
     if (activeCount >= limit) {
-      throw new AuthenticationException(
-        'Webhook quota exceeded',
-        ERROR_CODES.RESOURCE_ACCESS_DENIED,
+      throw new ForbiddenException(
         isPro
           ? 'Pro 用户最多创建 1 个 webhook'
-          : isAdmin
-            ? 'Admin 用户最多创建 5 个 webhook'
-            : 'Free 用户无法创建 webhook，请升级 Pro',
-        { activeCount, limit, role },
+          : 'Admin 用户最多创建 5 个 webhook',
       );
     }
 
