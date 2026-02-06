@@ -14,6 +14,7 @@ import {
   DynamoDBException,
   AuthorizationException,
   ResourceNotFoundException,
+  ValidationException,
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 
@@ -43,6 +44,24 @@ export class TradeService {
   async createTrade(userId: string, dto: CreateTradeDto) {
     const now = new Date().toISOString();
     const transactionId = uuidv4();
+
+    const normalizedProfitLossPercentage =
+      dto.profitLossPercentage === undefined || dto.profitLossPercentage === null
+        ? 0
+        : dto.profitLossPercentage;
+
+    if (
+      typeof normalizedProfitLossPercentage !== 'number' ||
+      !Number.isFinite(normalizedProfitLossPercentage)
+    ) {
+      throw new ValidationException(
+        `profitLossPercentage must be a finite number, got: ${dto.profitLossPercentage}`,
+        ERROR_CODES.VALIDATION_INVALID_VALUE,
+        '盈亏百分比必须是数字，否则保存失败',
+        { value: dto.profitLossPercentage },
+      );
+    }
+
     /**
      * 创建一个新的 Trade 实例。
      *
@@ -120,7 +139,7 @@ export class TradeService {
       analysisImages: dto.analysisImages,
       analysisImagesDetailed: dto.analysisImagesDetailed,
       // 基础计算字段
-      profitLossPercentage: dto.profitLossPercentage,
+      profitLossPercentage: normalizedProfitLossPercentage,
       riskRewardRatio: dto.riskRewardRatio,
       followedSystemStrictly: dto.followedSystemStrictly,
       createdAt: now,
@@ -1009,6 +1028,25 @@ export class TradeService {
         previous30SimulationTrades,
       );
 
+      const calculateAvgProfitLossPercentage = (trades: Trade[]) => {
+        if (trades.length === 0) return 0;
+        const sum = trades.reduce((acc, trade) => {
+          const value = trade.profitLossPercentage;
+          if (typeof value !== 'number' || !Number.isFinite(value)) return acc;
+          return acc + value;
+        }, 0);
+        // 保留2位小数，方便图表展示
+        return Math.round((sum / trades.length) * 100) / 100;
+      };
+
+      // 两种交易数量字段（用于图表）
+      const recent30RealTradeCount = recent30Trades.length;
+      const recent30SimulationTradeCount = recent30SimulationTrades.length;
+
+      // 近30笔 vs 之前30笔（60-30）综合盈亏对比
+      const recent30ProfitLossAvg = calculateAvgProfitLossPercentage(recent30Trades);
+      const previous30ProfitLossAvg = calculateAvgProfitLossPercentage(previous30Trades);
+
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
 
@@ -1035,6 +1073,10 @@ export class TradeService {
           lastMonthSimulationTradeCount,
           recent30SimulationWinRate,
           previous30SimulationWinRate,
+          recent30RealTradeCount,
+          recent30SimulationTradeCount,
+          recent30ProfitLossAvg,
+          previous30ProfitLossAvg,
           summaryHighlights,
           recentTrades,
         },
@@ -1226,9 +1268,32 @@ export class TradeService {
 
       // 直接将 dto 中的所有属性复制到 updatedTradeData 中
       // 由于我们已经更新了 DTO 和实体，字段名称现在是一致的
+      const normalizedProfitLossPercentage =
+        dto.profitLossPercentage === undefined
+          ? undefined
+          : dto.profitLossPercentage === null
+            ? 0
+            : dto.profitLossPercentage;
+
+      if (
+        normalizedProfitLossPercentage !== undefined &&
+        (typeof normalizedProfitLossPercentage !== 'number' ||
+          !Number.isFinite(normalizedProfitLossPercentage))
+      ) {
+        throw new ValidationException(
+          `profitLossPercentage must be a finite number, got: ${dto.profitLossPercentage}`,
+          ERROR_CODES.VALIDATION_INVALID_VALUE,
+          '盈亏百分比必须是数字，否则保存失败',
+          { value: dto.profitLossPercentage },
+        );
+      }
+
       const updatedTradeData: Partial<Trade> = {
         ...dto,
         analysisTime: dto.analysisTime, // 行情分析时间
+        ...(normalizedProfitLossPercentage !== undefined
+          ? { profitLossPercentage: normalizedProfitLossPercentage }
+          : {}),
       };
 
       const updated: Trade = {
