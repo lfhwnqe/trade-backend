@@ -1,6 +1,10 @@
 # Trade Backend
 
-本项目是一个基于 NestJS 的后端服务，使用 AWS CDK进行部署。
+本项目是一个基于 NestJS 的后端服务，使用 AWS CDK 进行部署。
+
+- 总览文档：`../README.md`
+- 规格/文档：`../docs/`（建议从 `overview.md` / `architecture.md` 开始）
+- 环境变量清单：`../docs/env.md`
 
 ## 项目结构
 
