@@ -149,6 +149,16 @@ export class AuthMiddleware implements NestMiddleware {
           );
         }
 
+        // 限制 API token 只能访问 trade 模块
+        if (!req.path.startsWith('/trade')) {
+          throw new AuthenticationException(
+            'API token not allowed for this route',
+            ERROR_CODES.AUTH_UNAUTHORIZED,
+            'API token 无权访问该接口',
+            { path: req.path },
+          );
+        }
+
         (req as any).user = { sub: auth.userId };
         (req as any).authType = 'apiToken';
         (req as any).scopes = auth.scopes;
