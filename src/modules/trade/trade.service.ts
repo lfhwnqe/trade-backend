@@ -1051,9 +1051,17 @@ export class TradeService {
       const recent30RealTradeCount = recent30Trades.length;
       const recent30SimulationTradeCount = recent30SimulationTrades.length;
 
-      // 近30笔 vs 之前30笔（60-30）综合盈亏对比
+      // 近30笔 vs 之前30笔（60-30）综合盈亏对比（真实交易）
       const recent30ProfitLossAvg = calculateAvgProfitLossPercentage(recent30Trades);
       const previous30ProfitLossAvg = calculateAvgProfitLossPercentage(previous30Trades);
+
+      // 近30笔 vs 之前30笔（60-30）综合盈亏对比（模拟交易）
+      const recent30SimulationProfitLossAvg = calculateAvgProfitLossPercentage(
+        recent30SimulationTrades,
+      );
+      const previous30SimulationProfitLossAvg = calculateAvgProfitLossPercentage(
+        previous30SimulationTrades,
+      );
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
@@ -1085,6 +1093,8 @@ export class TradeService {
           recent30SimulationTradeCount,
           recent30ProfitLossAvg,
           previous30ProfitLossAvg,
+          recent30SimulationProfitLossAvg,
+          previous30SimulationProfitLossAvg,
           summaryHighlights,
           recentTrades,
         },
