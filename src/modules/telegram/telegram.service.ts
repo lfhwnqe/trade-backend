@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import crypto from 'node:crypto';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
@@ -19,6 +19,7 @@ export class TelegramService {
 
   constructor(
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => WebhookService))
     private readonly webhookService: WebhookService,
   ) {
     const region = this.configService.getOrThrow('AWS_REGION');
