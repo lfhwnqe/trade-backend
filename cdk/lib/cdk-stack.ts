@@ -267,7 +267,6 @@ export class TradingStack extends cdk.Stack {
         functionName: functionName,
         memorySize: 256,
         environment: {
-          AWS_REGION: region,
           APP_ENV: envName,
           APP_NAME: appName,
           IMAGE_BUCKET_NAME: imageBucket.bucketName,
