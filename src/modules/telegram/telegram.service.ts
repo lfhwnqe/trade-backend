@@ -9,6 +9,7 @@ import {
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 import { TelegramBinding } from './telegram.types';
+import { WebhookService } from '../webhook/webhook.service';
 
 @Injectable()
 export class TelegramService {
@@ -16,7 +17,10 @@ export class TelegramService {
   private readonly db: DynamoDBDocument;
   private readonly tableName: string;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly webhookService: WebhookService,
+  ) {
     const region = this.configService.getOrThrow('AWS_REGION');
     this.tableName = this.configService.getOrThrow(
       'TELEGRAM_BINDINGS_TABLE_NAME',
@@ -82,7 +86,11 @@ export class TelegramService {
     if (parts.length !== 2) return null;
     const [payload, sig] = parts;
     const expected = this.hmac(payload);
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    try {
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        return null;
+      }
+    } catch {
       return null;
     }
     try {
@@ -93,6 +101,20 @@ export class TelegramService {
     } catch {
       return null;
     }
+  }
+
+  verifyHookBindCode(code: string) {
+    return this.webhookService.verifyBindCode(code);
+  }
+
+  async bindHookToChat(input: {
+    userId: string;
+    hookId: string;
+    chatId: number;
+    chatType?: string;
+    chatTitle?: string;
+  }) {
+    return this.webhookService.bindHookToChat(input);
   }
 
   async upsertBinding(input: {

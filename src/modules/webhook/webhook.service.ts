@@ -52,6 +52,63 @@ export class WebhookService {
     return base.endsWith('/') ? base : base + '/';
   }
 
+  private getBindSecret() {
+    return this.configService.getOrThrow('WEBHOOK_BIND_SECRET');
+  }
+
+  private hmac(payload: string) {
+    return crypto
+      .createHmac('sha256', this.getBindSecret())
+      .update(payload)
+      .digest('hex');
+  }
+
+  private base64UrlEncode(input: string) {
+    return Buffer.from(input)
+      .toString('base64')
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replaceAll('=', '');
+  }
+
+  private base64UrlDecode(input: string) {
+    const normalized = input.replaceAll('-', '+').replaceAll('_', '/');
+    const pad = normalized.length % 4;
+    const padded = pad ? normalized + '='.repeat(4 - pad) : normalized;
+    return Buffer.from(padded, 'base64').toString('utf8');
+  }
+
+  createBindCode(userId: string, hookId: string) {
+    const payloadObj = { u: userId, h: hookId, t: Date.now() };
+    const payload = this.base64UrlEncode(JSON.stringify(payloadObj));
+    const sig = this.hmac(payload);
+    return `${payload}.${sig}`;
+  }
+
+  verifyBindCode(code: string): { userId: string; hookId: string } | null {
+    if (!code) return null;
+    const parts = code.split('.');
+    if (parts.length !== 2) return null;
+    const [payload, sig] = parts;
+    const expected = this.hmac(payload);
+    try {
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        return null;
+      }
+    } catch {
+      return null;
+    }
+
+    try {
+      const decoded = this.base64UrlDecode(payload);
+      const parsed = JSON.parse(decoded) as { u?: string; h?: string };
+      if (!parsed?.u || !parsed?.h) return null;
+      return { userId: parsed.u, hookId: parsed.h };
+    } catch {
+      return null;
+    }
+  }
+
   buildTradeAlertUrl(hookId: string) {
     const base = this.getApiBaseUrl();
     if (!base) return `/webhook/trade-alert/${hookId}`;
@@ -96,6 +153,7 @@ export class WebhookService {
         hook: publicHook,
         secret,
         url: this.buildTradeAlertUrl(hookId),
+        bindCode: this.createBindCode(userId, hookId),
       };
     } catch (error: any) {
       this.logger.error(`createHook failed: ${error?.message || error}`);
@@ -198,6 +256,48 @@ export class WebhookService {
     }
   }
 
+  async bindHookToChat(input: {
+    userId: string;
+    hookId: string;
+    chatId: number;
+    chatType?: string;
+    chatTitle?: string;
+  }) {
+    const now = new Date().toISOString();
+    try {
+      await this.db.update({
+        TableName: this.tableName,
+        Key: { hookId: input.hookId },
+        ConditionExpression: 'userId = :u AND attribute_not_exists(revokedAt)',
+        UpdateExpression:
+          'SET chatId = :c, chatType = :ct, chatTitle = :ttl, boundAt = :b',
+        ExpressionAttributeValues: {
+          ':u': input.userId,
+          ':c': input.chatId,
+          ':ct': input.chatType || 'unknown',
+          ':ttl': input.chatTitle || '',
+          ':b': now,
+        },
+      });
+      return { success: true };
+    } catch (error: any) {
+      this.logger.error(`bindHookToChat failed: ${error?.message || error}`);
+      throw new DynamoDBException(
+        `bind hook failed: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '绑定群组失败，请稍后重试',
+      );
+    }
+  }
+
+  async getHook(hookId: string) {
+    const res = await this.db.get({
+      TableName: this.tableName,
+      Key: { hookId },
+    });
+    return (res.Item as WebhookHook | undefined) ?? null;
+  }
+
   async authenticateHook(hookId: string, secret: string) {
     if (!hookId || !secret) return null;
     const res = await this.db.get({
@@ -219,5 +319,17 @@ export class WebhookService {
     }
 
     return { userId: item.userId, hookId: item.hookId };
+  }
+
+  async countActiveHooks(userId: string): Promise<number> {
+    const res = await this.db.query({
+      TableName: this.tableName,
+      IndexName: 'userId-createdAt-index',
+      KeyConditionExpression: 'userId = :u',
+      ExpressionAttributeValues: { ':u': userId },
+      FilterExpression: 'attribute_not_exists(revokedAt)',
+      Select: 'COUNT',
+    });
+    return res.Count ?? 0;
   }
 }

@@ -181,6 +181,24 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    // DynamoDB Table for webhook hooks
+    const webhookHooksTable = new dynamodb.Table(
+      this,
+      `${appName}WebhookHooksTable${envName}`,
+      {
+        tableName: `${appName}-webhook-hooks-${envName.toLowerCase()}`,
+        partitionKey: { name: 'hookId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    webhookHooksTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -249,6 +267,7 @@ export class TradingStack extends cdk.Stack {
         functionName: functionName,
         memorySize: 256,
         environment: {
+          AWS_REGION: region,
           APP_ENV: envName,
           APP_NAME: appName,
           IMAGE_BUCKET_NAME: imageBucket.bucketName,
@@ -257,6 +276,8 @@ export class TradingStack extends cdk.Stack {
           CONFIG_TABLE_NAME: configTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
+          WEBHOOK_HOOKS_TABLE_NAME: webhookHooksTable.tableName,
+          WEBHOOK_BIND_SECRET: process.env.WEBHOOK_BIND_SECRET || '',
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
@@ -271,6 +292,7 @@ export class TradingStack extends cdk.Stack {
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
+    webhookHooksTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 
@@ -342,6 +364,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TELEGRAM_BINDINGS_TABLE_NAME', {
       value: telegramBindingsTable.tableName,
       description: `Name of the DynamoDB table for telegram bindings in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'WEBHOOK_HOOKS_TABLE_NAME', {
+      value: webhookHooksTable.tableName,
+      description: `Name of the DynamoDB table for webhook hooks in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'USER_POOL_ID', {

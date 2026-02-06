@@ -85,8 +85,14 @@ export class TelegramController {
       return { success: true };
     }
 
-    // Expect: /start <payload>
-    if (typeof text === 'string' && text.startsWith('/start')) {
+    const normalizeCommand = (t: string) => {
+      const first = t.trim().split(/\s+/)[0] || '';
+      // /bind or /bind@MyBot
+      return first.split('@')[0];
+    };
+
+    // Expect: /start <payload> (private chat)
+    if (typeof text === 'string' && normalizeCommand(text) === '/start') {
       const parts = text.trim().split(/\s+/);
       const startParam = parts[1] || '';
       const verified = this.telegramService.verifyBindPayload(startParam);
@@ -110,6 +116,44 @@ export class TelegramController {
 
       await this.telegramService
         .sendMessage(chatId, '绑定成功：后续系统会把交易提醒推送到这里。')
+        .catch(() => undefined);
+
+      return { success: true };
+    }
+
+    // Expect: /bind <bindCode> (group chat)
+    if (typeof text === 'string' && normalizeCommand(text) === '/bind') {
+      const parts = text.trim().split(/\s+/);
+      const bindCode = parts[1] || '';
+      if (!bindCode) {
+        await this.telegramService
+          .sendMessage(chatId, '绑定失败：缺少 bindCode。请从网页复制绑定码。')
+          .catch(() => undefined);
+        return { success: true };
+      }
+
+      const verified = this.telegramService.verifyHookBindCode(bindCode);
+      if (!verified) {
+        await this.telegramService
+          .sendMessage(chatId, '绑定失败：bindCode 无效。请从网页重新生成。')
+          .catch(() => undefined);
+        return { success: true };
+      }
+
+      await this.telegramService.bindHookToChat({
+        userId: verified.userId,
+        hookId: verified.hookId,
+        chatId,
+        chatType: update?.message?.chat?.type,
+        chatTitle:
+          update?.message?.chat?.title || update?.message?.chat?.username,
+      });
+
+      await this.telegramService
+        .sendMessage(
+          chatId,
+          `绑定成功：该群已绑定到 webhook（hookId=${verified.hookId}）。`,
+        )
         .catch(() => undefined);
 
       return { success: true };

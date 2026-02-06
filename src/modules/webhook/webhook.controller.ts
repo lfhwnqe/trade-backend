@@ -46,6 +46,34 @@ export class WebhookController {
         '用户信息异常',
       );
     }
+
+    // quota by role
+    const claims = (req as any).user?.claims || (req as any).user;
+    const role = String(claims?.['custom:role'] || claims?.role || '');
+    const groups: string[] =
+      (claims?.['cognito:groups'] as string[]) ||
+      (req as any).user?.groups ||
+      [];
+
+    const isAdmin =
+      role === 'Admin' || role === 'SuperAdmin' || groups.includes('Admins');
+    const isPro = role === 'ProPlan';
+
+    const activeCount = await this.webhookService.countActiveHooks(userId);
+    const limit = isAdmin ? 5 : isPro ? 1 : 0;
+    if (activeCount >= limit) {
+      throw new AuthenticationException(
+        'Webhook quota exceeded',
+        ERROR_CODES.RESOURCE_ACCESS_DENIED,
+        isPro
+          ? 'Pro 用户最多创建 1 个 webhook'
+          : isAdmin
+            ? 'Admin 用户最多创建 5 个 webhook'
+            : 'Free 用户无法创建 webhook，请升级 Pro',
+        { activeCount, limit, role },
+      );
+    }
+
     const result = await this.webhookService.createHook(userId, body?.name);
     return { success: true, data: result };
   }
@@ -75,6 +103,30 @@ export class WebhookController {
     if (!userId) throw new Error('用户信息异常');
     if (!hookId) throw new Error('hookId required');
     return this.webhookService.revokeHook(userId, hookId);
+  }
+
+  @ApiOperation({ summary: '重新生成 hook 的绑定码（用于群内 /bind）' })
+  @ApiBearerAuth()
+  @Post('user/webhooks/:hookId/bind-code')
+  @HttpCode(HttpStatus.OK)
+  async regenBindCode(@Req() req: Request, @Param('hookId') hookId: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new Error('用户信息异常');
+    if (!hookId) throw new Error('hookId required');
+
+    const hook = await this.webhookService.getHook(hookId);
+    if (!hook || hook.userId !== userId || hook.revokedAt) {
+      throw new ValidationException(
+        'hook not found',
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        'hook 不存在',
+      );
+    }
+
+    return {
+      success: true,
+      data: { bindCode: this.webhookService.createBindCode(userId, hookId) },
+    };
   }
 
   // =========================
@@ -124,17 +176,15 @@ export class WebhookController {
       );
     }
 
-    // TODO: send to configured chats (group/private). For now use existing single binding.
-    const binding = await this.telegramService.getBinding(auth.userId);
-    const data = binding.data;
-    if (!data?.chatId) {
+    const hook = await this.webhookService.getHook(hookId);
+    if (!hook?.chatId) {
       return {
         success: true,
-        data: { delivered: false, reason: 'telegram not bound' },
+        data: { delivered: false, reason: 'hook not bound to a telegram chat' },
       };
     }
 
-    await this.telegramService.sendMessage(data.chatId, message);
+    await this.telegramService.sendMessage(hook.chatId, message);
     return { success: true, data: { delivered: true } };
   }
 }
