@@ -18,6 +18,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ConfirmUserDto } from './dto/confirm-user.dto';
 import { CreateApiTokenDto } from './dto/create-api-token.dto';
+import { ListApiTokensDto } from './dto/list-api-tokens.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
 import {
   ApiTags,
@@ -258,10 +259,13 @@ export class UserController {
   @ApiBearerAuth()
   @Get('tokens')
   @HttpCode(HttpStatus.OK)
-  async listApiTokens(@Req() req: Request) {
+  async listApiTokens(@Req() req: Request, @Query() query: ListApiTokensDto) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new Error('用户信息异常');
-    return this.apiTokenService.listTokens(userId);
+    return this.apiTokenService.listTokens(userId, {
+      limit: query.limit,
+      cursor: query.cursor,
+    });
   }
 
   @ApiOperation({ summary: '撤销 API Token' })

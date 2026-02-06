@@ -111,40 +111,68 @@ export class ApiTokenService {
     }
   }
 
-  async listTokens(userId: string) {
+  private encodeCursor(key: Record<string, any> | undefined) {
+    if (!key) return undefined;
+    const json = JSON.stringify(key);
+    return Buffer.from(json)
+      .toString('base64')
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replaceAll('=', '');
+  }
+
+  private decodeCursor(cursor?: string) {
+    if (!cursor) return undefined;
     try {
-      const items: ApiTokenPublic[] = [];
-      let lastKey: Record<string, any> | undefined;
+      const normalized = cursor.replaceAll('-', '+').replaceAll('_', '/');
+      const pad = normalized.length % 4;
+      const padded = pad ? normalized + '='.repeat(4 - pad) : normalized;
+      const json = Buffer.from(padded, 'base64').toString('utf8');
+      return JSON.parse(json) as Record<string, any>;
+    } catch {
+      return undefined;
+    }
+  }
 
-      do {
-        const res = await this.db.query({
-          TableName: this.tableName,
-          IndexName: this.userIdCreatedAtIndexName,
-          KeyConditionExpression: 'userId = :userId',
-          ExpressionAttributeValues: {
-            ':userId': userId,
-          },
-          ScanIndexForward: false,
-          ExclusiveStartKey: lastKey,
-        });
+  async listTokens(
+    userId: string,
+    options?: { limit?: number; cursor?: string },
+  ) {
+    try {
+      const limit = Math.min(Math.max(options?.limit ?? 20, 1), 100);
+      const startKey = this.decodeCursor(options?.cursor);
 
-        const page = (res.Items || []) as ApiTokenRecord[];
-        page.forEach((item) => {
-          items.push({
-            tokenId: item.tokenId,
-            userId: item.userId,
-            name: item.name,
-            scopes: item.scopes,
-            createdAt: item.createdAt,
-            revokedAt: item.revokedAt,
-            lastUsedAt: item.lastUsedAt,
-          });
-        });
+      const res = await this.db.query({
+        TableName: this.tableName,
+        IndexName: this.userIdCreatedAtIndexName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: {
+          ':userId': userId,
+        },
+        ScanIndexForward: false,
+        ExclusiveStartKey: startKey,
+        Limit: limit,
+      });
 
-        lastKey = res.LastEvaluatedKey;
-      } while (lastKey);
+      const items = ((res.Items || []) as ApiTokenRecord[]).map((item) => ({
+        tokenId: item.tokenId,
+        userId: item.userId,
+        name: item.name,
+        scopes: item.scopes,
+        createdAt: item.createdAt,
+        revokedAt: item.revokedAt,
+        lastUsedAt: item.lastUsedAt,
+      }));
 
-      return { success: true, data: { items } };
+      const nextCursor = this.encodeCursor(res.LastEvaluatedKey);
+
+      return {
+        success: true,
+        data: {
+          items,
+          nextCursor,
+        },
+      };
     } catch (error: any) {
       this.logger.error(`listTokens failed: ${error?.message || error}`);
       throw new DynamoDBException(
