@@ -9,8 +9,8 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "deploy:dev": "cdk deploy --context envName=dev --context appName=trading-app --context region=ap-southeast-1",
-    "deploy:prod": "cdk deploy --context envName=prod --context appName=trading-app --context region=ap-southeast-1",
+    "deploy:dev": "cdk deploy --require-approval never --context envName=dev --context appName=trading-app --context region=ap-southeast-1",
+    "deploy:prod": "cdk deploy --require-approval never --context envName=prod --context appName=trading-app --context region=ap-southeast-1",
     "destroy:dev": "cdk destroy --context envName=dev --context appName=trading-app --context region=ap-southeast-1",
     "destroy:prod": "cdk destroy --context envName=prod --context appName=trading-app --context region=ap-southeast-1"
   },
