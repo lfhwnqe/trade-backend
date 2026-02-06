@@ -170,6 +170,17 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // DynamoDB Table for telegram bindings
+    const telegramBindingsTable = new dynamodb.Table(
+      this,
+      `${appName}TelegramBindingsTable${envName}`,
+      {
+        tableName: `${appName}-telegram-bindings-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -245,6 +256,7 @@ export class TradingStack extends cdk.Stack {
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
+          TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
@@ -258,6 +270,7 @@ export class TradingStack extends cdk.Stack {
     transactionsTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
+    telegramBindingsTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 
@@ -322,6 +335,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'API_TOKENS_TABLE_NAME', {
       value: apiTokensTable.tableName,
       description: `Name of the DynamoDB table for API tokens in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'TELEGRAM_BINDINGS_TABLE_NAME', {
+      value: telegramBindingsTable.tableName,
+      description: `Name of the DynamoDB table for telegram bindings in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'USER_POOL_ID', {

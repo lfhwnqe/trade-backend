@@ -5,6 +5,7 @@ import { TradeModule } from './modules/trade/trade.module';
 import { AuthMiddleware } from './modules/common/auth.middleware';
 import { ImageModule } from './modules/image/image.module';
 import { RoleModule } from './modules/role/role.module';
+import { TelegramModule } from './modules/telegram/telegram.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -14,6 +15,7 @@ import { RoleModule } from './modules/role/role.module';
     TradeModule,
     ImageModule,
     RoleModule,
+    TelegramModule,
     // RAGModule,
   ],
 })
@@ -30,6 +32,9 @@ export class AppModule implements NestModule {
         '/svg-parser/parse-url',
         '/svg-parser/parse-file',
         '/svg-parser/validate',
+        // Webhooks (must bypass cookie/api-token auth)
+        '/webhook/telegram',
+        '/webhook/trade-alert',
       )
       .forRoutes('*');
   }
