@@ -36,6 +36,10 @@ export class WebhookService {
     return crypto.createHash('sha256').update(secret).digest('hex');
   }
 
+  private generateTriggerToken() {
+    return 'tw_' + base64Url(crypto.randomBytes(24));
+  }
+
   private generateHookId() {
     // short + url-safe
     return base64Url(crypto.randomBytes(18));
@@ -111,8 +115,15 @@ export class WebhookService {
 
   buildTradeAlertUrl(hookId: string) {
     const base = this.getApiBaseUrl();
-    if (!base) return `/webhook/trade-alert/${hookId}`;
-    return `${base}webhook/trade-alert/${hookId}`;
+    // legacy
+    if (!base) return `/webhook/trade-alert/hook/${hookId}`;
+    return `${base}webhook/trade-alert/hook/${hookId}`;
+  }
+
+  buildTradingViewTriggerUrl(triggerToken: string) {
+    const base = this.getApiBaseUrl();
+    if (!base) return `/webhook/trade-alert/${triggerToken}`;
+    return `${base}webhook/trade-alert/${triggerToken}`;
   }
 
   async createHook(
@@ -131,11 +142,14 @@ export class WebhookService {
     const hookId = this.generateHookId();
     const secret = this.generateSecret();
 
+    const triggerToken = this.generateTriggerToken();
+
     const item: WebhookHook = {
       hookId,
       userId,
       name: name?.trim() || undefined,
       secretHash: this.hashSecret(secret),
+      triggerToken,
       createdAt: now,
     };
 
@@ -154,6 +168,7 @@ export class WebhookService {
         secret,
         url: this.buildTradeAlertUrl(hookId),
         bindCode: this.createBindCode(userId, hookId),
+        triggerUrl: this.buildTradingViewTriggerUrl(triggerToken),
       };
     } catch (error: any) {
       this.logger.error(`createHook failed: ${error?.message || error}`);
@@ -185,6 +200,9 @@ export class WebhookService {
         return {
           ...publicHook,
           url: this.buildTradeAlertUrl(publicHook.hookId),
+          triggerUrl: publicHook.triggerToken
+            ? this.buildTradingViewTriggerUrl(publicHook.triggerToken)
+            : undefined,
         };
       });
 
@@ -319,6 +337,58 @@ export class WebhookService {
     }
 
     return { userId: item.userId, hookId: item.hookId };
+  }
+
+  async authenticateByTriggerToken(triggerToken: string) {
+    if (!triggerToken) return null;
+
+    // Since triggerToken is random and unique, we can store it on the item and scan by GSI would be better,
+    // but we keep it simple here (table is per app, hooks count is small).
+    // TODO: if scale grows, add a GSI on triggerToken.
+    const res = await this.db.scan({
+      TableName: this.tableName,
+      FilterExpression: 'triggerToken = :t AND attribute_not_exists(revokedAt)',
+      ExpressionAttributeValues: { ':t': triggerToken },
+      Limit: 1,
+    });
+
+    const item = (res.Items?.[0] as WebhookHook | undefined) ?? undefined;
+    if (!item) return null;
+
+    return { userId: item.userId, hookId: item.hookId };
+  }
+
+  async touchTrigger(hookId: string, nowIso: string, minIntervalSeconds = 60) {
+    const minMs = minIntervalSeconds * 1000;
+    try {
+      const existing = await this.db.get({
+        TableName: this.tableName,
+        Key: { hookId },
+      });
+      const item = existing.Item as WebhookHook | undefined;
+      if (!item) return { allowed: false, reason: 'hook not found' };
+      const last = item.lastTriggeredAt ? Date.parse(item.lastTriggeredAt) : 0;
+      const now = Date.parse(nowIso);
+      if (last && now - last < minMs) {
+        return {
+          allowed: false,
+          reason: 'rate_limited',
+          nextInMs: minMs - (now - last),
+        };
+      }
+
+      await this.db.update({
+        TableName: this.tableName,
+        Key: { hookId },
+        UpdateExpression: 'SET lastTriggeredAt = :t',
+        ExpressionAttributeValues: { ':t': nowIso },
+      });
+
+      return { allowed: true };
+    } catch (error: any) {
+      this.logger.error(`touchTrigger failed: ${error?.message || error}`);
+      return { allowed: false, reason: 'touch_failed' };
+    }
   }
 
   async countActiveHooks(userId: string): Promise<number> {

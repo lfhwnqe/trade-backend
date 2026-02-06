@@ -6,11 +6,18 @@ export type WebhookHook = {
   createdAt: string;
   revokedAt?: string;
 
+  // TradingView-friendly trigger token (no headers needed)
+  // NOTE: This token is a secret (acts like an API key) and is embedded in the URL.
+  triggerToken?: string;
+
   // one hook -> one telegram group (chat)
   chatId?: number;
   chatType?: string;
   chatTitle?: string;
   boundAt?: string;
+
+  // rate limit
+  lastTriggeredAt?: string;
 };
 
 export type CreateWebhookHookResult = {
@@ -18,4 +25,7 @@ export type CreateWebhookHookResult = {
   secret: string; // only returned once
   url: string;
   bindCode: string; // only returned once (used in telegram group: /bind <bindCode>)
+
+  // A single unique URL (no header), for TradingView
+  triggerUrl: string;
 };

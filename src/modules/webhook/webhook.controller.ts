@@ -143,7 +143,8 @@ export class WebhookController {
     summary:
       'Trade alert webhook (by hookId) -> send message to user configured telegram chats',
   })
-  @Post('webhook/trade-alert/:hookId')
+  // Legacy endpoint (requires header secret)
+  @Post('webhook/trade-alert/hook/:hookId')
   @HttpCode(HttpStatus.OK)
   async tradeAlertWebhook(
     @Param('hookId') hookId: string,
@@ -182,7 +183,85 @@ export class WebhookController {
       );
     }
 
+    // rate limit: 1 per minute
+    const nowIso = new Date().toISOString();
+    const touch = await this.webhookService.touchTrigger(hookId, nowIso, 60);
+    if (!touch.allowed) {
+      return {
+        success: true,
+        data: {
+          delivered: false,
+          reason: touch.reason,
+          nextInMs: (touch as any).nextInMs,
+        },
+      };
+    }
+
     const hook = await this.webhookService.getHook(hookId);
+    if (!hook?.chatId) {
+      return {
+        success: true,
+        data: { delivered: false, reason: 'hook not bound to a telegram chat' },
+      };
+    }
+
+    await this.telegramService.sendMessage(hook.chatId, message);
+    return { success: true, data: { delivered: true } };
+  }
+
+  // TradingView-friendly endpoint (single unique URL, no headers)
+  @ApiOperation({
+    summary:
+      'Trade alert webhook (by triggerToken) -> send message to bound telegram group',
+  })
+  @Post('webhook/trade-alert/:triggerToken')
+  @HttpCode(HttpStatus.OK)
+  async tradeAlertWebhookByToken(
+    @Param('triggerToken') triggerToken: string,
+    @Body() body: { message?: string },
+  ) {
+    const message = body?.message;
+    if (!triggerToken) {
+      throw new ValidationException(
+        'triggerToken required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '缺少 triggerToken',
+      );
+    }
+    if (typeof message !== 'string' || message.trim().length === 0) {
+      throw new ValidationException(
+        'message required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '缺少 message',
+      );
+    }
+
+    const auth =
+      await this.webhookService.authenticateByTriggerToken(triggerToken);
+    if (!auth) {
+      // do not leak existence
+      return { success: true, data: { delivered: false } };
+    }
+
+    // rate limit: 1 per minute
+    const nowIso = new Date().toISOString();
+    const touch = await this.webhookService.touchTrigger(
+      auth.hookId,
+      nowIso,
+      60,
+    );
+    if (!touch.allowed) {
+      return {
+        success: true,
+        data: {
+          delivered: false,
+          reason: touch.reason,
+          nextInMs: (touch as any).nextInMs,
+        },
+      };
+    }
+
+    const hook = await this.webhookService.getHook(auth.hookId);
     if (!hook?.chatId) {
       return {
         success: true,
