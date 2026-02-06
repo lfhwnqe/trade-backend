@@ -277,7 +277,14 @@ export class TradingStack extends cdk.Stack {
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
           WEBHOOK_HOOKS_TABLE_NAME: webhookHooksTable.tableName,
+
+          // Telegram/webhook secrets (provided at deploy time via CDK env)
+          TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+          TELEGRAM_BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME || '',
+          TELEGRAM_BIND_SECRET: process.env.TELEGRAM_BIND_SECRET || '',
+          TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || '',
           WEBHOOK_BIND_SECRET: process.env.WEBHOOK_BIND_SECRET || '',
+
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
