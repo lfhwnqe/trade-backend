@@ -1,6 +1,7 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import { CognitoService } from './cognito.service';
+import { ApiTokenService } from './api-token.service';
 import { AuthenticationException } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 
@@ -18,7 +19,10 @@ export class AuthMiddleware implements NestMiddleware {
   private readonly accessTokenMaxAgeMs = 60 * 60 * 1000;
   private readonly refreshTokenMaxAgeMs = 30 * 24 * 60 * 60 * 1000;
 
-  constructor(private readonly cognitoService: CognitoService) {}
+  constructor(
+    private readonly cognitoService: CognitoService,
+    private readonly apiTokenService: ApiTokenService,
+  ) {}
 
   private getCookieValue(req: Request, name: string): string | undefined {
     const cookieHeader = req.headers.cookie;
@@ -28,6 +32,22 @@ export class AuthMiddleware implements NestMiddleware {
       .map((item) => item.trim())
       .find((item) => item.startsWith(`${name}=`));
     return cookie?.split('=')[1];
+  }
+
+  private getBearerToken(req: Request): string | undefined {
+    const header = req.headers['authorization'];
+    if (!header || typeof header !== 'string') return undefined;
+    const [kind, value] = header.split(' ');
+    if (kind?.toLowerCase() !== 'bearer') return undefined;
+    return value;
+  }
+
+  private getApiToken(req: Request): string | undefined {
+    const fromHeader = req.headers['x-api-token'];
+    if (typeof fromHeader === 'string' && fromHeader.trim()) {
+      return fromHeader.trim();
+    }
+    return this.getBearerToken(req);
   }
 
   private setAuthCookies(
@@ -61,60 +81,86 @@ export class AuthMiddleware implements NestMiddleware {
         console.log('[AuthMiddleware] 命中白名单，放行');
         return next();
       }
-      const token = this.getCookieValue(req, 'token');
+      const accessToken = this.getCookieValue(req, 'token');
 
-      if (!token) {
-        console.log('[AuthMiddleware] 缺少 token');
-        throw new AuthenticationException(
-          'Authorization token missing from request',
-          ERROR_CODES.AUTH_TOKEN_MISSING,
-          '缺少 token，请登录',
-        );
-      }
-      let user = null;
-      let verifyError: any = null;
-      try {
-        user = await this.cognitoService.verifyAccessToken(token);
-      } catch (err: any) {
-        verifyError = err;
-        console.log(
-          '[AuthMiddleware] verifyAccessToken抛出异常:',
-          err?.message || err,
-        );
-      }
-
-      const isExpired =
-        verifyError?.errorCode === ERROR_CODES.AUTH_TOKEN_EXPIRED ||
-        (typeof verifyError?.message === 'string' &&
-          verifyError.message.toLowerCase().includes('expired'));
-
-      if (!user && isExpired) {
-        const refreshToken = this.getCookieValue(req, 'refreshToken');
-        if (!refreshToken) {
-          console.log('[AuthMiddleware] access token 过期且缺少 refresh token');
-          throw new AuthenticationException(
-            'Refresh token missing while access token expired',
-            ERROR_CODES.AUTH_TOKEN_EXPIRED,
-            '登录已过期，请重新登录',
+      // 1) 优先 cookie accessToken（Cognito）
+      if (accessToken) {
+        let user = null;
+        let verifyError: any = null;
+        try {
+          user = await this.cognitoService.verifyAccessToken(accessToken);
+        } catch (err: any) {
+          verifyError = err;
+          console.log(
+            '[AuthMiddleware] verifyAccessToken抛出异常:',
+            err?.message || err,
           );
         }
 
-        console.log('[AuthMiddleware] access token 过期，尝试 refresh');
-        const tokens = await this.cognitoService.refreshTokens(refreshToken);
-        this.setAuthCookies(res, tokens);
-        user = await this.cognitoService.verifyAccessToken(tokens.accessToken);
+        const isExpired =
+          verifyError?.errorCode === ERROR_CODES.AUTH_TOKEN_EXPIRED ||
+          (typeof verifyError?.message === 'string' &&
+            verifyError.message.toLowerCase().includes('expired'));
+
+        if (!user && isExpired) {
+          const refreshToken = this.getCookieValue(req, 'refreshToken');
+          if (!refreshToken) {
+            console.log(
+              '[AuthMiddleware] access token 过期且缺少 refresh token',
+            );
+            throw new AuthenticationException(
+              'Refresh token missing while access token expired',
+              ERROR_CODES.AUTH_TOKEN_EXPIRED,
+              '登录已过期，请重新登录',
+            );
+          }
+
+          console.log('[AuthMiddleware] access token 过期，尝试 refresh');
+          const tokens = await this.cognitoService.refreshTokens(refreshToken);
+          this.setAuthCookies(res, tokens);
+          user = await this.cognitoService.verifyAccessToken(
+            tokens.accessToken,
+          );
+        }
+
+        if (!user) {
+          console.log('[AuthMiddleware] token校验失败');
+          throw new AuthenticationException(
+            'JWT token verification failed',
+            ERROR_CODES.AUTH_TOKEN_INVALID,
+            'token 校验失败',
+          );
+        }
+
+        (req as any).user = user;
+        (req as any).authType = 'cognito';
+        return next();
       }
 
-      if (!user) {
-        console.log('[AuthMiddleware] token校验失败');
-        throw new AuthenticationException(
-          'JWT token verification failed',
-          ERROR_CODES.AUTH_TOKEN_INVALID,
-          'token 校验失败',
-        );
+      // 2) 兜底：API Token（给 claw/脚本）
+      const apiToken = this.getApiToken(req);
+      if (apiToken) {
+        const auth = await this.apiTokenService.authenticateToken(apiToken);
+        if (!auth) {
+          throw new AuthenticationException(
+            'API token invalid',
+            ERROR_CODES.AUTH_TOKEN_INVALID,
+            'token 校验失败',
+          );
+        }
+
+        (req as any).user = { sub: auth.userId };
+        (req as any).authType = 'apiToken';
+        (req as any).scopes = auth.scopes;
+        return next();
       }
-      (req as any).user = user;
-      return next();
+
+      console.log('[AuthMiddleware] 缺少 token');
+      throw new AuthenticationException(
+        'Authorization token missing from request',
+        ERROR_CODES.AUTH_TOKEN_MISSING,
+        '缺少 token，请登录',
+      );
     } catch (e: any) {
       console.log('[AuthMiddleware] 总catch捕获到异常:', e?.message || e);
       // 如果已经是我们的自定义异常，直接重新抛出

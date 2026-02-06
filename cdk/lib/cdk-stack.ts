@@ -152,6 +152,24 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    // DynamoDB Table for API tokens (personal API keys)
+    const apiTokensTable = new dynamodb.Table(
+      this,
+      `${appName}ApiTokensTable${envName}`,
+      {
+        tableName: `${appName}-api-tokens-${envName.toLowerCase()}`,
+        partitionKey: { name: 'tokenHash', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    apiTokensTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
@@ -226,6 +244,7 @@ export class TradingStack extends cdk.Stack {
           CLOUDFRONT_DOMAIN_NAME: distribution.distributionDomainName,
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
+          API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
@@ -238,6 +257,7 @@ export class TradingStack extends cdk.Stack {
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
+    apiTokensTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 
@@ -297,6 +317,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'CONFIG_TABLE_NAME', {
       value: configTable.tableName,
       description: `Name of the DynamoDB table for common config in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'API_TOKENS_TABLE_NAME', {
+      value: apiTokensTable.tableName,
+      description: `Name of the DynamoDB table for API tokens in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'USER_POOL_ID', {

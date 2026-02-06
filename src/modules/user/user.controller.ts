@@ -11,11 +11,13 @@ import {
   Param,
   Res,
   Req,
+  Delete,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { LoginUserDto } from './dto/login-user.dto';
 import { ConfirmUserDto } from './dto/confirm-user.dto';
+import { CreateApiTokenDto } from './dto/create-api-token.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
 import {
   ApiTags,
@@ -29,6 +31,7 @@ import {
 import { Roles, Role } from '../../base/decorators/roles.decorator';
 import { RolesGuard } from '../../base/guards/roles.guard';
 import { CognitoService } from '../common/cognito.service';
+import { ApiTokenService } from '../common/api-token.service';
 import { Request, Response } from 'express';
 
 @ApiTags('用户管理')
@@ -41,6 +44,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly cognitoService: CognitoService,
+    private readonly apiTokenService: ApiTokenService,
   ) {}
 
   private getCookieValue(req: Request, name: string): string | undefined {
@@ -234,5 +238,40 @@ export class UserController {
   @HttpCode(HttpStatus.OK)
   async getRegistrationStatus() {
     return this.userService.getRegistrationStatus();
+  }
+
+  // =========================
+  // API Token (for claw/scripts)
+  // =========================
+
+  @ApiOperation({ summary: '创建 API Token（仅返回一次明文 token）' })
+  @ApiBearerAuth()
+  @Post('tokens')
+  @HttpCode(HttpStatus.CREATED)
+  async createApiToken(@Req() req: Request, @Body() dto: CreateApiTokenDto) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new Error('用户信息异常');
+    return this.apiTokenService.createToken(userId, dto?.name);
+  }
+
+  @ApiOperation({ summary: '列出当前用户的 API Token（不返回明文）' })
+  @ApiBearerAuth()
+  @Get('tokens')
+  @HttpCode(HttpStatus.OK)
+  async listApiTokens(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new Error('用户信息异常');
+    return this.apiTokenService.listTokens(userId);
+  }
+
+  @ApiOperation({ summary: '撤销 API Token' })
+  @ApiBearerAuth()
+  @ApiParam({ name: 'tokenId', description: 'tokenId' })
+  @Delete('tokens/:tokenId')
+  @HttpCode(HttpStatus.OK)
+  async revokeApiToken(@Req() req: Request, @Param('tokenId') tokenId: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new Error('用户信息异常');
+    return this.apiTokenService.revokeToken(userId, tokenId);
   }
 }

@@ -10,6 +10,7 @@ import {
   NotFoundException,
   Query,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { TradeService } from './trade.service';
 import { CreateTradeDto } from './dto/create-trade.dto';
@@ -129,10 +130,7 @@ export class TradeController {
   @ApiParam({ name: 'shareId', description: '分享ID' })
   @ApiResponse({ status: 200, description: '查询成功' })
   @Get('shared/:shareId')
-  async getSharedTrade(
-    @Req() req: Request,
-    @Param('shareId') shareId: string,
-  ) {
+  async getSharedTrade(@Req() req: Request, @Param('shareId') shareId: string) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     const result = await this.tradeService.getSharedTradeByShareId(shareId);
@@ -346,6 +344,12 @@ export class TradeController {
   ) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
+
+    // API Token 允许 read/write，但禁止 delete
+    if ((req as any).authType === 'apiToken') {
+      throw new ForbiddenException('API token 无权删除交易记录');
+    }
+
     const result = await this.tradeService.deleteTrade(userId, transactionId);
     return result;
   }

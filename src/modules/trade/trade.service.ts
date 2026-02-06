@@ -1,8 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  CreateTradeDto, TradeResult,
-  TradeType
-} from './dto/create-trade.dto';
+import { CreateTradeDto, TradeResult, TradeType } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -46,7 +43,8 @@ export class TradeService {
     const transactionId = uuidv4();
 
     const normalizedProfitLossPercentage =
-      dto.profitLossPercentage === undefined || dto.profitLossPercentage === null
+      dto.profitLossPercentage === undefined ||
+      dto.profitLossPercentage === null
         ? 0
         : dto.profitLossPercentage;
 
@@ -286,9 +284,8 @@ export class TradeService {
    * 结合筛选条件的分页查询（POST）
    */
   async findByUserQuery(userId: string, dto: TradeQueryDto) {
-    let {
+    const {
       page = 1,
-      pageSize,
       limit,
       type,
       grade,
@@ -304,7 +301,8 @@ export class TradeService {
       dateFrom,
       dateTo,
     } = dto;
-    pageSize = limit ?? pageSize ?? 20;
+
+    const pageSize = limit ?? dto.pageSize ?? 20;
 
     try {
       // 使用 createdAt 索引按创建时间倒序拉取（顺序由索引保证）
@@ -345,7 +343,7 @@ export class TradeService {
         if (dateTimeRange.from) {
           try {
             fromDate = new Date(dateTimeRange.from).toISOString().split('T')[0];
-          } catch (e) {
+          } catch {
             console.error('Invalid dateTimeRange.from:', dateTimeRange.from);
           }
         }
@@ -355,7 +353,7 @@ export class TradeService {
             const endDate = new Date(dateTimeRange.to);
             endDate.setHours(23, 59, 59, 999);
             toDate = endDate.toISOString();
-          } catch (e) {
+          } catch {
             console.error('Invalid dateTimeRange.to:', dateTimeRange.to);
           }
         }
@@ -365,7 +363,7 @@ export class TradeService {
       if (dateFrom) {
         try {
           fromDate = new Date(dateFrom).toISOString().split('T')[0];
-        } catch (e) {
+        } catch {
           console.error('Invalid dateFrom:', dateFrom);
         }
       }
@@ -375,7 +373,7 @@ export class TradeService {
           const endDate = new Date(dateTo);
           endDate.setHours(23, 59, 59, 999);
           toDate = endDate.toISOString();
-        } catch (e) {
+        } catch {
           console.error('Invalid dateTo:', dateTo);
         }
       }
@@ -1034,7 +1032,8 @@ export class TradeService {
         const sum = trades.reduce((acc, trade) => {
           const value = (trade as any).profitLossPercentage;
           // 兼容历史数据：可能是 number，也可能是可解析的字符串
-          if (typeof value === 'number' && Number.isFinite(value)) return acc + value;
+          if (typeof value === 'number' && Number.isFinite(value))
+            return acc + value;
           if (typeof value === 'string') {
             const parsed = Number(value);
             if (Number.isFinite(parsed)) return acc + parsed;
@@ -1052,16 +1051,17 @@ export class TradeService {
       const recent30SimulationTradeCount = recent30SimulationTrades.length;
 
       // 近30笔 vs 之前30笔（60-30）综合盈亏对比（真实交易）
-      const recent30ProfitLossAvg = calculateAvgProfitLossPercentage(recent30Trades);
-      const previous30ProfitLossAvg = calculateAvgProfitLossPercentage(previous30Trades);
+      const recent30ProfitLossAvg =
+        calculateAvgProfitLossPercentage(recent30Trades);
+      const previous30ProfitLossAvg =
+        calculateAvgProfitLossPercentage(previous30Trades);
 
       // 近30笔 vs 之前30笔（60-30）综合盈亏对比（模拟交易）
       const recent30SimulationProfitLossAvg = calculateAvgProfitLossPercentage(
         recent30SimulationTrades,
       );
-      const previous30SimulationProfitLossAvg = calculateAvgProfitLossPercentage(
-        previous30SimulationTrades,
-      );
+      const previous30SimulationProfitLossAvg =
+        calculateAvgProfitLossPercentage(previous30SimulationTrades);
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
