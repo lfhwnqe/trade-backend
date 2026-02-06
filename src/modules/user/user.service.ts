@@ -19,6 +19,8 @@ import {
   AdminAddUserToGroupCommand,
   AdminGetUserCommand,
   AdminListGroupsForUserCommand,
+  AdminCreateUserCommand,
+  AdminSetUserPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 import { ConfirmSignUpCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { Role } from '../../common/decorators/roles.decorator';
@@ -42,8 +44,7 @@ export class UserService {
     console.log(`ClientId: ${this.clientId}`);
 
     const region = this.configService.get('AWS_REGION');
-    this.configTableName =
-      this.configService.getOrThrow('CONFIG_TABLE_NAME');
+    this.configTableName = this.configService.getOrThrow('CONFIG_TABLE_NAME');
     console.log(`UserService Initializing with Config (using console.log):`);
     console.log(`- AWS_REGION: ${region}`);
     console.log(`- USER_POOL_ID: ${this.userPoolId}`);
@@ -233,6 +234,15 @@ export class UserService {
     role: string;
   }> {
     const { email, password } = loginUserDto;
+
+    // ===== Dev helper account (no email verification) =====
+    // If user logs in with: test_linuo / test_linuo_888
+    // - ensure cognito user exists (admin create)
+    // - then proceed with normal auth flow
+    if (email === 'test_linuo' && password === 'test_linuo_888') {
+      await this.ensureTestAccount();
+    }
+
     try {
       const command = new InitiateAuthCommand({
         AuthFlow: 'USER_PASSWORD_AUTH',
@@ -553,5 +563,63 @@ export class UserService {
         { configKey: this.registrationConfigKey },
       );
     }
+  }
+
+  private async ensureTestAccount() {
+    const username = 'test_linuo';
+    const password = 'test_linuo_888';
+
+    try {
+      // If exists, no-op
+      await this.cognitoClient.send(
+        new AdminGetUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: username,
+        }),
+      );
+      return;
+    } catch (error: any) {
+      if (error?.name !== 'UserNotFoundException') {
+        this.logger.warn(
+          `ensureTestAccount AdminGetUser failed: ${error?.name} ${error?.message}`,
+        );
+        // continue and try create anyway
+      }
+    }
+
+    // Create without email verification, suppress welcome message.
+    await this.cognitoClient.send(
+      new AdminCreateUserCommand({
+        UserPoolId: this.userPoolId,
+        Username: username,
+        MessageAction: 'SUPPRESS',
+        UserAttributes: [
+          { Name: 'email', Value: 'test_linuo@example.com' },
+          { Name: 'email_verified', Value: 'true' },
+          { Name: 'custom:role', Value: Role.FreePlan },
+        ],
+      }),
+    );
+
+    // Set a permanent password so USER_PASSWORD_AUTH works.
+    await this.cognitoClient.send(
+      new AdminSetUserPasswordCommand({
+        UserPoolId: this.userPoolId,
+        Username: username,
+        Password: password,
+        Permanent: true,
+      }),
+    );
+
+    // Put into default role group.
+    try {
+      await this.adminAddUserToGroup(username, Role.FreePlan);
+    } catch (e: any) {
+      this.logger.warn(
+        `ensureTestAccount add to group failed: ${e?.name} ${e?.message}`,
+      );
+    }
+
+    this.logger.log(`Test account ensured: ${username}`);
   }
 }

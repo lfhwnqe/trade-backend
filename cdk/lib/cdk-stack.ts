@@ -286,6 +286,8 @@ export class TradingStack extends cdk.Stack {
           'cognito-idp:AdminEnableUser',
           'cognito-idp:AdminDisableUser',
           'cognito-idp:AdminUpdateUserAttributes',
+          'cognito-idp:AdminCreateUser',
+          'cognito-idp:AdminSetUserPassword',
           'cognito-idp:AdminInitiateAuth',
           'cognito-idp:AdminRespondToAuthChallenge',
           'cognito-idp:InitiateAuth',
