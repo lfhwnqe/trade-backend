@@ -27,12 +27,17 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { TradeQueryDto } from './dto/trade-query.dto';
+import { TradeImageUploadUrlDto } from './dto/trade-image-upload.dto';
+import { ImageService } from '../image/image.service';
 
 @ApiTags('交易管理')
 @ApiBearerAuth()
 @Controller('trade')
 export class TradeController {
-  constructor(private readonly tradeService: TradeService) {}
+  constructor(
+    private readonly tradeService: TradeService,
+    private readonly imageService: ImageService,
+  ) {}
   // 首页统计 GET /trade/stats
   @ApiOperation({ summary: '获取本月已离场交易数和胜率' })
   @ApiResponse({ status: 200, description: '统计数据获取成功' })
@@ -75,6 +80,29 @@ export class TradeController {
       normalizedRange as '7d' | '30d' | '3m',
     );
     return result;
+  }
+
+  // ============ Trade-scoped Image Upload (for API token) ============
+  @ApiOperation({
+    summary: '获取交易截图上传URL（trade 域内，给 API token 使用）',
+  })
+  @ApiBody({ type: TradeImageUploadUrlDto })
+  @ApiResponse({ status: 200, description: '返回上传URL和key' })
+  @Post('image/upload-url')
+  async getTradeImageUploadUrl(
+    @Req() req: Request,
+    @Body() body: TradeImageUploadUrlDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    // 复用 imageService 的校验与 key 规则
+    return this.imageService.generateUploadUrl(
+      userId,
+      body.fileName,
+      body.fileType,
+      body.date,
+    );
   }
 
   // 创建交易记录
