@@ -187,6 +187,8 @@ export class WebhookService {
         IndexName: 'userId-createdAt-index',
         KeyConditionExpression: 'userId = :u',
         ExpressionAttributeValues: { ':u': userId },
+        // FilterExpression to hide revoked legacy items (revoked now means deleted)
+        FilterExpression: 'attribute_not_exists(revokedAt)',
         ScanIndexForward: false,
         Limit: limit,
         ExclusiveStartKey: cursor,
@@ -239,7 +241,6 @@ export class WebhookService {
   }
 
   async revokeHook(userId: string, hookId: string) {
-    const now = new Date().toISOString();
     try {
       // Ensure belongs to user
       const existing = await this.db.get({
@@ -255,11 +256,12 @@ export class WebhookService {
         );
       }
 
-      await this.db.update({
+      // Treat revoke as delete (hard delete)
+      await this.db.delete({
         TableName: this.tableName,
         Key: { hookId },
-        UpdateExpression: 'SET revokedAt = :r',
-        ExpressionAttributeValues: { ':r': now },
+        ConditionExpression: 'userId = :u',
+        ExpressionAttributeValues: { ':u': userId },
       });
 
       return { success: true };
