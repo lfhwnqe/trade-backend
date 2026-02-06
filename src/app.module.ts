@@ -7,6 +7,7 @@ import { ImageModule } from './modules/image/image.module';
 import { RoleModule } from './modules/role/role.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
+import { BinanceFuturesModule } from './modules/exchange/binance-futures/binance-futures.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { WebhookModule } from './modules/webhook/webhook.module';
     RoleModule,
     TelegramModule,
     WebhookModule,
+    BinanceFuturesModule,
     // RAGModule,
   ],
 })

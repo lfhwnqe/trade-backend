@@ -1,0 +1,30 @@
+export type BinanceFuturesApiKeyRecord = {
+  userId: string;
+  apiKey: string;
+  secretEnc: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BinanceFuturesFillRecord = {
+  userId: string;
+  // trade id from Binance (number) but store as string for DynamoDB
+  tradeId: string;
+  symbol: string;
+  time: number;
+
+  // normalized fields (best-effort)
+  side?: string;
+  positionSide?: string;
+  price?: string;
+  qty?: string;
+  realizedPnl?: string;
+  commission?: string;
+  commissionAsset?: string;
+  orderId?: string;
+
+  // raw payload for forward-compat
+  raw: any;
+
+  importedAt: string;
+};

@@ -192,6 +192,35 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    // ===== Exchange Integrations (Binance Futures) =====
+    const binanceFuturesKeysTable = new dynamodb.Table(
+      this,
+      `${appName}BinanceFuturesKeysTable${envName}`,
+      {
+        tableName: `${appName}-binance-futures-keys-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    const binanceFuturesFillsTable = new dynamodb.Table(
+      this,
+      `${appName}BinanceFuturesFillsTable${envName}`,
+      {
+        tableName: `${appName}-binance-futures-fills-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'tradeKey', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    binanceFuturesFillsTable.addGlobalSecondaryIndex({
+      indexName: 'userId-time-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'time', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     webhookHooksTable.addGlobalSecondaryIndex({
       indexName: 'userId-createdAt-index',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
@@ -276,6 +305,9 @@ export class TradingStack extends cdk.Stack {
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
           WEBHOOK_HOOKS_TABLE_NAME: webhookHooksTable.tableName,
+          BINANCE_FUTURES_KEYS_TABLE_NAME: binanceFuturesKeysTable.tableName,
+          BINANCE_FUTURES_FILLS_TABLE_NAME: binanceFuturesFillsTable.tableName,
+          EXCHANGE_KEY_ENC_SECRET: process.env.EXCHANGE_KEY_ENC_SECRET || '',
 
           // Telegram/webhook secrets (provided at deploy time via CDK env)
           TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
@@ -299,6 +331,8 @@ export class TradingStack extends cdk.Stack {
     apiTokensTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
     webhookHooksTable.grantReadWriteData(fn);
+    binanceFuturesKeysTable.grantReadWriteData(fn);
+    binanceFuturesFillsTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 
