@@ -189,7 +189,7 @@ export class UserController {
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
   @Roles(Role.Admin, Role.SuperAdmin)
-  @Get(':userId')
+  @Get('detail/:userId')
   @HttpCode(HttpStatus.OK)
   async getUserDetail(@Param('userId') userId: string) {
     return this.userService.getUserDetail(userId);

@@ -41,7 +41,10 @@ export class TradeQueryDto {
   @Min(1)
   pageSize: number = 20;
 
-  @ApiPropertyOptional({ description: '交易类型（兼容字段）', example: '模拟交易' })
+  @ApiPropertyOptional({
+    description: '交易类型（兼容字段）',
+    example: '模拟交易',
+  })
   @IsOptional()
   @IsString()
   type?: string;

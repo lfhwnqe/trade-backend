@@ -574,15 +574,15 @@ export class UserService {
   private async ensureTestAccount(password: string) {
     const username = 'test_linuo';
 
+    let exists = false;
     try {
-      // If exists, no-op
       await this.cognitoClient.send(
         new AdminGetUserCommand({
           UserPoolId: this.userPoolId,
           Username: username,
         }),
       );
-      return;
+      exists = true;
     } catch (error: any) {
       if (error?.name !== 'UserNotFoundException') {
         this.logger.warn(
@@ -592,21 +592,24 @@ export class UserService {
       }
     }
 
-    // Create without email verification, suppress welcome message.
-    await this.cognitoClient.send(
-      new AdminCreateUserCommand({
-        UserPoolId: this.userPoolId,
-        Username: username,
-        MessageAction: 'SUPPRESS',
-        UserAttributes: [
-          { Name: 'email', Value: 'test_linuo@example.com' },
-          { Name: 'email_verified', Value: 'true' },
-          { Name: 'custom:role', Value: Role.FreePlan },
-        ],
-      }),
-    );
+    // If user does not exist, create without email verification, suppress welcome message.
+    if (!exists) {
+      await this.cognitoClient.send(
+        new AdminCreateUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: username,
+          MessageAction: 'SUPPRESS',
+          UserAttributes: [
+            { Name: 'email', Value: 'test_linuo@example.com' },
+            { Name: 'email_verified', Value: 'true' },
+            { Name: 'custom:role', Value: Role.FreePlan },
+          ],
+        }),
+      );
+    }
 
-    // Set a permanent password so USER_PASSWORD_AUTH works.
+    // Always (re)set a permanent password so USER_PASSWORD_AUTH works even if the
+    // test account already existed with a different password.
     await this.cognitoClient.send(
       new AdminSetUserPasswordCommand({
         UserPoolId: this.userPoolId,
@@ -625,6 +628,6 @@ export class UserService {
       );
     }
 
-    this.logger.log(`Test account ensured: ${username}`);
+    this.logger.log(`Test account ensured: ${username} (exists=${exists})`);
   }
 }

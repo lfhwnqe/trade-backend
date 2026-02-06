@@ -546,8 +546,7 @@ export class CreateTradeDto {
   @Type(() => Number)
   @ValidateIf(
     (o) =>
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
+      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
   )
   exitPrice: number;
 
@@ -558,8 +557,7 @@ export class CreateTradeDto {
   @IsDateString({ strict: true })
   @ValidateIf(
     (o) =>
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
+      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
   )
   exitTime: string;
 
@@ -571,8 +569,7 @@ export class CreateTradeDto {
   @IsEnum(TradeResult)
   @ValidateIf(
     (o) =>
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
+      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
   )
   tradeResult: TradeResult;
 
@@ -583,8 +580,7 @@ export class CreateTradeDto {
   @IsBoolean()
   @ValidateIf(
     (o) =>
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
+      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
   )
   followedPlan: boolean;
 
@@ -633,8 +629,7 @@ export class CreateTradeDto {
   @IsString()
   @ValidateIf(
     (o) =>
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
+      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
   )
   actualPathAnalysis: string;
 

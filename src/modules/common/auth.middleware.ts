@@ -150,12 +150,27 @@ export class AuthMiddleware implements NestMiddleware {
         }
 
         // 限制 API token 只能访问 trade 模块
-        if (!req.path.startsWith('/trade')) {
+        // 注意：在某些 adapter/代理场景下，req.path 可能不含前导斜杠，或与 originalUrl 不一致。
+        const path = String((req as any).path || '');
+        const originalUrl = String((req as any).originalUrl || '');
+        const isTradeRoute =
+          path.startsWith('/trade') ||
+          path.startsWith('trade') ||
+          originalUrl.startsWith('/trade') ||
+          originalUrl.startsWith('trade');
+
+        // Debug (do not log token)
+        if (!isTradeRoute) {
+          console.log('[AuthMiddleware][apiToken] blocked route', {
+            path,
+            originalUrl,
+            method: (req as any).method,
+          });
           throw new AuthenticationException(
             'API token not allowed for this route',
             ERROR_CODES.AUTH_UNAUTHORIZED,
             'API token 无权访问该接口',
-            { path: req.path },
+            { path, originalUrl },
           );
         }
 
