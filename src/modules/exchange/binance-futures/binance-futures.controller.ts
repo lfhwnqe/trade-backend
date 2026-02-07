@@ -118,6 +118,18 @@ export class BinanceFuturesController {
     );
   }
 
+  @ApiOperation({ summary: '手动触发：重建已平仓仓位历史（由成交聚合）' })
+  @ApiResponse({ status: 200 })
+  @Post('positions/rebuild')
+  async rebuildPositions(
+    @Req() req: Request,
+    @Body() body: ImportBinanceFuturesDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.rebuildClosedPositions(userId, body.range);
+  }
+
   @ApiOperation({ summary: '把选中的已平仓仓位转换为系统 Trade（推荐）' })
   @ApiResponse({ status: 200 })
   @Post('positions/convert')

@@ -524,12 +524,8 @@ export class BinanceFuturesService {
       windowStart = windowEnd;
     }
 
-    // After fills import, rebuild closed positions for the same range (best-effort)
-    try {
-      await this.rebuildClosedPositions(userId, range);
-    } catch {
-      this.logger.warn('rebuildClosedPositions failed (ignored)');
-    }
+    // NOTE: Do NOT rebuild positions here; keep import fast.
+    // User can rebuild positions manually from UI.
 
     return {
       success: true,
