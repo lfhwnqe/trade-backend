@@ -813,6 +813,11 @@ export class BinanceFuturesService {
             ? TradeResult.LOSS
             : TradeResult.BREAKEVEN;
 
+      const profitLossPercentage =
+        typeof pos.pnlPercent === 'number' && Number.isFinite(pos.pnlPercent)
+          ? pos.pnlPercent
+          : 0;
+
       const dir =
         pos.positionSide === 'SHORT'
           ? EntryDirection.SHORT
@@ -840,7 +845,8 @@ export class BinanceFuturesService {
         exitTime: closeIso,
         exitPrice: pos.closePrice,
         tradeResult,
-        profitLossPercentage: pos.pnlPercent ?? 0,
+        profitLossPercentage,
+        tradeTags: ['binance', 'auto-import', 'position'],
         remarks: JSON.stringify(
           {
             source: 'binance-futures-positions',
@@ -853,8 +859,9 @@ export class BinanceFuturesService {
             closePrice: pos.closePrice,
             closedQty: pos.closedQty,
             maxOpenQty: pos.maxOpenQty,
+            currentQty: pos.currentQty,
             realizedPnl: pos.realizedPnl,
-            pnlPercent: pos.pnlPercent,
+            pnlPercent: profitLossPercentage,
             fees: pos.fees,
             feeAsset: pos.feeAsset,
             fillCount: pos.fillCount,
