@@ -8,7 +8,7 @@ import {
   BinanceFuturesFillRecord,
 } from './binance-futures.types';
 import { decryptText, encryptText } from './binance-futures.crypto';
-import { buildClosedPositionsFromFills } from './binance-futures.aggregator';
+import { buildClosedPositionsV2 } from './binance-futures.aggregator.v2';
 import { BinanceFuturesClosedPosition } from './binance-futures.positions';
 import {
   AuthorizationException,
@@ -618,15 +618,14 @@ export class BinanceFuturesService {
       );
     }
 
-    const { positions, ignoredFills } = buildClosedPositionsFromFills(
-      userId,
-      fillsAsc,
-    );
+    // V2: group by symbol+orderId+time+side then sessionize (one-way friendly)
+    const v2 = buildClosedPositionsV2(userId, fillsAsc);
+    const positions = v2.positions;
 
     if (debug) {
-      this.logger.log('[binance][rebuildClosedPositions] aggregated', {
+      this.logger.log('[binance][rebuildClosedPositions] v2', {
         scannedFills: fillsAsc.length,
-        ignoredFills,
+        groups: v2.groups,
         positions: positions.length,
       });
       const posSample = positions.slice(0, 3);
@@ -661,7 +660,7 @@ export class BinanceFuturesService {
       data: {
         rebuiltCount: positions.length,
         written,
-        ignoredFills,
+        ignoredFills: 0,
         scannedFills: fillsAsc.length,
       },
     };
