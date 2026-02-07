@@ -8,6 +8,8 @@ import {
   BinanceFuturesFillRecord,
 } from './binance-futures.types';
 import { decryptText, encryptText } from './binance-futures.crypto';
+import { buildClosedPositionsFromFills } from './binance-futures.aggregator';
+import { BinanceFuturesClosedPosition } from './binance-futures.positions';
 import {
   AuthorizationException,
   ResourceNotFoundException,
@@ -23,6 +25,7 @@ export class BinanceFuturesService {
   private readonly db: DynamoDBDocument;
   private readonly keysTableName: string;
   private readonly fillsTableName: string;
+  private readonly positionsTableName: string;
   private readonly encSecret: string;
 
   constructor(private readonly configService: ConfigService) {
@@ -36,6 +39,9 @@ export class BinanceFuturesService {
     );
     this.fillsTableName = this.configService.getOrThrow(
       'BINANCE_FUTURES_FILLS_TABLE_NAME',
+    );
+    this.positionsTableName = this.configService.getOrThrow(
+      'BINANCE_FUTURES_POSITIONS_TABLE_NAME',
     );
     this.encSecret = this.configService.getOrThrow('EXCHANGE_KEY_ENC_SECRET');
   }
@@ -518,6 +524,13 @@ export class BinanceFuturesService {
       windowStart = windowEnd;
     }
 
+    // After fills import, rebuild closed positions for the same range (best-effort)
+    try {
+      await this.rebuildClosedPositions(userId, range);
+    } catch {
+      this.logger.warn('rebuildClosedPositions failed (ignored)');
+    }
+
     return {
       success: true,
       data: {
@@ -528,6 +541,212 @@ export class BinanceFuturesService {
           toMs: now,
         },
       },
+    };
+  }
+
+  async rebuildClosedPositions(userId: string, range?: '7d' | '30d' | '1y') {
+    const now = Date.now();
+    const rangeMs =
+      range === '1y'
+        ? 365 * 24 * 60 * 60 * 1000
+        : range === '30d'
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000;
+    const fromMs = now - rangeMs;
+
+    // Load fills by time descending, then sort asc for aggregation
+    const all: any[] = [];
+    let nextToken: string | null = null;
+
+    // Safety cap to avoid runaway memory for 1y in extreme accounts
+    const hardCap = range === '1y' ? 200000 : range === '30d' ? 50000 : 15000;
+
+    while (true) {
+      const page = await this.listFills(userId, 200, nextToken);
+      const items = (page.data.items || []) as any[];
+      const filtered = items.filter((it) => Number(it.time) >= fromMs);
+      all.push(...filtered);
+      if (all.length >= hardCap) break;
+      nextToken = page.data.nextToken || null;
+      if (!nextToken) break;
+      // If the oldest item in this page is already older than fromMs, we can stop
+      const oldest = filtered[filtered.length - 1];
+      if (oldest && Number(oldest.time) < fromMs) break;
+      if (filtered.length === 0) break;
+    }
+
+    const fillsAsc = all
+      .slice()
+      .sort((a, b) => Number(a.time) - Number(b.time));
+
+    const { positions } = buildClosedPositionsFromFills(userId, fillsAsc);
+
+    const nowIso = new Date().toISOString();
+
+    for (const p of positions) {
+      const item: BinanceFuturesClosedPosition = {
+        ...p,
+        updatedAt: nowIso,
+      };
+
+      await this.db.put({
+        TableName: this.positionsTableName,
+        Item: item,
+      });
+    }
+
+    return {
+      success: true,
+      data: { rebuiltCount: positions.length },
+    };
+  }
+
+  async listPositions(
+    userId: string,
+    pageSize = 20,
+    nextToken?: string,
+    range?: '7d' | '30d' | '1y',
+  ) {
+    const ExclusiveStartKey = this.decodeNextToken(nextToken);
+
+    const now = Date.now();
+    const rangeMs =
+      range === '1y'
+        ? 365 * 24 * 60 * 60 * 1000
+        : range === '30d'
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000;
+    const fromMs = now - rangeMs;
+
+    const res = await this.db.query({
+      TableName: this.positionsTableName,
+      IndexName: 'userId-closeTime-index',
+      KeyConditionExpression: 'userId = :userId AND closeTime >= :fromMs',
+      ExpressionAttributeValues: { ':userId': userId, ':fromMs': fromMs },
+      Limit: Math.min(Math.max(pageSize, 1), 100),
+      ScanIndexForward: false,
+      ExclusiveStartKey,
+    });
+
+    return {
+      success: true,
+      data: {
+        items: (res.Items || []) as BinanceFuturesClosedPosition[],
+        nextToken: this.encodeNextToken(res.LastEvaluatedKey),
+      },
+    };
+  }
+
+  async convertPositionsToTrades(userId: string, positionKeys: string[]) {
+    if (!positionKeys || positionKeys.length === 0) {
+      return { success: true, data: { createdCount: 0 } };
+    }
+
+    const uniqueKeys = Array.from(new Set(positionKeys)).slice(0, 50);
+    const keys = uniqueKeys.map((positionKey) => ({ userId, positionKey }));
+
+    const batch = await this.db.batchGet({
+      RequestItems: {
+        [this.positionsTableName]: { Keys: keys },
+      },
+    });
+
+    const positions =
+      (batch.Responses?.[
+        this.positionsTableName
+      ] as BinanceFuturesClosedPosition[]) || [];
+
+    const transactionsTable = this.configService.getOrThrow(
+      'TRANSACTIONS_TABLE_NAME',
+    );
+
+    const { v4: uuidv4 } = await import('uuid');
+    const {
+      TradeType,
+      TradeStatus,
+      EntryDirection,
+      TradeResult,
+      MarketStructure,
+    } = await import('../../trade/dto/create-trade.dto');
+
+    const nowIso = new Date().toISOString();
+    let createdCount = 0;
+
+    for (const pos of positions) {
+      const transactionId = uuidv4();
+      const openIso = new Date(pos.openTime).toISOString();
+      const closeIso = new Date(pos.closeTime).toISOString();
+
+      const tradeResult =
+        pos.realizedPnl > 0
+          ? TradeResult.PROFIT
+          : pos.realizedPnl < 0
+            ? TradeResult.LOSS
+            : TradeResult.BREAKEVEN;
+
+      const dir =
+        pos.positionSide === 'SHORT'
+          ? EntryDirection.SHORT
+          : EntryDirection.LONG;
+
+      const trade = {
+        transactionId,
+        userId,
+        status: TradeStatus.EXITED,
+        tradeType: TradeType.REAL,
+        tradeSubject: pos.symbol,
+        analysisTime: openIso,
+        analysisPeriod: '1小时',
+        marketStructure: MarketStructure.UNSEEN,
+        marketStructureAnalysis:
+          'Binance futures auto-import (closed positions)',
+        entryPlanA: {
+          entryReason: '自动导入（币安合约已平仓仓位）',
+          entrySignal: '',
+          exitSignal: '',
+        },
+        entryDirection: dir,
+        entryTime: openIso,
+        entryPrice: pos.openPrice,
+        exitTime: closeIso,
+        exitPrice: pos.closePrice,
+        tradeResult,
+        profitLossPercentage: pos.pnlPercent ?? 0,
+        remarks: JSON.stringify(
+          {
+            source: 'binance-futures-positions',
+            positionKey: pos.positionKey,
+            symbol: pos.symbol,
+            positionSide: pos.positionSide,
+            openTime: pos.openTime,
+            closeTime: pos.closeTime,
+            openPrice: pos.openPrice,
+            closePrice: pos.closePrice,
+            closedQty: pos.closedQty,
+            maxOpenQty: pos.maxOpenQty,
+            realizedPnl: pos.realizedPnl,
+            pnlPercent: pos.pnlPercent,
+            fees: pos.fees,
+            feeAsset: pos.feeAsset,
+            fillCount: pos.fillCount,
+          },
+          null,
+          2,
+        ),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await this.db.put({
+        TableName: transactionsTable,
+        Item: trade,
+      });
+      createdCount += 1;
+    }
+
+    return {
+      success: true,
+      data: { createdCount },
     };
   }
 }

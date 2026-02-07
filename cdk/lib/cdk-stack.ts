@@ -221,6 +221,24 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    const binanceFuturesPositionsTable = new dynamodb.Table(
+      this,
+      `${appName}BinanceFuturesPositionsTable${envName}`,
+      {
+        tableName: `${appName}-binance-futures-positions-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'positionKey', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    binanceFuturesPositionsTable.addGlobalSecondaryIndex({
+      indexName: 'userId-closeTime-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'closeTime', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     webhookHooksTable.addGlobalSecondaryIndex({
       indexName: 'userId-createdAt-index',
       partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
@@ -307,6 +325,7 @@ export class TradingStack extends cdk.Stack {
           WEBHOOK_HOOKS_TABLE_NAME: webhookHooksTable.tableName,
           BINANCE_FUTURES_KEYS_TABLE_NAME: binanceFuturesKeysTable.tableName,
           BINANCE_FUTURES_FILLS_TABLE_NAME: binanceFuturesFillsTable.tableName,
+          BINANCE_FUTURES_POSITIONS_TABLE_NAME: binanceFuturesPositionsTable.tableName,
           EXCHANGE_KEY_ENC_SECRET: process.env.EXCHANGE_KEY_ENC_SECRET || '',
 
           // Telegram/webhook secrets (provided at deploy time via CDK env)
@@ -333,6 +352,7 @@ export class TradingStack extends cdk.Stack {
     webhookHooksTable.grantReadWriteData(fn);
     binanceFuturesKeysTable.grantReadWriteData(fn);
     binanceFuturesFillsTable.grantReadWriteData(fn);
+    binanceFuturesPositionsTable.grantReadWriteData(fn);
 
     // Grant Lambda permissions for RAG tables
 

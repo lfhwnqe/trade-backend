@@ -20,6 +20,8 @@ import { SetBinanceFuturesKeyDto } from './dto/set-binance-futures-key.dto';
 import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
 import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
+import { ListBinanceFuturesPositionsDto } from './dto/list-binance-futures-positions.dto';
+import { ConvertBinanceFuturesPositionsDto } from './dto/convert-binance-futures-positions.dto';
 
 @ApiTags('交易集成')
 @ApiBearerAuth()
@@ -96,5 +98,34 @@ export class BinanceFuturesController {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.convertFillsToTrades(userId, body.tradeKeys);
+  }
+
+  @ApiOperation({ summary: '分页查询：已平仓仓位历史（由成交聚合）' })
+  @ApiResponse({ status: 200 })
+  @Get('positions')
+  async listPositions(
+    @Req() req: Request,
+    @Query() query: ListBinanceFuturesPositionsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.listPositions(
+      userId,
+      query.pageSize ?? 20,
+      query.nextToken,
+      query.range,
+    );
+  }
+
+  @ApiOperation({ summary: '把选中的已平仓仓位转换为系统 Trade（推荐）' })
+  @ApiResponse({ status: 200 })
+  @Post('positions/convert')
+  async convertPositions(
+    @Req() req: Request,
+    @Body() body: ConvertBinanceFuturesPositionsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.convertPositionsToTrades(userId, body.positionKeys);
   }
 }
