@@ -23,4 +23,14 @@ export class ImportBinanceFuturesDto {
   @IsOptional()
   @IsString()
   range?: '7d' | '30d' | '1y';
+
+  @ApiProperty({
+    description:
+      '合约市场：usdtm（默认，USDⓈ-M，含 USDT/USDC 永续）| coinm（COIN-M / 币本位）',
+    required: false,
+    example: 'usdtm',
+  })
+  @IsOptional()
+  @IsString()
+  market?: 'usdtm' | 'coinm';
 }

@@ -70,7 +70,12 @@ export class BinanceFuturesController {
   async import(@Req() req: Request, @Body() body: ImportBinanceFuturesDto) {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
-    return this.binance.importFills(userId, body.symbols, body.range);
+    return this.binance.importFills(
+      userId,
+      body.symbols,
+      body.range,
+      body.market,
+    );
   }
 
   @ApiOperation({ summary: '分页查询：已同步的 Binance 合约成交记录（fills）' })

@@ -17,7 +17,8 @@ import {
 } from '../../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../../base/constants/error-codes';
 
-const BINANCE_FAPI_BASE = 'https://fapi.binance.com';
+const BINANCE_FAPI_BASE = 'https://fapi.binance.com'; // USDⓈ-M (USDT/USDC perpetual)
+const BINANCE_DAPI_BASE = 'https://dapi.binance.com'; // COIN-M (coin-margined)
 
 @Injectable()
 export class BinanceFuturesService {
@@ -127,6 +128,7 @@ export class BinanceFuturesService {
   }
 
   private async binanceFetch(
+    baseUrl: string,
     path: string,
     params: Record<string, string>,
     apiKey: string,
@@ -135,7 +137,7 @@ export class BinanceFuturesService {
     const searchParams = new URLSearchParams(params);
     const queryString = searchParams.toString();
     const signature = this.signQuery(queryString, apiSecret);
-    const url = `${BINANCE_FAPI_BASE}${path}?${queryString}&signature=${signature}`;
+    const url = `${baseUrl}${path}?${queryString}&signature=${signature}`;
 
     const res = await fetch(url, {
       method: 'GET',
@@ -362,7 +364,15 @@ export class BinanceFuturesService {
     userId: string,
     symbols?: string[],
     range?: '7d' | '30d' | '1y',
+    market?: 'usdtm' | 'coinm',
   ) {
+    const resolvedMarket = market || 'usdtm';
+    const baseUrl =
+      resolvedMarket === 'coinm' ? BINANCE_DAPI_BASE : BINANCE_FAPI_BASE;
+    const userTradesPath =
+      resolvedMarket === 'coinm'
+        ? '/dapi/v1/userTrades'
+        : '/fapi/v1/userTrades';
     const { apiKey, apiSecret } = await this.getApiKey(userId);
 
     const now = Date.now();
@@ -424,7 +434,8 @@ export class BinanceFuturesService {
 
       while (cursor < endTime) {
         const payload = await this.binanceFetch(
-          '/fapi/v1/userTrades',
+          baseUrl,
+          userTradesPath,
           {
             recvWindow: '5000',
             startTime: String(cursor),
@@ -464,7 +475,8 @@ export class BinanceFuturesService {
 
       while (cursor < endTime) {
         const payload = await this.binanceFetch(
-          '/fapi/v1/userTrades',
+          baseUrl,
+          userTradesPath,
           {
             symbol,
             recvWindow: '5000',
