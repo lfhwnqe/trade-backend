@@ -163,15 +163,21 @@ export class BinanceFuturesService {
 
   private normalizeFill(userId: string, raw: any): BinanceFuturesFillRecord {
     const importedAt = new Date().toISOString();
+
+    // Normalize side for different Binance payload variants
+    const side =
+      raw?.side ||
+      (raw?.buyer === true ? 'BUY' : raw?.buyer === false ? 'SELL' : undefined);
+
     return {
       userId,
       tradeId: String(raw?.id ?? raw?.tradeId ?? ''),
       symbol: String(raw?.symbol ?? ''),
       time: Number(raw?.time ?? raw?.timestamp ?? 0),
-      side: raw?.side,
+      side,
       positionSide: raw?.positionSide,
       price: raw?.price,
-      qty: raw?.qty,
+      qty: raw?.qty ?? raw?.executedQty,
       realizedPnl: raw?.realizedPnl,
       commission: raw?.commission,
       commissionAsset: raw?.commissionAsset,
@@ -575,7 +581,10 @@ export class BinanceFuturesService {
       .slice()
       .sort((a, b) => Number(a.time) - Number(b.time));
 
-    const { positions } = buildClosedPositionsFromFills(userId, fillsAsc);
+    const { positions, ignoredFills } = buildClosedPositionsFromFills(
+      userId,
+      fillsAsc,
+    );
 
     const nowIso = new Date().toISOString();
 
@@ -593,7 +602,11 @@ export class BinanceFuturesService {
 
     return {
       success: true,
-      data: { rebuiltCount: positions.length },
+      data: {
+        rebuiltCount: positions.length,
+        ignoredFills,
+        scannedFills: fillsAsc.length,
+      },
     };
   }
 
