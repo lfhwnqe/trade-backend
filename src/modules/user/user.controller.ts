@@ -19,6 +19,7 @@ import { LoginUserDto } from './dto/login-user.dto';
 import { ConfirmUserDto } from './dto/confirm-user.dto';
 import { CreateApiTokenDto } from './dto/create-api-token.dto';
 import { ListApiTokensDto } from './dto/list-api-tokens.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
 import {
   ApiTags,
@@ -142,6 +143,22 @@ export class UserController {
     const tokens = await this.cognitoService.refreshTokens(refreshToken || '');
     this.setAuthCookies(res, tokens);
     return tokens;
+  }
+
+  @ApiOperation({ summary: '修改密码（登录态）' })
+  @ApiBody({ type: ChangePasswordDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '修改成功' })
+  @ApiBearerAuth()
+  @Post('password/change')
+  @HttpCode(HttpStatus.OK)
+  async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
+    const accessToken = this.getCookieValue(req, 'token');
+    await this.cognitoService.changePassword(
+      accessToken || '',
+      dto.oldPassword,
+      dto.newPassword,
+    );
+    return { success: true };
   }
 
   // 任务要求：第一个用户默认为管理员 - 这部分逻辑通常在 UserService.register 中处理，或者有一个专门的初始化脚本。

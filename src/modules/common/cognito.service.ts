@@ -6,6 +6,7 @@ import { ERROR_CODES } from '../../base/constants/error-codes';
 import {
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
+  ChangePasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
@@ -163,6 +164,70 @@ export class CognitoService {
         ERROR_CODES.AUTH_TOKEN_INVALID,
         '登录状态已过期，请重新登录',
         { error: error?.name, message: error?.message },
+      );
+    }
+  }
+
+  /**
+   * 修改密码（登录态）
+   * - 使用 Cognito ChangePassword API
+   * - 需要 accessToken
+   */
+  async changePassword(
+    accessToken: string,
+    oldPassword: string,
+    newPassword: string,
+  ) {
+    if (!accessToken) {
+      throw new CognitoException(
+        'Access token is required',
+        ERROR_CODES.AUTH_TOKEN_MISSING,
+        '请先登录后再修改密码',
+      );
+    }
+
+    try {
+      const { client } = this.getCognitoClient();
+      await client.send(
+        new ChangePasswordCommand({
+          AccessToken: accessToken,
+          PreviousPassword: oldPassword,
+          ProposedPassword: newPassword,
+        }),
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      // Common Cognito errors:
+      // - NotAuthorizedException: old password wrong / invalid session
+      // - InvalidPasswordException: new password policy violation
+      const name = error?.name || 'UnknownError';
+      const message = error?.message || '';
+      this.logger.warn(`[cognito][changePassword] failed: ${name} ${message}`);
+
+      if (name === 'InvalidPasswordException') {
+        throw new CognitoException(
+          `Invalid new password: ${message}`,
+          ERROR_CODES.COGNITO_INVALID_PASSWORD,
+          '新密码不符合密码策略，请调整后重试',
+          { name, message },
+        );
+      }
+
+      if (name === 'NotAuthorizedException') {
+        throw new CognitoException(
+          `Change password unauthorized: ${message}`,
+          ERROR_CODES.AUTH_UNAUTHORIZED,
+          '旧密码不正确，或登录状态已失效',
+          { name, message },
+        );
+      }
+
+      throw new CognitoException(
+        `Change password failed: ${message}`,
+        ERROR_CODES.COGNITO_CONFIG_ERROR,
+        '修改密码失败，请稍后再试',
+        { name, message },
       );
     }
   }
