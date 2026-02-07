@@ -26,11 +26,13 @@ export function buildClosedPositionsFromFills(
 
   type State = {
     symbol: string;
-    side: 'LONG' | 'SHORT';
+    // In hedge mode, this is fixed. In one-way mode, it will be determined when session opens.
+    side: 'LONG' | 'SHORT' | null;
     openTime: number | null;
     closeTime: number | null;
 
-    // position qty (signed positive means open exposure)
+    // position qty (signed). For hedge mode it is magnitude of that side.
+    // For one-way mode: BUY -> +qty, SELL -> -qty.
     openQty: number;
     maxAbsQty: number;
 
@@ -48,8 +50,9 @@ export function buildClosedPositionsFromFills(
 
   const byKey = new Map<string, State>();
 
-  const getKey = (symbol: string, side: 'LONG' | 'SHORT') =>
+  const getHedgeKey = (symbol: string, side: 'LONG' | 'SHORT') =>
     `${symbol}#${side}`;
+  const getOneWayKey = (symbol: string) => `${symbol}#ONEWAY`;
 
   for (const f of fills) {
     const symbol = String(f.symbol || '').trim();
@@ -69,28 +72,27 @@ export function buildClosedPositionsFromFills(
       continue;
     }
 
-    // Determine position side
-    const ps = String(f.positionSide || '').toUpperCase();
-    let side: 'LONG' | 'SHORT' | null = null;
-
-    if (ps === 'LONG' || ps === 'SHORT') {
-      side = ps as any;
-    } else {
-      // Fallback for one-way mode: infer by side BUY/SELL
-      const s = String(f.side || '').toUpperCase();
-      if (s === 'BUY') side = 'LONG';
-      else if (s === 'SELL') side = 'SHORT';
-    }
-
-    if (!side) {
+    const rawSide = String(f.side || '').toUpperCase();
+    if (rawSide !== 'BUY' && rawSide !== 'SELL') {
       ignoredFills += 1;
       continue;
     }
 
-    const stateKey = getKey(symbol, side);
+    // Determine mode
+    const ps = String(f.positionSide || '').toUpperCase();
+    const isHedgeMode = ps === 'LONG' || ps === 'SHORT';
+
+    let stateKey: string;
+    if (isHedgeMode) {
+      stateKey = getHedgeKey(symbol, ps as 'LONG' | 'SHORT');
+    } else {
+      // One-way mode: positionSide may be BOTH/empty. Must net BUY/SELL within same bucket.
+      stateKey = getOneWayKey(symbol);
+    }
+
     const st: State = byKey.get(stateKey) || {
       symbol,
-      side,
+      side: isHedgeMode ? (ps as 'LONG' | 'SHORT') : null,
       openTime: null,
       closeTime: null,
       openQty: 0,
@@ -105,13 +107,20 @@ export function buildClosedPositionsFromFills(
       fillCount: 0,
     };
 
-    // qty sign: for LONG, BUY increases, SELL decreases; for SHORT, SELL increases, BUY decreases
-    const rawSide = String(f.side || '').toUpperCase();
+    // delta qty
+    // - Hedge mode: qty tracked for that positionSide bucket
+    // - One-way mode: BUY => +qty, SELL => -qty (netted)
     let delta = 0;
-    if (side === 'LONG') {
-      delta = rawSide === 'SELL' ? -qty : qty;
+    if (isHedgeMode) {
+      const side = ps as 'LONG' | 'SHORT';
+      // for LONG, BUY increases, SELL decreases; for SHORT, SELL increases, BUY decreases
+      if (side === 'LONG') {
+        delta = rawSide === 'SELL' ? -qty : qty;
+      } else {
+        delta = rawSide === 'BUY' ? -qty : qty;
+      }
     } else {
-      delta = rawSide === 'BUY' ? -qty : qty;
+      delta = rawSide === 'BUY' ? qty : -qty;
     }
 
     const prevQty = st.openQty;
@@ -129,6 +138,11 @@ export function buildClosedPositionsFromFills(
       st.fillCount = 0;
       st.maxAbsQty = 0;
       st.feeAsset = f.commissionAsset;
+
+      // one-way mode: decide direction by sign
+      if (!isHedgeMode) {
+        st.side = nextQty > 0 ? 'LONG' : 'SHORT';
+      }
     }
 
     // classify this fill as open/add or close/reduce based on whether it increases abs exposure
@@ -163,13 +177,14 @@ export function buildClosedPositionsFromFills(
       const pnlPercent = notional > 0 ? st.realizedPnl / notional : undefined;
 
       const nowIso = new Date().toISOString();
-      const positionKey = `${symbol}#${side}#${st.openTime}`;
+      const finalSide = st.side || 'LONG';
+      const positionKey = `${symbol}#${finalSide}#${st.openTime}`;
 
       positions.push({
         userId,
         positionKey,
         symbol,
-        positionSide: side,
+        positionSide: finalSide,
         openTime: st.openTime,
         closeTime: st.closeTime,
         openPrice,
