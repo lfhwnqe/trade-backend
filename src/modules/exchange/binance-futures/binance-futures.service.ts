@@ -620,13 +620,15 @@ export class BinanceFuturesService {
 
     // V2: group by symbol+orderId+time+side then sessionize (one-way friendly)
     const v2 = buildClosedPositionsV2(userId, fillsAsc);
-    const positions = v2.positions;
+    const positions = v2.closedPositions;
+    const openPositions = v2.openPositions;
 
     if (debug) {
       this.logger.log('[binance][rebuildClosedPositions] v2', {
         scannedFills: fillsAsc.length,
         groups: v2.groups,
-        positions: positions.length,
+        closedPositions: positions.length,
+        openPositions: openPositions.length,
       });
       const posSample = positions.slice(0, 3);
       this.logger.log(
@@ -660,6 +662,9 @@ export class BinanceFuturesService {
       data: {
         rebuiltCount: positions.length,
         written,
+        openCount: openPositions.length,
+        // open items are not persisted yet (for now). return a preview list.
+        openItems: openPositions.slice(0, 50),
         ignoredFills: 0,
         scannedFills: fillsAsc.length,
       },

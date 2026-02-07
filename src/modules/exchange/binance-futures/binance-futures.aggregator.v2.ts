@@ -82,8 +82,23 @@ export function groupFills(fills: BinanceFuturesFillRecord[]): FillGroup[] {
   return Array.from(map.values()).sort((a, b) => a.time - b.time);
 }
 
+export type BinanceFuturesOpenPosition = {
+  symbol: string;
+  positionSide: 'LONG' | 'SHORT';
+  openTime: number;
+  lastTime: number;
+  openPrice: number;
+  currentQty: number;
+  maxOpenQty: number;
+  realizedPnl: number;
+  fees: number;
+  feeAsset?: string;
+  fillCount: number;
+};
+
 export type BuildPositionsV2Result = {
-  positions: BinanceFuturesClosedPosition[];
+  closedPositions: BinanceFuturesClosedPosition[];
+  openPositions: BinanceFuturesOpenPosition[];
   groups: number;
 };
 
@@ -115,7 +130,7 @@ export function buildClosedPositionsV2(
   };
 
   const sessions = new Map<string, Session>(); // per symbol single session (one-way)
-  const positions: BinanceFuturesClosedPosition[] = [];
+  const closedPositions: BinanceFuturesClosedPosition[] = [];
 
   const eps = 1e-12;
   const nowIso = new Date().toISOString();
@@ -199,7 +214,7 @@ export function buildClosedPositionsV2(
 
       const positionKey = `${symbol}#${s.direction}#${s.openTime}`;
 
-      positions.push({
+      closedPositions.push({
         userId,
         positionKey,
         symbol,
@@ -224,5 +239,23 @@ export function buildClosedPositionsV2(
     }
   }
 
-  return { positions, groups: groups.length };
+  const openPositions = Array.from(sessions.values()).map((s) => {
+    const openPrice = s.openSumQty > 0 ? s.openSumPxQty / s.openSumQty : 0;
+
+    return {
+      symbol: s.symbol,
+      positionSide: s.direction,
+      openTime: s.openTime,
+      lastTime: s.closeTime,
+      openPrice,
+      currentQty: Math.abs(s.openQty),
+      maxOpenQty: s.maxAbsQty,
+      realizedPnl: s.realizedPnl,
+      fees: s.fees,
+      feeAsset: s.feeAsset,
+      fillCount: s.fillCount,
+    };
+  });
+
+  return { closedPositions, openPositions, groups: groups.length };
 }

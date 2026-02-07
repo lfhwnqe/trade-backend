@@ -90,10 +90,14 @@ describe('binance-futures aggregator v2', () => {
       }),
     ];
 
-    const { positions } = buildClosedPositionsV2('u', fills);
-    expect(positions.length).toBe(1);
+    const { closedPositions, openPositions } = buildClosedPositionsV2(
+      'u',
+      fills,
+    );
+    expect(openPositions.length).toBe(0);
+    expect(closedPositions.length).toBe(1);
 
-    const p = positions[0];
+    const p = closedPositions[0];
     expect(p.symbol).toBe('BTCUSDC');
     expect(p.positionSide).toBe('SHORT');
     expect(p.openTime).toBe(tOpen);
