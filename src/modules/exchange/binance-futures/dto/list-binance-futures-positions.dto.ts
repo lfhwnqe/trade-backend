@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import { IsOptional, IsString, IsInt, Min, Max, IsIn } from 'class-validator';
 
 export class ListBinanceFuturesPositionsDto {
@@ -9,6 +10,7 @@ export class ListBinanceFuturesPositionsDto {
 
   @ApiProperty({ required: false, description: '每页数量，默认 20，最大 100' })
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
