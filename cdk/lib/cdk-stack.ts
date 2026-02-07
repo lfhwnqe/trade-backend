@@ -312,7 +312,8 @@ export class TradingStack extends cdk.Stack {
         handler: 'lambda.handler',
         code: lambda.Code.fromAsset(path.join(__dirname, '../../dist')),
         functionName: functionName,
-        memorySize: 256,
+        memorySize: 512,
+        timeout: cdk.Duration.seconds(120),
         environment: {
           APP_ENV: envName,
           APP_NAME: appName,
