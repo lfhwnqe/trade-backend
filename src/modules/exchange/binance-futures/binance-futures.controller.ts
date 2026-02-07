@@ -148,6 +148,20 @@ export class BinanceFuturesController {
     return this.binance.convertPositionsToTrades(userId, body.positionKeys);
   }
 
+  @ApiOperation({
+    summary: '把选中的未平仓仓位转换为系统 Trade（进行中 / ENTERED）',
+  })
+  @ApiResponse({ status: 200 })
+  @Post('positions/convert-open')
+  async convertOpenPositions(
+    @Req() req: Request,
+    @Body() body: ConvertBinanceFuturesPositionsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.convertOpenPositionsToTrades(userId, body.positionKeys);
+  }
+
   @ApiOperation({ summary: '清空币安合约同步数据（不影响系统真实交易记录）' })
   @ApiResponse({ status: 200 })
   @Post('cleanup')

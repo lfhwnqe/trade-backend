@@ -886,6 +886,102 @@ export class BinanceFuturesService {
     };
   }
 
+  async convertOpenPositionsToTrades(userId: string, positionKeys: string[]) {
+    if (!positionKeys || positionKeys.length === 0) {
+      return { success: true, data: { createdCount: 0 } };
+    }
+
+    const uniqueKeys = Array.from(new Set(positionKeys)).slice(0, 50);
+    const keys = uniqueKeys.map((positionKey) => ({ userId, positionKey }));
+
+    const batch = await this.db.batchGet({
+      RequestItems: {
+        [this.positionsTableName]: { Keys: keys },
+      },
+    });
+
+    const positions =
+      (batch.Responses?.[
+        this.positionsTableName
+      ] as BinanceFuturesClosedPosition[]) || [];
+
+    const openPositions = positions.filter((p) => p.status === 'OPEN');
+
+    const transactionsTable = this.configService.getOrThrow(
+      'TRANSACTIONS_TABLE_NAME',
+    );
+
+    const { v4: uuidv4 } = await import('uuid');
+    const { TradeType, TradeStatus, EntryDirection, MarketStructure } =
+      await import('../../trade/dto/create-trade.dto');
+
+    const nowIso = new Date().toISOString();
+    let createdCount = 0;
+
+    for (const pos of openPositions) {
+      const transactionId = uuidv4();
+      const openIso = new Date(pos.openTime).toISOString();
+
+      const dir =
+        pos.positionSide === 'SHORT'
+          ? EntryDirection.SHORT
+          : EntryDirection.LONG;
+
+      const trade = {
+        transactionId,
+        userId,
+        status: TradeStatus.ENTERED,
+        tradeType: TradeType.REAL,
+        tradeSubject: pos.symbol,
+        analysisTime: openIso,
+        analysisPeriod: '1小时',
+        marketStructure: MarketStructure.UNSEEN,
+        marketStructureAnalysis: 'Binance futures auto-import (open position)',
+        entryPlanA: {
+          entryReason: '自动导入（币安合约未平仓仓位）',
+          entrySignal: '',
+          exitSignal: '',
+        },
+        entryDirection: dir,
+        entryTime: openIso,
+        entryPrice: pos.openPrice,
+        profitLossPercentage: 0,
+        tradeTags: ['binance', 'auto-import', 'open-position'],
+        remarks: JSON.stringify(
+          {
+            source: 'binance-futures-positions',
+            status: 'OPEN',
+            positionKey: pos.positionKey,
+            symbol: pos.symbol,
+            positionSide: pos.positionSide,
+            openTime: pos.openTime,
+            lastTime: pos.closeTime,
+            openPrice: pos.openPrice,
+            currentQty: pos.currentQty,
+            maxOpenQty: pos.maxOpenQty,
+            realizedPnl: pos.realizedPnl,
+            fees: pos.fees,
+            feeAsset: pos.feeAsset,
+            fillCount: pos.fillCount,
+          },
+          null,
+          2,
+        ),
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await this.db.put({
+        TableName: transactionsTable,
+        Item: trade,
+      });
+
+      createdCount += 1;
+    }
+
+    return { success: true, data: { createdCount } };
+  }
+
   async cleanupSyncedData(userId: string, includeKeys?: boolean) {
     let fillsDeleted = 0;
     let positionsDeleted = 0;
