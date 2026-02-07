@@ -115,6 +115,7 @@ export class BinanceFuturesController {
       query.pageSize ?? 20,
       query.nextToken,
       query.range,
+      query.status,
     );
   }
 

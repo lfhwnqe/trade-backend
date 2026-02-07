@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsOptional, IsString, IsInt, Min, Max, IsIn } from 'class-validator';
 
+export type BinancePositionStatus = 'open' | 'closed';
+
 export class ListBinanceFuturesPositionsDto {
   @ApiProperty({ required: false, description: '分页游标（base64）' })
   @IsOptional()
@@ -15,6 +17,11 @@ export class ListBinanceFuturesPositionsDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+
+  @ApiProperty({ required: false, description: '状态过滤：open | closed' })
+  @IsOptional()
+  @IsIn(['open', 'closed'])
+  status?: BinancePositionStatus;
 
   @ApiProperty({
     required: false,

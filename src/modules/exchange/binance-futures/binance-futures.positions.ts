@@ -20,6 +20,9 @@ export type BinanceFuturesClosedPosition = {
   fees?: number;
   feeAsset?: string;
 
+  status?: 'CLOSED' | 'OPEN';
+  currentQty?: number; // for OPEN: current abs qty
+
   source: 'binance-futures-fills';
   fillCount: number;
 

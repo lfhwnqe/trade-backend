@@ -643,6 +643,7 @@ export class BinanceFuturesService {
     for (const p of positions) {
       const item: BinanceFuturesClosedPosition = {
         ...p,
+        status: 'CLOSED',
         updatedAt: nowIso,
       };
 
@@ -651,6 +652,38 @@ export class BinanceFuturesService {
         Item: item,
       });
       written += 1;
+    }
+
+    // Persist open positions too (for pagination)
+    for (const op of openPositions) {
+      const positionKey = `${op.symbol}#${op.positionSide}#${op.openTime}`;
+      const item: BinanceFuturesClosedPosition = {
+        userId,
+        positionKey,
+        symbol: op.symbol,
+        positionSide: op.positionSide,
+        openTime: op.openTime,
+        closeTime: op.lastTime,
+        openPrice: op.openPrice,
+        closePrice: op.openPrice,
+        closedQty: 0,
+        maxOpenQty: op.maxOpenQty,
+        currentQty: op.currentQty,
+        realizedPnl: op.realizedPnl,
+        pnlPercent: undefined,
+        fees: op.fees,
+        feeAsset: op.feeAsset,
+        status: 'OPEN',
+        source: 'binance-futures-fills',
+        fillCount: op.fillCount,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      await this.db.put({
+        TableName: this.positionsTableName,
+        Item: item,
+      });
     }
 
     if (debug) {
@@ -663,7 +696,7 @@ export class BinanceFuturesService {
         rebuiltCount: positions.length,
         written,
         openCount: openPositions.length,
-        // open items are not persisted yet (for now). return a preview list.
+        // For now, return a preview list too (useful for quick UI update)
         openItems: openPositions.slice(0, 50),
         ignoredFills: 0,
         scannedFills: fillsAsc.length,
@@ -676,6 +709,7 @@ export class BinanceFuturesService {
     pageSize = 20,
     nextToken?: string,
     range?: '7d' | '30d' | '1y',
+    status?: 'open' | 'closed',
   ) {
     const ExclusiveStartKey = this.decodeNextToken(nextToken);
 
@@ -688,11 +722,24 @@ export class BinanceFuturesService {
           : 7 * 24 * 60 * 60 * 1000;
     const fromMs = now - rangeMs;
 
+    const filterStatus =
+      status === 'open' ? 'OPEN' : status === 'closed' ? 'CLOSED' : null;
+
     const res = await this.db.query({
       TableName: this.positionsTableName,
       IndexName: 'userId-closeTime-index',
       KeyConditionExpression: 'userId = :userId AND closeTime >= :fromMs',
-      ExpressionAttributeValues: { ':userId': userId, ':fromMs': fromMs },
+      ExpressionAttributeValues: {
+        ':userId': userId,
+        ':fromMs': fromMs,
+        ...(filterStatus ? { ':status': filterStatus } : {}),
+      },
+      ...(filterStatus
+        ? {
+            FilterExpression: '#status = :status',
+            ExpressionAttributeNames: { '#status': 'status' },
+          }
+        : {}),
       Limit: Math.min(Math.max(pageSize, 1), 100),
       ScanIndexForward: false,
       ExclusiveStartKey,
