@@ -131,7 +131,13 @@ export function buildClosedPositionsFromFills(
     }
 
     const prevQty = st.openQty;
-    const nextQty = prevQty + delta;
+    let nextQty = prevQty + delta;
+
+    // Avoid floating-point residue preventing position from returning to zero.
+    // qty is a decimal string in Binance payload; we parse to Number, so use epsilon.
+    if (Math.abs(nextQty) < 1e-12) {
+      nextQty = 0;
+    }
 
     // session open
     if (prevQty === 0 && nextQty !== 0) {
