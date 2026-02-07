@@ -190,12 +190,21 @@ export class BinanceFuturesService {
     });
   }
 
-  async importLastYearFills(userId: string, symbols?: string[]) {
+  async importFills(
+    userId: string,
+    symbols?: string[],
+    range?: '7d' | '30d' | '1y',
+  ) {
     const { apiKey, apiSecret } = await this.getApiKey(userId);
 
     const now = Date.now();
-    const oneYearMs = 365 * 24 * 60 * 60 * 1000;
-    const overallStart = now - oneYearMs;
+    const rangeMs =
+      range === '1y'
+        ? 365 * 24 * 60 * 60 * 1000
+        : range === '30d'
+          ? 30 * 24 * 60 * 60 * 1000
+          : 7 * 24 * 60 * 60 * 1000;
+    const overallStart = now - rangeMs;
 
     // Binance 限制：最大时间窗口 7 天（见 -4165）
     const maxWindowMs = 7 * 24 * 60 * 60 * 1000;
@@ -316,7 +325,7 @@ export class BinanceFuturesService {
       return total;
     };
 
-    // Iterate over 7-day windows for last 1 year
+    // Iterate over 7-day windows within selected range
     for (let windowStart = overallStart; windowStart < now; ) {
       const windowEnd = Math.min(windowStart + maxWindowMs, now);
 

@@ -13,4 +13,14 @@ export class ImportBinanceFuturesDto {
   @ArrayMaxSize(50)
   @IsString({ each: true })
   symbols?: string[];
+
+  @ApiProperty({
+    description:
+      '导入范围：7d（默认）| 30d | 1y。注意：Binance 单次查询最大 7 天，我们会自动分段。',
+    required: false,
+    example: '7d',
+  })
+  @IsOptional()
+  @IsString()
+  range?: '7d' | '30d' | '1y';
 }

@@ -66,6 +66,6 @@ export class BinanceFuturesController {
   async import(@Req() req: Request, @Body() body: ImportBinanceFuturesDto) {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
-    return this.binance.importLastYearFills(userId, body.symbols);
+    return this.binance.importFills(userId, body.symbols, body.range);
   }
 }
