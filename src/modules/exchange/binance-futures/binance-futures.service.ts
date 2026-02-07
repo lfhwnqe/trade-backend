@@ -556,6 +556,17 @@ export class BinanceFuturesService {
           : 7 * 24 * 60 * 60 * 1000;
     const fromMs = now - rangeMs;
 
+    const debug =
+      String(process.env.DEBUG_BINANCE || '').toLowerCase() === 'true';
+    if (debug) {
+      this.logger.log('[binance][rebuildClosedPositions] start', {
+        userId,
+        range: range || '7d',
+        fromMs,
+        toMs: now,
+      });
+    }
+
     // Load fills by time descending, then sort asc for aggregation
     const all: any[] = [];
     let nextToken: string | null = null;
@@ -568,6 +579,16 @@ export class BinanceFuturesService {
       const items = (page.data.items || []) as any[];
       const filtered = items.filter((it) => Number(it.time) >= fromMs);
       all.push(...filtered);
+
+      if (debug) {
+        this.logger.log('[binance][rebuildClosedPositions] page', {
+          got: items.length,
+          kept: filtered.length,
+          nextToken: Boolean(page.data.nextToken),
+          totalKept: all.length,
+        });
+      }
+
       if (all.length >= hardCap) break;
       nextToken = page.data.nextToken || null;
       if (!nextToken) break;
@@ -581,13 +602,43 @@ export class BinanceFuturesService {
       .slice()
       .sort((a, b) => Number(a.time) - Number(b.time));
 
+    if (debug) {
+      const sample = fillsAsc.slice(0, 5).map((f: any) => ({
+        symbol: f.symbol,
+        time: f.time,
+        side: f.side,
+        positionSide: f.positionSide,
+        qty: f.qty,
+        price: f.price,
+        realizedPnl: f.realizedPnl,
+      }));
+      this.logger.log(
+        '[binance][rebuildClosedPositions] fillsAsc sample',
+        sample,
+      );
+    }
+
     const { positions, ignoredFills } = buildClosedPositionsFromFills(
       userId,
       fillsAsc,
     );
 
+    if (debug) {
+      this.logger.log('[binance][rebuildClosedPositions] aggregated', {
+        scannedFills: fillsAsc.length,
+        ignoredFills,
+        positions: positions.length,
+      });
+      const posSample = positions.slice(0, 3);
+      this.logger.log(
+        '[binance][rebuildClosedPositions] positions sample',
+        posSample,
+      );
+    }
+
     const nowIso = new Date().toISOString();
 
+    let written = 0;
     for (const p of positions) {
       const item: BinanceFuturesClosedPosition = {
         ...p,
@@ -598,12 +649,18 @@ export class BinanceFuturesService {
         TableName: this.positionsTableName,
         Item: item,
       });
+      written += 1;
+    }
+
+    if (debug) {
+      this.logger.log('[binance][rebuildClosedPositions] written', { written });
     }
 
     return {
       success: true,
       data: {
         rebuiltCount: positions.length,
+        written,
         ignoredFills,
         scannedFills: fillsAsc.length,
       },
