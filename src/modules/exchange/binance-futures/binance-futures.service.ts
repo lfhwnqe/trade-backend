@@ -195,15 +195,10 @@ export class BinanceFuturesService {
 
     const now = Date.now();
     const oneYearMs = 365 * 24 * 60 * 60 * 1000;
-    const startTime = now - oneYearMs;
+    const overallStart = now - oneYearMs;
 
-    const baseParams: Record<string, string> = {
-      timestamp: String(Date.now()),
-      recvWindow: '5000',
-      startTime: String(startTime),
-      endTime: String(now),
-      limit: '1000',
-    };
+    // Binance 限制：最大时间窗口 7 天（见 -4165）
+    const maxWindowMs = 7 * 24 * 60 * 60 * 1000;
 
     const attemptNoSymbol = !symbols || symbols.length === 0;
 
@@ -212,70 +207,150 @@ export class BinanceFuturesService {
 
     const importFromPayload = async (payload: any) => {
       if (!Array.isArray(payload)) {
-        return;
+        return { count: 0, lastTime: null as number | null };
       }
+      let count = 0;
+      let lastTime: number | null = null;
+
       for (const raw of payload) {
         const fill = this.normalizeFill(userId, raw);
-        if (!fill.tradeId || !fill.symbol) continue;
+        if (!fill.tradeId || !fill.symbol || !fill.time) continue;
         try {
           await this.saveFill(fill);
           imported.push(fill);
+          count += 1;
         } catch (e: any) {
           // ConditionalCheckFailedException means duplicate
           if (String(e?.name || '').includes('ConditionalCheckFailed')) {
             skipped.push(Number(fill.tradeId));
-            continue;
-          }
-          // tolerate duplicates from DynamoDBDocument
-          if (String(e?.message || '').includes('ConditionalCheckFailed')) {
+          } else if (
+            String(e?.message || '').includes('ConditionalCheckFailed')
+          ) {
             skipped.push(Number(fill.tradeId));
-            continue;
+          } else {
+            throw e;
+          }
+        }
+
+        if (typeof fill.time === 'number' && Number.isFinite(fill.time)) {
+          if (lastTime === null || fill.time > lastTime) lastTime = fill.time;
+        }
+      }
+
+      return { count, lastTime };
+    };
+
+    const fetchWindowAll = async (startTime: number, endTime: number) => {
+      // paginate inside a window by moving startTime forward based on last fill time
+      let cursor = startTime;
+      let total = 0;
+
+      while (cursor < endTime) {
+        const payload = await this.binanceFetch(
+          '/fapi/v1/userTrades',
+          {
+            recvWindow: '5000',
+            startTime: String(cursor),
+            endTime: String(endTime),
+            limit: '1000',
+            timestamp: String(Date.now()),
+          },
+          apiKey,
+          apiSecret,
+        );
+
+        const { count, lastTime } = await importFromPayload(payload);
+        total += count;
+
+        if (!Array.isArray(payload) || payload.length === 0) break;
+        if (lastTime === null) break;
+
+        // Move cursor forward to avoid infinite loop on same timestamp
+        const nextCursor = lastTime + 1;
+        if (nextCursor <= cursor) break;
+        cursor = nextCursor;
+
+        // If returned less than limit, likely no more within window
+        if (payload.length < 1000) break;
+      }
+
+      return total;
+    };
+
+    const fetchWindowBySymbol = async (
+      symbol: string,
+      startTime: number,
+      endTime: number,
+    ) => {
+      let cursor = startTime;
+      let total = 0;
+
+      while (cursor < endTime) {
+        const payload = await this.binanceFetch(
+          '/fapi/v1/userTrades',
+          {
+            symbol,
+            recvWindow: '5000',
+            startTime: String(cursor),
+            endTime: String(endTime),
+            limit: '1000',
+            timestamp: String(Date.now()),
+          },
+          apiKey,
+          apiSecret,
+        );
+
+        const { count, lastTime } = await importFromPayload(payload);
+        total += count;
+
+        if (!Array.isArray(payload) || payload.length === 0) break;
+        if (lastTime === null) break;
+
+        const nextCursor = lastTime + 1;
+        if (nextCursor <= cursor) break;
+        cursor = nextCursor;
+
+        if (payload.length < 1000) break;
+      }
+
+      return total;
+    };
+
+    // Iterate over 7-day windows for last 1 year
+    for (let windowStart = overallStart; windowStart < now; ) {
+      const windowEnd = Math.min(windowStart + maxWindowMs, now);
+
+      if (attemptNoSymbol) {
+        try {
+          await fetchWindowAll(windowStart, windowEnd);
+        } catch (e: any) {
+          // If Binance requires symbol, ask caller to provide symbols
+          const msg = String(e?.message || '');
+          if (msg.includes('symbol') || msg.includes('Mandatory parameter')) {
+            throw new ValidationException(
+              'Binance requires symbol parameter; please provide symbols',
+              ERROR_CODES.VALIDATION_INVALID_VALUE,
+              'Binance 要求提供 symbol，请在导入时指定 symbols（如 BTCUSDT/ETHUSDT）',
+            );
           }
           throw e;
         }
-      }
-    };
-
-    if (attemptNoSymbol) {
-      try {
-        const payload = await this.binanceFetch(
-          '/fapi/v1/userTrades',
-          { ...baseParams },
-          apiKey,
-          apiSecret,
-        );
-        await importFromPayload(payload);
-      } catch (e: any) {
-        // If Binance requires symbol, ask caller to provide symbols
-        const msg = String(e?.message || '');
-        if (msg.includes('symbol') || msg.includes('Mandatory parameter')) {
+      } else {
+        if (symbols.length > 50) {
           throw new ValidationException(
-            'Binance requires symbol parameter; please provide symbols',
+            'Too many symbols',
             ERROR_CODES.VALIDATION_INVALID_VALUE,
-            'Binance 要求提供 symbol，请在导入时指定 symbols（如 BTCUSDT/ETHUSDT）',
+            'symbols 最多支持 50 个',
           );
         }
-        throw e;
-      }
-    } else {
-      if (symbols.length > 50) {
-        throw new ValidationException(
-          'Too many symbols',
-          ERROR_CODES.VALIDATION_INVALID_VALUE,
-          'symbols 最多支持 50 个',
-        );
+
+        for (const symbol of symbols) {
+          await fetchWindowBySymbol(symbol, windowStart, windowEnd);
+        }
       }
 
-      for (const symbol of symbols) {
-        // Refresh timestamp each call
-        const payload = await this.binanceFetch(
-          '/fapi/v1/userTrades',
-          { ...baseParams, symbol, timestamp: String(Date.now()) },
-          apiKey,
-          apiSecret,
-        );
-        await importFromPayload(payload);
-      }
+      // next window
+      windowStart = windowEnd;
     }
 
     return {
@@ -284,7 +359,7 @@ export class BinanceFuturesService {
         importedCount: imported.length,
         skippedCount: skipped.length,
         range: {
-          fromMs: startTime,
+          fromMs: overallStart,
           toMs: now,
         },
       },
