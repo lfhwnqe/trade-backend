@@ -28,6 +28,8 @@ export function buildClosedPositionsFromFills(
     symbol: string;
     // In hedge mode, this is fixed. In one-way mode, it will be determined when session opens.
     side: 'LONG' | 'SHORT' | null;
+    // first seen fill time (used when position started before current window)
+    firstTime: number | null;
     openTime: number | null;
     closeTime: number | null;
 
@@ -93,6 +95,7 @@ export function buildClosedPositionsFromFills(
     const st: State = byKey.get(stateKey) || {
       symbol,
       side: isHedgeMode ? (ps as 'LONG' | 'SHORT') : null,
+      firstTime: null,
       openTime: null,
       closeTime: null,
       openQty: 0,
@@ -106,6 +109,10 @@ export function buildClosedPositionsFromFills(
       feeAsset: f.commissionAsset,
       fillCount: 0,
     };
+
+    if (st.firstTime === null) {
+      st.firstTime = time;
+    }
 
     // delta qty
     // - Hedge mode: qty tracked for that positionSide bucket
@@ -164,7 +171,16 @@ export function buildClosedPositionsFromFills(
     st.fillCount += 1;
 
     // session close
-    if (prevQty !== 0 && nextQty === 0 && st.openTime) {
+    if (prevQty !== 0 && nextQty === 0) {
+      // If the position started before our current window, openTime may be null.
+      // In that case we still emit a closed position using firstTime as an approximation.
+      const openTime = st.openTime ?? st.firstTime;
+      if (!openTime) {
+        // can't determine open time at all
+        byKey.set(stateKey, st);
+        continue;
+      }
+
       st.closeTime = time;
 
       const openPrice =
@@ -177,15 +193,15 @@ export function buildClosedPositionsFromFills(
       const pnlPercent = notional > 0 ? st.realizedPnl / notional : undefined;
 
       const nowIso = new Date().toISOString();
-      const finalSide = st.side || 'LONG';
-      const positionKey = `${symbol}#${finalSide}#${st.openTime}`;
+      const finalSide = st.side || (st.openQty >= 0 ? 'LONG' : 'SHORT');
+      const positionKey = `${symbol}#${finalSide}#${openTime}`;
 
       positions.push({
         userId,
         positionKey,
         symbol,
         positionSide: finalSide,
-        openTime: st.openTime,
+        openTime,
         closeTime: st.closeTime,
         openPrice,
         closePrice,
