@@ -749,4 +749,90 @@ export class BinanceFuturesService {
       data: { createdCount },
     };
   }
+
+  async cleanupSyncedData(userId: string, includeKeys?: boolean) {
+    let fillsDeleted = 0;
+    let positionsDeleted = 0;
+
+    // 1) Delete fills
+    let startKey: any = undefined;
+    while (true) {
+      const res = await this.db.query({
+        TableName: this.fillsTableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ProjectionExpression: 'userId, tradeKey',
+        ExclusiveStartKey: startKey,
+        Limit: 200,
+      });
+
+      const requests = (res.Items || []).map((it: any) => ({
+        DeleteRequest: { Key: { userId: it.userId, tradeKey: it.tradeKey } },
+      }));
+
+      for (let i = 0; i < requests.length; i += 25) {
+        const chunk = requests.slice(i, i + 25);
+        if (chunk.length === 0) continue;
+        await this.db.batchWrite({
+          RequestItems: {
+            [this.fillsTableName]: chunk,
+          },
+        });
+        fillsDeleted += chunk.length;
+      }
+
+      startKey = res.LastEvaluatedKey;
+      if (!startKey) break;
+    }
+
+    // 2) Delete positions (table might not exist yet in some env)
+    try {
+      startKey = undefined;
+      while (true) {
+        const res = await this.db.query({
+          TableName: this.positionsTableName,
+          KeyConditionExpression: 'userId = :userId',
+          ExpressionAttributeValues: { ':userId': userId },
+          ProjectionExpression: 'userId, positionKey',
+          ExclusiveStartKey: startKey,
+          Limit: 200,
+        });
+
+        const requests = (res.Items || []).map((it: any) => ({
+          DeleteRequest: {
+            Key: { userId: it.userId, positionKey: it.positionKey },
+          },
+        }));
+
+        for (let i = 0; i < requests.length; i += 25) {
+          const chunk = requests.slice(i, i + 25);
+          if (chunk.length === 0) continue;
+          await this.db.batchWrite({
+            RequestItems: {
+              [this.positionsTableName]: chunk,
+            },
+          });
+          positionsDeleted += chunk.length;
+        }
+
+        startKey = res.LastEvaluatedKey;
+        if (!startKey) break;
+      }
+    } catch {
+      this.logger.warn('cleanup positions skipped');
+    }
+
+    if (includeKeys) {
+      await this.deleteApiKey(userId);
+    }
+
+    return {
+      success: true,
+      data: {
+        fillsDeleted,
+        positionsDeleted,
+        keysDeleted: Boolean(includeKeys),
+      },
+    };
+  }
 }

@@ -22,6 +22,7 @@ import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
 import { ListBinanceFuturesPositionsDto } from './dto/list-binance-futures-positions.dto';
 import { ConvertBinanceFuturesPositionsDto } from './dto/convert-binance-futures-positions.dto';
+import { CleanupBinanceFuturesDto } from './dto/cleanup-binance-futures.dto';
 
 @ApiTags('交易集成')
 @ApiBearerAuth()
@@ -127,5 +128,14 @@ export class BinanceFuturesController {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.convertPositionsToTrades(userId, body.positionKeys);
+  }
+
+  @ApiOperation({ summary: '清空币安合约同步数据（不影响系统真实交易记录）' })
+  @ApiResponse({ status: 200 })
+  @Post('cleanup')
+  async cleanup(@Req() req: Request, @Body() body: CleanupBinanceFuturesDto) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.cleanupSyncedData(userId, body.includeKeys);
   }
 }
