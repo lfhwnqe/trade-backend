@@ -6,6 +6,7 @@ import {
   Post,
   Req,
   ForbiddenException,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -17,6 +18,8 @@ import { Request } from 'express';
 import { BinanceFuturesService } from './binance-futures.service';
 import { SetBinanceFuturesKeyDto } from './dto/set-binance-futures-key.dto';
 import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
+import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
+import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
 
 @ApiTags('交易集成')
 @ApiBearerAuth()
@@ -58,14 +61,40 @@ export class BinanceFuturesController {
     return this.binance.deleteApiKey(userId);
   }
 
-  @ApiOperation({
-    summary: '手动触发：导入最近 1 年 Binance 合约成交记录（fills）',
-  })
+  @ApiOperation({ summary: '手动触发：导入 Binance 合约成交记录（fills）' })
   @ApiResponse({ status: 200 })
   @Post('import')
   async import(@Req() req: Request, @Body() body: ImportBinanceFuturesDto) {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.importFills(userId, body.symbols, body.range);
+  }
+
+  @ApiOperation({ summary: '分页查询：已同步的 Binance 合约成交记录（fills）' })
+  @ApiResponse({ status: 200 })
+  @Get('fills')
+  async listFills(
+    @Req() req: Request,
+    @Query() query: ListBinanceFuturesFillsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.listFills(
+      userId,
+      query.pageSize ?? 50,
+      query.nextToken,
+    );
+  }
+
+  @ApiOperation({ summary: '把选中的 fills 转换为系统 Trade（基础记录）' })
+  @ApiResponse({ status: 200 })
+  @Post('convert')
+  async convert(
+    @Req() req: Request,
+    @Body() body: ConvertBinanceFuturesFillsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.convertFillsToTrades(userId, body.tradeKeys);
   }
 }

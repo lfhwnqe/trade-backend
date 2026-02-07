@@ -13,6 +13,9 @@ export type BinanceFuturesFillRecord = {
   symbol: string;
   time: number;
 
+  // DynamoDB sort key, format: SYMBOL#tradeId
+  tradeKey?: string;
+
   // normalized fields (best-effort)
   side?: string;
   positionSide?: string;

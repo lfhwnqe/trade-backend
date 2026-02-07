@@ -190,6 +190,162 @@ export class BinanceFuturesService {
     });
   }
 
+  private encodeNextToken(key: any) {
+    if (!key) return null;
+    return Buffer.from(JSON.stringify(key), 'utf8').toString('base64');
+  }
+
+  private decodeNextToken(token?: string) {
+    if (!token) return undefined;
+    try {
+      const json = Buffer.from(token, 'base64').toString('utf8');
+      return JSON.parse(json);
+    } catch {
+      return undefined;
+    }
+  }
+
+  async listFills(userId: string, pageSize = 50, nextToken?: string) {
+    const ExclusiveStartKey = this.decodeNextToken(nextToken);
+
+    const res = await this.db.query({
+      TableName: this.fillsTableName,
+      IndexName: 'userId-time-index',
+      KeyConditionExpression: 'userId = :userId',
+      ExpressionAttributeValues: { ':userId': userId },
+      Limit: Math.min(Math.max(pageSize, 1), 200),
+      ScanIndexForward: false,
+      ExclusiveStartKey,
+    });
+
+    return {
+      success: true,
+      data: {
+        items: (res.Items || []) as BinanceFuturesFillRecord[],
+        nextToken: this.encodeNextToken(res.LastEvaluatedKey),
+      },
+    };
+  }
+
+  async convertFillsToTrades(userId: string, tradeKeys: string[]) {
+    if (!tradeKeys || tradeKeys.length === 0) {
+      return { success: true, data: { createdCount: 0 } };
+    }
+
+    const uniqueKeys = Array.from(new Set(tradeKeys)).slice(0, 100);
+
+    const keys = uniqueKeys.map((tradeKey) => ({ userId, tradeKey }));
+
+    const batch = await this.db.batchGet({
+      RequestItems: {
+        [this.fillsTableName]: {
+          Keys: keys,
+        },
+      },
+    });
+
+    const fills =
+      (batch.Responses?.[this.fillsTableName] as BinanceFuturesFillRecord[]) ||
+      [];
+
+    const transactionsTable = this.configService.getOrThrow(
+      'TRANSACTIONS_TABLE_NAME',
+    );
+
+    const { v4: uuidv4 } = await import('uuid');
+    const {
+      TradeType,
+      TradeStatus,
+      EntryDirection,
+      TradeResult,
+      MarketStructure,
+    } = await import('../../trade/dto/create-trade.dto');
+
+    const createdAt = new Date().toISOString();
+
+    let createdCount = 0;
+
+    for (const fill of fills) {
+      const transactionId = uuidv4();
+      const timeMs = Number(fill.time);
+      const timeIso = Number.isFinite(timeMs)
+        ? new Date(timeMs).toISOString()
+        : createdAt;
+
+      const realized = Number(fill.realizedPnl ?? 0);
+      const tradeResult =
+        realized > 0
+          ? TradeResult.PROFIT
+          : realized < 0
+            ? TradeResult.LOSS
+            : TradeResult.BREAKEVEN;
+
+      const dir =
+        String(fill.positionSide || '').toUpperCase() === 'SHORT'
+          ? EntryDirection.SHORT
+          : EntryDirection.LONG;
+
+      const entryPrice = Number(fill.price ?? 0);
+
+      const trade = {
+        transactionId,
+        userId,
+        status: TradeStatus.EXITED,
+        tradeType: TradeType.REAL,
+        tradeSubject: fill.symbol || 'UNKNOWN',
+        analysisTime: timeIso,
+        analysisPeriod: '1小时',
+        marketStructure: MarketStructure.UNSEEN,
+        marketStructureAnalysis: 'Binance futures auto-import (fills)',
+        entryPlanA: {
+          entryReason: '自动导入（币安合约成交）',
+          entrySignal: '',
+          exitSignal: '',
+        },
+        entryDirection: dir,
+        entryTime: timeIso,
+        entryPrice: Number.isFinite(entryPrice) ? entryPrice : undefined,
+        exitTime: timeIso,
+        profitLossPercentage: 0,
+        tradeResult,
+        remarks: JSON.stringify(
+          {
+            source: 'binance-futures',
+            tradeKey: fill.tradeKey || `${fill.symbol}#${fill.tradeId}`,
+            tradeId: fill.tradeId,
+            symbol: fill.symbol,
+            time: fill.time,
+            side: fill.side,
+            positionSide: fill.positionSide,
+            price: fill.price,
+            qty: fill.qty,
+            realizedPnl: fill.realizedPnl,
+            commission: fill.commission,
+            commissionAsset: fill.commissionAsset,
+            orderId: fill.orderId,
+          },
+          null,
+          2,
+        ),
+        createdAt,
+        updatedAt: createdAt,
+      };
+
+      if (!trade.tradeSubject || trade.tradeSubject === 'UNKNOWN') continue;
+
+      await this.db.put({
+        TableName: transactionsTable,
+        Item: trade,
+      });
+      createdCount += 1;
+    }
+
+    return {
+      success: true,
+      data: { createdCount },
+    };
+  }
+
   async importFills(
     userId: string,
     symbols?: string[],
