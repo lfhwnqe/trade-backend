@@ -801,7 +801,19 @@ export class BinanceFuturesService {
     const nowIso = new Date().toISOString();
     let createdCount = 0;
 
+    let skippedCount = 0;
+
     for (const pos of positions) {
+      if (pos.status && pos.status !== 'CLOSED') {
+        // skip OPEN positions here
+        continue;
+      }
+      // idempotency: skip if already converted
+      if ((pos as any).convertedAt || (pos as any).convertedTradeId) {
+        skippedCount += 1;
+        continue;
+      }
+
       const transactionId = uuidv4();
       const openIso = new Date(pos.openTime).toISOString();
       const closeIso = new Date(pos.closeTime).toISOString();
@@ -873,16 +885,45 @@ export class BinanceFuturesService {
         updatedAt: nowIso,
       };
 
-      await this.db.put({
-        TableName: transactionsTable,
-        Item: trade,
-      });
-      createdCount += 1;
+      try {
+        await this.db.transactWrite({
+          TransactItems: [
+            {
+              Put: {
+                TableName: transactionsTable,
+                Item: trade,
+              },
+            },
+            {
+              Update: {
+                TableName: this.positionsTableName,
+                Key: { userId, positionKey: pos.positionKey },
+                UpdateExpression:
+                  'SET convertedAt = :t, convertedTradeId = :tid',
+                ConditionExpression:
+                  'attribute_not_exists(convertedAt) AND attribute_not_exists(convertedTradeId)',
+                ExpressionAttributeValues: {
+                  ':t': nowIso,
+                  ':tid': transactionId,
+                },
+              },
+            },
+          ],
+        });
+
+        createdCount += 1;
+      } catch (e: any) {
+        if (e?.name === 'TransactionCanceledException') {
+          skippedCount += 1;
+          continue;
+        }
+        throw e;
+      }
     }
 
     return {
       success: true,
-      data: { createdCount },
+      data: { createdCount, skippedCount },
     };
   }
 
@@ -917,8 +958,15 @@ export class BinanceFuturesService {
 
     const nowIso = new Date().toISOString();
     let createdCount = 0;
+    let skippedCount = 0;
 
     for (const pos of openPositions) {
+      // idempotency: skip if already converted
+      if ((pos as any).convertedAt || (pos as any).convertedTradeId) {
+        skippedCount += 1;
+        continue;
+      }
+
       const transactionId = uuidv4();
       const openIso = new Date(pos.openTime).toISOString();
 
@@ -971,15 +1019,43 @@ export class BinanceFuturesService {
         updatedAt: nowIso,
       };
 
-      await this.db.put({
-        TableName: transactionsTable,
-        Item: trade,
-      });
+      try {
+        await this.db.transactWrite({
+          TransactItems: [
+            {
+              Put: {
+                TableName: transactionsTable,
+                Item: trade,
+              },
+            },
+            {
+              Update: {
+                TableName: this.positionsTableName,
+                Key: { userId, positionKey: pos.positionKey },
+                UpdateExpression:
+                  'SET convertedAt = :t, convertedTradeId = :tid',
+                ConditionExpression:
+                  'attribute_not_exists(convertedAt) AND attribute_not_exists(convertedTradeId)',
+                ExpressionAttributeValues: {
+                  ':t': nowIso,
+                  ':tid': transactionId,
+                },
+              },
+            },
+          ],
+        });
 
-      createdCount += 1;
+        createdCount += 1;
+      } catch (e: any) {
+        if (e?.name === 'TransactionCanceledException') {
+          skippedCount += 1;
+          continue;
+        }
+        throw e;
+      }
     }
 
-    return { success: true, data: { createdCount } };
+    return { success: true, data: { createdCount, skippedCount } };
   }
 
   async cleanupSyncedData(userId: string, includeKeys?: boolean) {
