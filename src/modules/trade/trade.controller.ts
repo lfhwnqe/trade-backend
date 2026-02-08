@@ -29,6 +29,7 @@ import {
 import { TradeQueryDto } from './dto/trade-query.dto';
 import { TradeImageUploadUrlDto } from './dto/trade-image-upload.dto';
 import { ImageService } from '../image/image.service';
+import { WebhookService } from '../webhook/webhook.service';
 
 @ApiTags('交易管理')
 @ApiBearerAuth()
@@ -37,6 +38,7 @@ export class TradeController {
   constructor(
     private readonly tradeService: TradeService,
     private readonly imageService: ImageService,
+    private readonly webhookService: WebhookService,
   ) {}
   // 首页统计 GET /trade/stats
   @ApiOperation({ summary: '获取本月已离场交易数和胜率' })
@@ -395,5 +397,145 @@ export class TradeController {
     if (!userId) throw new NotFoundException('用户信息异常');
     const result = await this.tradeService.copyTrade(userId, transactionId);
     return result;
+  }
+
+  // =========================
+  // Trade webhook (1 trade = 1 webhook)
+  // =========================
+
+  @ApiOperation({ summary: '为该 Trade 创建 webhook（1 trade = 1 webhook）' })
+  @ApiParam({ name: 'transactionId', description: '交易ID' })
+  @ApiResponse({ status: 201, description: '创建成功（secret 仅返回一次）' })
+  @Post(':transactionId/webhook')
+  async createTradeWebhook(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    // quota by role
+    const claims = (req as any).user?.claims || (req as any).user;
+    const role = String(claims?.['custom:role'] || claims?.role || '');
+    const groups: string[] =
+      (claims?.['cognito:groups'] as string[]) ||
+      (req as any).user?.groups ||
+      [];
+
+    const isAdmin =
+      role === 'Admins' ||
+      role === 'SuperAdmins' ||
+      groups.includes('Admins') ||
+      groups.includes('SuperAdmins');
+    const isPro = role === 'ProPlan';
+
+    const activeCount = await this.webhookService.countActiveHooks(userId);
+    const limit = isAdmin ? 5 : isPro ? 1 : 0;
+
+    if (limit === 0) {
+      throw new ForbiddenException('Free 用户无法创建 webhook，请升级 Pro');
+    }
+    if (activeCount >= limit) {
+      throw new ForbiddenException(
+        isPro
+          ? 'Pro 用户最多创建 1 个 webhook'
+          : 'Admin 用户最多创建 5 个 webhook',
+      );
+    }
+
+    // ensure trade exists & shortId exists
+    const tradeRes = await this.tradeService.getTrade(userId, transactionId);
+    const trade = tradeRes?.data as any;
+    const tradeShortId =
+      trade?.tradeShortId ||
+      (await this.tradeService.ensureTradeShortId(userId, transactionId));
+
+    if (!tradeShortId) {
+      throw new BadRequestException('tradeShortId 生成失败');
+    }
+
+    const hook = await this.webhookService.createHookForTrade({
+      userId,
+      tradeTransactionId: transactionId,
+      tradeShortId,
+      name: trade?.tradeSubject
+        ? `trade:${trade.tradeSubject}`
+        : 'trade-webhook',
+    });
+
+    return { success: true, data: hook };
+  }
+
+  @ApiOperation({ summary: '查看该 Trade 的 webhook 状态' })
+  @ApiParam({ name: 'transactionId', description: '交易ID' })
+  @Get(':transactionId/webhook')
+  async getTradeWebhook(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    // ensure trade exists
+    await this.tradeService.getTrade(userId, transactionId);
+
+    const hook = await this.webhookService.findActiveHookByTrade(
+      userId,
+      transactionId,
+    );
+
+    if (!hook) {
+      return { success: true, data: { exists: false } };
+    }
+
+    const { secretHash: _ignoreSecretHash, ...publicHook } = hook as any;
+    void _ignoreSecretHash;
+    return {
+      success: true,
+      data: {
+        exists: true,
+        hook: {
+          ...publicHook,
+          url: this.webhookService.buildTradeAlertUrl(publicHook.hookId),
+          triggerUrl:
+            publicHook.triggerToken && publicHook.tradeShortId
+              ? this.webhookService.buildTradingViewTriggerUrlForTrade(
+                  publicHook.triggerToken,
+                  publicHook.tradeShortId,
+                )
+              : publicHook.triggerToken
+                ? this.webhookService.buildTradingViewTriggerUrl(
+                    publicHook.triggerToken,
+                  )
+                : undefined,
+        },
+      },
+    };
+  }
+
+  @ApiOperation({ summary: '删除/撤销该 Trade 的 webhook' })
+  @ApiParam({ name: 'transactionId', description: '交易ID' })
+  @Delete(':transactionId/webhook')
+  async deleteTradeWebhook(
+    @Req() req: Request,
+    @Param('transactionId') transactionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    // ensure trade exists
+    await this.tradeService.getTrade(userId, transactionId);
+
+    const hook = await this.webhookService.findActiveHookByTrade(
+      userId,
+      transactionId,
+    );
+
+    if (!hook) {
+      return { success: true, data: { deleted: false } };
+    }
+
+    await this.webhookService.revokeHook(userId, hook.hookId);
+    return { success: true, data: { deleted: true } };
   }
 }

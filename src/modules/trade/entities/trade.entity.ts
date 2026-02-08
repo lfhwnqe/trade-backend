@@ -21,6 +21,9 @@ export interface Trade {
   transactionId: string; // 本次复盘唯一标识(UUID), DynamoDB sortKey
   userId: string; // 所属用户ID, DynamoDB partitionKey
 
+  // short id for external integrations (e.g. TradingView webhook url)
+  tradeShortId?: string; // e.g. tr_8f3k2a1b
+
   // ===== 交易状态 =====
   status: TradeStatus; // 交易状态: 已分析/待入场/已入场/已离场/提前离场
 

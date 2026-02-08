@@ -3,6 +3,7 @@ import { CreateTradeDto, TradeResult, TradeType } from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'node:crypto';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { ConfigService } from '../common/config.service';
@@ -38,9 +39,43 @@ export class TradeService {
     console.log('[TradeService] db:', this.db); // 打印 db 对象
   }
 
+  private base64Url(buf: Buffer) {
+    return buf
+      .toString('base64')
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replaceAll('=', '');
+  }
+
+  private generateTradeShortId() {
+    // 6 bytes => 8 chars base64url, plus prefix
+    return 'tr_' + this.base64Url(crypto.randomBytes(6));
+  }
+
+  async ensureTradeShortId(userId: string, transactionId: string) {
+    const tradeRes = await this.getTrade(userId, transactionId);
+    const trade = tradeRes?.data as Trade | undefined;
+    if (!trade) return null;
+    if (trade.tradeShortId) return trade.tradeShortId;
+
+    const shortId = this.generateTradeShortId();
+    const now = new Date().toISOString();
+    await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, transactionId },
+      UpdateExpression: 'SET tradeShortId = :sid, updatedAt = :u',
+      ExpressionAttributeValues: {
+        ':sid': shortId,
+        ':u': now,
+      },
+    });
+    return shortId;
+  }
+
   async createTrade(userId: string, dto: CreateTradeDto) {
     const now = new Date().toISOString();
     const transactionId = uuidv4();
+    const tradeShortId = this.generateTradeShortId();
 
     const normalizedProfitLossPercentage =
       dto.profitLossPercentage === undefined ||
@@ -88,6 +123,7 @@ export class TradeService {
     const newTrade: Trade = {
       transactionId,
       userId,
+      tradeShortId,
       tradeType: dto.tradeType,
       tradeSubject: dto.tradeSubject,
       grade: dto.grade,

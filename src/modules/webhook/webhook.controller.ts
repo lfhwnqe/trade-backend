@@ -210,6 +210,81 @@ export class WebhookController {
   }
 
   // TradingView-friendly endpoint (single unique URL, no headers)
+  // Trade-scoped: token + tradeShortId in path
+  @ApiOperation({
+    summary:
+      'Trade alert webhook (by triggerToken + tradeShortId) -> send message to bound telegram group',
+  })
+  @Post('webhook/trade-alert/:triggerToken/:tradeShortId')
+  @HttpCode(HttpStatus.OK)
+  async tradeAlertWebhookByTokenAndTrade(
+    @Param('triggerToken') triggerToken: string,
+    @Param('tradeShortId') tradeShortId: string,
+    @Body() body: { message?: string },
+  ) {
+    const message = body?.message;
+    if (!triggerToken || !tradeShortId) {
+      throw new ValidationException(
+        'triggerToken and tradeShortId required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '缺少 triggerToken 或 tradeShortId',
+      );
+    }
+    if (typeof message !== 'string' || message.trim().length === 0) {
+      throw new ValidationException(
+        'message required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '缺少 message',
+      );
+    }
+
+    const auth =
+      await this.webhookService.authenticateByTriggerToken(triggerToken);
+    if (!auth) {
+      // do not leak existence
+      return { success: true, data: { delivered: false } };
+    }
+
+    const hook = await this.webhookService.getHook(auth.hookId);
+    if (!hook || hook.revokedAt) {
+      return { success: true, data: { delivered: false } };
+    }
+
+    // Ensure this trigger URL matches the trade-scoped hook
+    if (hook.tradeShortId && hook.tradeShortId !== tradeShortId) {
+      return { success: true, data: { delivered: false } };
+    }
+
+    // rate limit: 1 per minute
+    const nowIso = new Date().toISOString();
+    const touch = await this.webhookService.touchTrigger(
+      auth.hookId,
+      nowIso,
+      60,
+    );
+    if (!touch.allowed) {
+      return {
+        success: true,
+        data: {
+          delivered: false,
+          reason: touch.reason,
+          nextInMs: (touch as any).nextInMs,
+        },
+      };
+    }
+
+    if (!hook.chatId) {
+      return {
+        success: true,
+        data: { delivered: false, reason: 'hook not bound to a telegram chat' },
+      };
+    }
+
+    await this.telegramService.sendMessage(hook.chatId, message);
+    return { success: true, data: { delivered: true } };
+  }
+
+  // Legacy TradingView-friendly endpoint (single unique URL, no headers)
   @ApiOperation({
     summary:
       'Trade alert webhook (by triggerToken) -> send message to bound telegram group',

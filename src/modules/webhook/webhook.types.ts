@@ -10,6 +10,10 @@ export type WebhookHook = {
   // NOTE: This token is a secret (acts like an API key) and is embedded in the URL.
   triggerToken?: string;
 
+  // Trade-scoped: 1 trade = 1 webhook
+  tradeTransactionId?: string;
+  tradeShortId?: string;
+
   // one hook -> one telegram group (chat)
   chatId?: number;
   chatType?: string;

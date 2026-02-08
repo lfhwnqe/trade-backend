@@ -126,6 +126,15 @@ export class WebhookService {
     return `${base}webhook/trade-alert/${triggerToken}`;
   }
 
+  buildTradingViewTriggerUrlForTrade(
+    triggerToken: string,
+    tradeShortId: string,
+  ) {
+    const base = this.getApiBaseUrl();
+    if (!base) return `/webhook/trade-alert/${triggerToken}/${tradeShortId}`;
+    return `${base}webhook/trade-alert/${triggerToken}/${tradeShortId}`;
+  }
+
   async createHook(
     userId: string,
     name?: string,
@@ -180,6 +189,111 @@ export class WebhookService {
     }
   }
 
+  async findActiveHookByTrade(userId: string, transactionId: string) {
+    if (!userId || !transactionId) return null;
+    // Quota is small (<=5), so a query by user and in-memory filter is acceptable.
+    const res = await this.db.query({
+      TableName: this.tableName,
+      IndexName: 'userId-createdAt-index',
+      KeyConditionExpression: 'userId = :u',
+      ExpressionAttributeValues: { ':u': userId },
+      FilterExpression: 'attribute_not_exists(revokedAt)',
+      ScanIndexForward: false,
+      Limit: 50,
+    });
+
+    const items = (res.Items || []) as WebhookHook[];
+    return (
+      items.find(
+        (it) =>
+          it.userId === userId &&
+          it.tradeTransactionId === transactionId &&
+          !it.revokedAt,
+      ) || null
+    );
+  }
+
+  async createHookForTrade(params: {
+    userId: string;
+    tradeTransactionId: string;
+    tradeShortId: string;
+    name?: string;
+  }): Promise<CreateWebhookHookResult> {
+    const { userId, tradeTransactionId, tradeShortId, name } = params;
+    if (!userId || !tradeTransactionId || !tradeShortId) {
+      throw new ValidationException(
+        'missing fields',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '缺少 userId / transactionId / tradeShortId',
+      );
+    }
+
+    const existing = await this.findActiveHookByTrade(
+      userId,
+      tradeTransactionId,
+    );
+    if (existing?.hookId && existing.triggerToken) {
+      const { secretHash: _ignoreSecretHash, ...publicHook } = existing;
+      void _ignoreSecretHash;
+      return {
+        hook: publicHook,
+        secret: '',
+        url: this.buildTradeAlertUrl(existing.hookId),
+        bindCode: this.createBindCode(userId, existing.hookId),
+        triggerUrl: this.buildTradingViewTriggerUrlForTrade(
+          existing.triggerToken,
+          tradeShortId,
+        ),
+      };
+    }
+
+    const now = new Date().toISOString();
+    const hookId = this.generateHookId();
+    const secret = this.generateSecret();
+    const triggerToken = this.generateTriggerToken();
+
+    const item: WebhookHook = {
+      hookId,
+      userId,
+      name: name?.trim() || undefined,
+      secretHash: this.hashSecret(secret),
+      triggerToken,
+      tradeTransactionId,
+      tradeShortId,
+      createdAt: now,
+    };
+
+    try {
+      await this.db.put({
+        TableName: this.tableName,
+        Item: item,
+        ConditionExpression: 'attribute_not_exists(hookId)',
+      });
+
+      const { secretHash: _ignoreSecretHash, ...publicHook } = item;
+      void _ignoreSecretHash;
+      return {
+        hook: publicHook,
+        secret,
+        url: this.buildTradeAlertUrl(hookId),
+        bindCode: this.createBindCode(userId, hookId),
+        triggerUrl: this.buildTradingViewTriggerUrlForTrade(
+          triggerToken,
+          tradeShortId,
+        ),
+      };
+    } catch (error: any) {
+      this.logger.error(
+        `createHookForTrade failed: ${error?.message || error}`,
+      );
+      throw new DynamoDBException(
+        `create hook failed: ${error.message}`,
+        ERROR_CODES.DYNAMODB_OPERATION_FAILED,
+        '创建 webhook 失败，请稍后重试',
+      );
+    }
+  }
+
   async listHooks(userId: string, limit = 20, cursor?: any) {
     try {
       const res = await this.db.query({
@@ -203,7 +317,12 @@ export class WebhookService {
           ...publicHook,
           url: this.buildTradeAlertUrl(publicHook.hookId),
           triggerUrl: publicHook.triggerToken
-            ? this.buildTradingViewTriggerUrl(publicHook.triggerToken)
+            ? publicHook.tradeShortId
+              ? this.buildTradingViewTriggerUrlForTrade(
+                  publicHook.triggerToken,
+                  publicHook.tradeShortId,
+                )
+              : this.buildTradingViewTriggerUrl(publicHook.triggerToken)
             : undefined,
         };
       });
