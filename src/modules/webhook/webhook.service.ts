@@ -344,12 +344,11 @@ export class WebhookService {
   async authenticateByTriggerToken(triggerToken: string) {
     if (!triggerToken) return null;
 
-    // Since triggerToken is random and unique, we can store it on the item and scan by GSI would be better,
-    // but we keep it simple here (table is per app, hooks count is small).
-    // TODO: if scale grows, add a GSI on triggerToken.
-    const res = await this.db.scan({
+    const res = await this.db.query({
       TableName: this.tableName,
-      FilterExpression: 'triggerToken = :t AND attribute_not_exists(revokedAt)',
+      IndexName: 'triggerToken-index',
+      KeyConditionExpression: 'triggerToken = :t',
+      FilterExpression: 'attribute_not_exists(revokedAt)',
       ExpressionAttributeValues: { ':t': triggerToken },
       Limit: 1,
     });

@@ -246,6 +246,12 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    webhookHooksTable.addGlobalSecondaryIndex({
+      indexName: 'triggerToken-index',
+      partitionKey: { name: 'triggerToken', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // Cognito User Pool
     const userPool = new cognito.UserPool(
       this,
