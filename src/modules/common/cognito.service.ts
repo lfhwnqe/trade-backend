@@ -7,6 +7,8 @@ import {
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
   ChangePasswordCommand,
+  ForgotPasswordCommand,
+  ConfirmForgotPasswordCommand,
 } from '@aws-sdk/client-cognito-identity-provider';
 
 @Injectable()
@@ -164,6 +166,97 @@ export class CognitoService {
         ERROR_CODES.AUTH_TOKEN_INVALID,
         '登录状态已过期，请重新登录',
         { error: error?.name, message: error?.message },
+      );
+    }
+  }
+
+  /**
+   * 发起忘记密码流程（向邮箱发送验证码）
+   */
+  async forgotPassword(usernameOrEmail: string) {
+    if (!usernameOrEmail) {
+      throw new CognitoException(
+        'email is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '请输入邮箱',
+      );
+    }
+
+    try {
+      const { client, clientId } = this.getCognitoClient();
+      await client.send(
+        new ForgotPasswordCommand({
+          ClientId: clientId,
+          Username: usernameOrEmail,
+        }),
+      );
+      return { success: true };
+    } catch (error: any) {
+      this.logger.warn(
+        `[cognito][forgotPassword] failed: ${error?.name || 'UnknownError'} ${error?.message || ''}`,
+      );
+      // For privacy, do not reveal whether user exists.
+      return { success: true };
+    }
+  }
+
+  /**
+   * 确认忘记密码（用验证码设置新密码）
+   */
+  async confirmForgotPassword(
+    usernameOrEmail: string,
+    code: string,
+    newPassword: string,
+  ) {
+    if (!usernameOrEmail || !code || !newPassword) {
+      throw new CognitoException(
+        'missing fields',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '请填写邮箱、验证码和新密码',
+      );
+    }
+
+    try {
+      const { client, clientId } = this.getCognitoClient();
+      await client.send(
+        new ConfirmForgotPasswordCommand({
+          ClientId: clientId,
+          Username: usernameOrEmail,
+          ConfirmationCode: code,
+          Password: newPassword,
+        }),
+      );
+      return { success: true };
+    } catch (error: any) {
+      const name = error?.name || 'UnknownError';
+      const message = error?.message || '';
+      this.logger.warn(
+        `[cognito][confirmForgotPassword] failed: ${name} ${message}`,
+      );
+
+      if (name === 'CodeMismatchException' || name === 'ExpiredCodeException') {
+        throw new CognitoException(
+          `Invalid code: ${message}`,
+          ERROR_CODES.COGNITO_CODE_MISMATCH,
+          '验证码不正确或已过期，请重试',
+          { name, message },
+        );
+      }
+
+      if (name === 'InvalidPasswordException') {
+        throw new CognitoException(
+          `Invalid new password: ${message}`,
+          ERROR_CODES.COGNITO_INVALID_PASSWORD,
+          '新密码不符合密码策略，请调整后重试',
+          { name, message },
+        );
+      }
+
+      throw new CognitoException(
+        `Reset password failed: ${message}`,
+        ERROR_CODES.COGNITO_CONFIG_ERROR,
+        '重置密码失败，请稍后再试',
+        { name, message },
       );
     }
   }

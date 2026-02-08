@@ -20,6 +20,8 @@ import { ConfirmUserDto } from './dto/confirm-user.dto';
 import { CreateApiTokenDto } from './dto/create-api-token.dto';
 import { ListApiTokensDto } from './dto/list-api-tokens.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 // import { AuthGuard } from '@nestjs/passport'; // 我们稍后会根据需要添加认证守卫
 import {
   ApiTags,
@@ -143,6 +145,31 @@ export class UserController {
     const tokens = await this.cognitoService.refreshTokens(refreshToken || '');
     this.setAuthCookies(res, tokens);
     return tokens;
+  }
+
+  @ApiOperation({ summary: '发起忘记密码（发送验证码到邮箱）' })
+  @ApiBody({ type: ForgotPasswordDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '已发送（或已接受请求）' })
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    // Privacy: always return success
+    await this.cognitoService.forgotPassword(dto.email);
+    return { success: true };
+  }
+
+  @ApiOperation({ summary: '确认忘记密码（验证码 + 新密码）' })
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiResponse({ status: HttpStatus.OK, description: '重置成功' })
+  @Post('password/reset')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.cognitoService.confirmForgotPassword(
+      dto.email,
+      dto.code,
+      dto.newPassword,
+    );
+    return { success: true };
   }
 
   @ApiOperation({ summary: '修改密码（登录态）' })
