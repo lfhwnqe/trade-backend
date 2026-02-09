@@ -23,6 +23,8 @@ import {
   EntryPlan,
   TradeType,
   ChecklistState,
+  ExitType,
+  ExitQualityTag,
 } from './create-trade.dto';
 import { TradeGrade } from './create-trade.dto';
 import { ApiProperty } from '@nestjs/swagger';
@@ -537,6 +539,109 @@ export class UpdateTradeDto {
   @Type(() => MarketStructureAnalysisImage)
   @ArrayMaxSize(5)
   analysisImagesDetailed?: MarketStructureAnalysisImage[];
+
+  // ===== R 模型（计划层） =====
+  @ApiProperty({ description: '风险模型版本', example: 'r-v1', required: false })
+  @IsOptional()
+  @IsString()
+  riskModelVersion?: string;
+
+  @ApiProperty({ description: '计划止损价', example: 145.0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedStopLossPrice?: number;
+
+  @ApiProperty({ description: '计划止盈价', example: 160.0, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedTakeProfitPrice?: number;
+
+  @ApiProperty({ description: '计划风险金额（可选）', example: 100, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedRiskAmount?: number;
+
+  @ApiProperty({ description: '计划风险占比（可选）', example: 1, required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedRiskPct?: number;
+
+  @ApiProperty({ description: '计划每单位风险', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedRiskPerUnit?: number;
+
+  @ApiProperty({ description: '计划每单位收益', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedRewardPerUnit?: number;
+
+  @ApiProperty({ description: '计划盈亏比（R）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  plannedRR?: number;
+
+  @ApiProperty({ description: '实现R（离场后自动计算）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  realizedR?: number;
+
+  @ApiProperty({ description: 'R效率（实现R/计划R）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  rEfficiency?: number;
+
+  @ApiProperty({ description: '离场偏差R（计划R-实现R）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  exitDeviationR?: number;
+
+  @ApiProperty({ description: 'MFE（R）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxFavorableExcursionR?: number;
+
+  @ApiProperty({ description: 'MAE（R）', required: false })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  maxAdverseExcursionR?: number;
+
+  @ApiProperty({ description: '离场类型', enum: ExitType, required: false })
+  @IsOptional()
+  @IsEnum(ExitType)
+  exitType?: ExitType;
+
+  @ApiProperty({ description: '离场质量标签', enum: ExitQualityTag, required: false })
+  @IsOptional()
+  @IsEnum(ExitQualityTag)
+  exitQualityTag?: ExitQualityTag;
+
+  @ApiProperty({ description: '离场原因代码', required: false })
+  @IsOptional()
+  @IsString()
+  exitReasonCode?: string;
+
+  @ApiProperty({ description: '离场原因备注', required: false })
+  @IsOptional()
+  @IsString()
+  exitReasonNote?: string;
+
+  @ApiProperty({ description: 'R指标是否可用', required: false })
+  @IsOptional()
+  @IsBoolean()
+  rMetricsReady?: boolean;
 
   // 保留一些基础计算字段
   @ApiProperty({ description: '盈亏百分比', example: 2.5, required: false })

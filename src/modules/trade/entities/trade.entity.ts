@@ -92,9 +92,33 @@ export interface Trade {
   analysisImages?: ImageResource[]; // 分析图（旧字段），最多5张
   analysisImagesDetailed?: MarketStructureAnalysisImage[]; // 分析图（新字段），最多5张
 
-  // 基础计算字段
-  profitLossPercentage?: number; // 盈亏百分比
-  riskRewardRatio?: string; // 风险回报比
+  // ===== R 模型（计划层） =====
+  riskModelVersion?: string; // 风险模型版本，例如 r-v1
+  plannedStopLossPrice?: number; // 计划止损价
+  plannedTakeProfitPrice?: number; // 计划止盈价
+  plannedRiskAmount?: number; // 计划风险金额（可选）
+  plannedRiskPct?: number; // 计划风险占比（可选）
+
+  // ===== R 模型（自动计算） =====
+  plannedRiskPerUnit?: number; // 计划每单位风险
+  plannedRewardPerUnit?: number; // 计划每单位收益
+  plannedRR?: number; // 计划盈亏比（R）
+  realizedR?: number; // 实现R
+  rEfficiency?: number; // R效率（实现R/计划R）
+  exitDeviationR?: number; // 离场偏差R（计划R-实现R）
+  maxFavorableExcursionR?: number; // MFE（R）
+  maxAdverseExcursionR?: number; // MAE（R）
+
+  // ===== 离场执行质量 =====
+  exitType?: 'TP' | 'SL' | 'MANUAL' | 'TIME' | 'FORCED';
+  exitQualityTag?: 'TECHNICAL' | 'EMOTIONAL' | 'SYSTEM' | 'UNKNOWN';
+  exitReasonCode?: string;
+  exitReasonNote?: string;
+  rMetricsReady?: boolean; // R指标是否可用
+
+  // 基础计算字段（兼容保留）
+  profitLossPercentage?: number; // 盈亏百分比（兼容）
+  riskRewardRatio?: string; // 风险回报比（旧字段）
   followedSystemStrictly?: boolean; // 是否严格遵守交易系统
 
   createdAt: string; // 记录创建时间 (ISO 8601)

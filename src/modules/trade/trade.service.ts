@@ -52,6 +52,93 @@ export class TradeService {
     return 'tr_' + this.base64Url(crypto.randomBytes(6));
   }
 
+  private computeRiskMetrics(input: Partial<Trade>): Partial<Trade> {
+    const entry = Number(input.entryPrice);
+    const stop = Number(input.plannedStopLossPrice ?? input.stopLoss);
+    const tp = Number(input.plannedTakeProfitPrice ?? input.takeProfit);
+    const exit = Number(input.exitPrice);
+    const direction = input.entryDirection;
+    const status = input.status;
+
+    if (!Number.isFinite(entry) || !Number.isFinite(stop)) {
+      return {
+        rMetricsReady: false,
+      };
+    }
+
+    const plannedRiskPerUnit = Math.abs(entry - stop);
+    if (!Number.isFinite(plannedRiskPerUnit) || plannedRiskPerUnit <= 0) {
+      return {
+        rMetricsReady: false,
+      };
+    }
+
+    const hasTp = Number.isFinite(tp);
+    const plannedRewardPerUnit = hasTp ? Math.abs(tp - entry) : undefined;
+    const plannedRR =
+      hasTp && plannedRewardPerUnit !== undefined
+        ? plannedRewardPerUnit / plannedRiskPerUnit
+        : undefined;
+
+    let realizedR: number | undefined;
+    if (Number.isFinite(exit) && (status === '已离场' || status === '提前离场')) {
+      if (direction === '空') {
+        const denom = stop - entry;
+        if (Number.isFinite(denom) && denom > 0) {
+          realizedR = (entry - exit) / denom;
+        }
+      } else {
+        const denom = entry - stop;
+        if (Number.isFinite(denom) && denom > 0) {
+          realizedR = (exit - entry) / denom;
+        }
+      }
+    }
+
+    const rEfficiency =
+      plannedRR !== undefined &&
+      Number.isFinite(plannedRR) &&
+      plannedRR > 0 &&
+      realizedR !== undefined
+        ? realizedR / plannedRR
+        : undefined;
+
+    const exitDeviationR =
+      plannedRR !== undefined && Number.isFinite(plannedRR) && realizedR !== undefined
+        ? plannedRR - realizedR
+        : undefined;
+
+    const rMetricsReady =
+      plannedRR !== undefined &&
+      Number.isFinite(plannedRR) &&
+      (status === '已离场' || status === '提前离场'
+        ? realizedR !== undefined && Number.isFinite(realizedR)
+        : true);
+
+    return {
+      riskModelVersion: input.riskModelVersion || 'r-v1',
+      plannedStopLossPrice:
+        Number.isFinite(Number(input.plannedStopLossPrice))
+          ? Number(input.plannedStopLossPrice)
+          : Number.isFinite(Number(input.stopLoss))
+            ? Number(input.stopLoss)
+            : undefined,
+      plannedTakeProfitPrice:
+        Number.isFinite(Number(input.plannedTakeProfitPrice))
+          ? Number(input.plannedTakeProfitPrice)
+          : Number.isFinite(Number(input.takeProfit))
+            ? Number(input.takeProfit)
+            : undefined,
+      plannedRiskPerUnit,
+      plannedRewardPerUnit,
+      plannedRR,
+      realizedR,
+      rEfficiency,
+      exitDeviationR,
+      rMetricsReady,
+    };
+  }
+
   async ensureTradeShortId(userId: string, transactionId: string) {
     const tradeRes = await this.getTrade(userId, transactionId);
     const trade = tradeRes?.data as Trade | undefined;
@@ -120,7 +207,7 @@ export class TradeService {
      * @param createdAt - 创建时间。
      * @param updatedAt - 更新时间。
      */
-    const newTrade: Trade = {
+    const rawTrade: Trade = {
       transactionId,
       userId,
       tradeShortId,
@@ -172,12 +259,29 @@ export class TradeService {
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
       analysisImagesDetailed: dto.analysisImagesDetailed,
+      // R模型字段
+      riskModelVersion: dto.riskModelVersion,
+      plannedStopLossPrice: dto.plannedStopLossPrice,
+      plannedTakeProfitPrice: dto.plannedTakeProfitPrice,
+      plannedRiskAmount: dto.plannedRiskAmount,
+      plannedRiskPct: dto.plannedRiskPct,
+      maxFavorableExcursionR: dto.maxFavorableExcursionR,
+      maxAdverseExcursionR: dto.maxAdverseExcursionR,
+      exitType: dto.exitType,
+      exitQualityTag: dto.exitQualityTag,
+      exitReasonCode: dto.exitReasonCode,
+      exitReasonNote: dto.exitReasonNote,
       // 基础计算字段
       profitLossPercentage: normalizedProfitLossPercentage,
       riskRewardRatio: dto.riskRewardRatio,
       followedSystemStrictly: dto.followedSystemStrictly,
       createdAt: now,
       updatedAt: now,
+    };
+
+    const newTrade: Trade = {
+      ...rawTrade,
+      ...this.computeRiskMetrics(rawTrade),
     };
     console.log('[TradeService] createTrade userId:', userId);
     try {
@@ -1350,10 +1454,15 @@ export class TradeService {
           : {}),
       };
 
-      const updated: Trade = {
+      const merged: Trade = {
         ...existingTrade,
         ...updatedTradeData, // updatedTradeData 现在包含了正确映射的属性
         updatedAt: new Date().toISOString(),
+      };
+
+      const updated: Trade = {
+        ...merged,
+        ...this.computeRiskMetrics(merged),
       };
       await this.db.put({
         TableName: this.tableName,
