@@ -31,11 +31,6 @@ export class WebhookService {
       marshallOptions: { convertClassInstanceToMap: true },
     });
   }
-
-  private hashSecret(secret: string) {
-    return crypto.createHash('sha256').update(secret).digest('hex');
-  }
-
   private generateTriggerToken() {
     return 'tw_' + base64Url(crypto.randomBytes(24));
   }
@@ -44,11 +39,6 @@ export class WebhookService {
     // short + url-safe
     return base64Url(crypto.randomBytes(18));
   }
-
-  private generateSecret() {
-    return base64Url(crypto.randomBytes(32));
-  }
-
   private getApiBaseUrl() {
     // optional, used to build full url to show to user
     const base = this.configService.get('API_ENDPOINT_URL');
@@ -112,14 +102,6 @@ export class WebhookService {
       return null;
     }
   }
-
-  buildTradeAlertUrl(hookId: string) {
-    const base = this.getApiBaseUrl();
-    // legacy
-    if (!base) return `/webhook/trade-alert/hook/${hookId}`;
-    return `${base}webhook/trade-alert/hook/${hookId}`;
-  }
-
   buildTradingViewTriggerUrl(triggerToken: string) {
     const base = this.getApiBaseUrl();
     if (!base) return `/webhook/trade-alert/${triggerToken}`;
@@ -149,7 +131,6 @@ export class WebhookService {
 
     const now = new Date().toISOString();
     const hookId = this.generateHookId();
-    const secret = this.generateSecret();
 
     const triggerToken = this.generateTriggerToken();
 
@@ -157,7 +138,6 @@ export class WebhookService {
       hookId,
       userId,
       name: name?.trim() || undefined,
-      secretHash: this.hashSecret(secret),
       triggerToken,
       createdAt: now,
     };
@@ -174,8 +154,6 @@ export class WebhookService {
       void _ignoreSecretHash;
       return {
         hook: publicHook,
-        secret,
-        url: this.buildTradeAlertUrl(hookId),
         bindCode: this.createBindCode(userId, hookId),
         triggerUrl: this.buildTradingViewTriggerUrl(triggerToken),
       };
@@ -237,8 +215,6 @@ export class WebhookService {
       void _ignoreSecretHash;
       return {
         hook: publicHook,
-        secret: '',
-        url: this.buildTradeAlertUrl(existing.hookId),
         bindCode: this.createBindCode(userId, existing.hookId),
         triggerUrl: this.buildTradingViewTriggerUrlForTrade(
           existing.triggerToken,
@@ -249,14 +225,12 @@ export class WebhookService {
 
     const now = new Date().toISOString();
     const hookId = this.generateHookId();
-    const secret = this.generateSecret();
     const triggerToken = this.generateTriggerToken();
 
     const item: WebhookHook = {
       hookId,
       userId,
       name: name?.trim() || undefined,
-      secretHash: this.hashSecret(secret),
       triggerToken,
       tradeTransactionId,
       tradeShortId,
@@ -274,8 +248,6 @@ export class WebhookService {
       void _ignoreSecretHash;
       return {
         hook: publicHook,
-        secret,
-        url: this.buildTradeAlertUrl(hookId),
         bindCode: this.createBindCode(userId, hookId),
         triggerUrl: this.buildTradingViewTriggerUrlForTrade(
           triggerToken,
@@ -315,7 +287,6 @@ export class WebhookService {
         void _ignoreSecretHash;
         return {
           ...publicHook,
-          url: this.buildTradeAlertUrl(publicHook.hookId),
           triggerUrl: publicHook.triggerToken
             ? publicHook.tradeShortId
               ? this.buildTradingViewTriggerUrlForTrade(
@@ -437,29 +408,6 @@ export class WebhookService {
     return (res.Item as WebhookHook | undefined) ?? null;
   }
 
-  async authenticateHook(hookId: string, secret: string) {
-    if (!hookId || !secret) return null;
-    const res = await this.db.get({
-      TableName: this.tableName,
-      Key: { hookId },
-    });
-    const item = res.Item as WebhookHook | undefined;
-    if (!item || item.revokedAt) return null;
-
-    const provided = this.hashSecret(secret);
-    try {
-      const ok = crypto.timingSafeEqual(
-        Buffer.from(provided),
-        Buffer.from(item.secretHash),
-      );
-      if (!ok) return null;
-    } catch {
-      return null;
-    }
-
-    return { userId: item.userId, hookId: item.hookId };
-  }
-
   async authenticateByTriggerToken(triggerToken: string) {
     if (!triggerToken) return null;
 
@@ -506,10 +454,11 @@ export class WebhookService {
 
       return { allowed: true };
     } catch (error: any) {
-      this.logger.error(`touchTrigger failed: ${error?.message || error}`);
+      this.logger.error('touchTrigger failed: ' + (error?.message || error));
       return { allowed: false, reason: 'touch_failed' };
     }
   }
+
 
   async countActiveHooks(userId: string): Promise<number> {
     const res = await this.db.query({

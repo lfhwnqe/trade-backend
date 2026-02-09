@@ -496,7 +496,6 @@ export class TradeController {
         exists: true,
         hook: {
           ...publicHook,
-          url: this.webhookService.buildTradeAlertUrl(publicHook.hookId),
           triggerUrl:
             publicHook.triggerToken && publicHook.tradeShortId
               ? this.webhookService.buildTradingViewTriggerUrlForTrade(

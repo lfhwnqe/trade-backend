@@ -2,7 +2,8 @@ export type WebhookHook = {
   hookId: string;
   userId: string;
   name?: string;
-  secretHash: string;
+  // legacy auth (deprecated): secretHash is kept for backward compatibility.
+  secretHash?: string;
   createdAt: string;
   revokedAt?: string;
 
@@ -26,9 +27,7 @@ export type WebhookHook = {
 
 export type CreateWebhookHookResult = {
   hook: Omit<WebhookHook, 'secretHash'>;
-  secret: string; // only returned once
-  url: string;
-  bindCode: string; // only returned once (used in telegram group: /bind <bindCode>)
+  bindCode: string; // used in telegram group: /bind <bindCode>
 
   // A single unique URL (no header), for TradingView
   triggerUrl: string;

@@ -42,8 +42,6 @@ export class AppModule implements NestModule {
         '/webhook/trade-alert',
         '/webhook/trade-alert/:triggerToken',
         '/webhook/trade-alert/:triggerToken/:tradeShortId',
-        // legacy
-        '/webhook/trade-alert/hook/:hookId',
       )
       .forRoutes('*');
   }
