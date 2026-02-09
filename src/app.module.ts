@@ -38,8 +38,12 @@ export class AppModule implements NestModule {
         '/svg-parser/validate',
         // Webhooks (must bypass cookie/api-token auth)
         '/webhook/telegram',
+        // TradingView-friendly endpoints (no auth)
         '/webhook/trade-alert',
-        '/webhook/trade-alert/:hookId',
+        '/webhook/trade-alert/:triggerToken',
+        '/webhook/trade-alert/:triggerToken/:tradeShortId',
+        // legacy
+        '/webhook/trade-alert/hook/:hookId',
       )
       .forRoutes('*');
   }
