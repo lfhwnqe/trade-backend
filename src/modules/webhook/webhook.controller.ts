@@ -344,7 +344,31 @@ export class WebhookController {
       };
     }
 
-    await this.telegramService.sendMessage(hook.chatId, message);
+    // Make it clawbot-friendly: include structured meta in the message.
+    const meta = {
+      kind: 'mmc_trade_alert',
+      source: 'tradingview',
+      deliveredAt: new Date().toISOString(),
+      tradeShortId: hook.tradeShortId,
+      transactionId: hook.tradeTransactionId,
+      hookId: hook.hookId,
+      triggerToken,
+    };
+
+    const formatted = [
+      `【Trade Alert】${hook.tradeShortId ? hook.tradeShortId : auth.hookId}`,
+      hook.name ? `Trade: ${hook.name}` : undefined,
+      `Message: ${message}`,
+      '',
+      'META_JSON:',
+      '```json',
+      JSON.stringify(meta, null, 2),
+      '```',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    await this.telegramService.sendMessage(hook.chatId, formatted);
     return { success: true, data: { delivered: true } };
   }
 }
