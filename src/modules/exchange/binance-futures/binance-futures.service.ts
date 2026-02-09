@@ -601,6 +601,11 @@ export class BinanceFuturesService {
           : 7 * 24 * 60 * 60 * 1000;
     const fromMs = now - rangeMs;
 
+    // Pre-window to avoid misclassifying positions when entry happened slightly before the selected range.
+    // Without this, we may see fake OPEN positions and lose CLOSED items in rebuild output.
+    const preWindowMs = 7 * 24 * 60 * 60 * 1000;
+    const fromMsEffective = fromMs - preWindowMs;
+
     const debug =
       String(process.env.DEBUG_BINANCE || '').toLowerCase() === 'true';
     if (debug) {
@@ -608,6 +613,7 @@ export class BinanceFuturesService {
         userId,
         range: range || '7d',
         fromMs,
+        fromMsEffective,
         toMs: now,
       });
     }
@@ -622,7 +628,7 @@ export class BinanceFuturesService {
     while (true) {
       const page = await this.listFills(userId, 200, nextToken);
       const items = (page.data.items || []) as any[];
-      const filtered = items.filter((it) => Number(it.time) >= fromMs);
+      const filtered = items.filter((it) => Number(it.time) >= fromMsEffective);
       all.push(...filtered);
 
       if (debug) {
@@ -637,9 +643,9 @@ export class BinanceFuturesService {
       if (all.length >= hardCap) break;
       nextToken = page.data.nextToken || null;
       if (!nextToken) break;
-      // If the oldest item in this page is already older than fromMs, we can stop
+      // If the oldest item in this page is already older than fromMsEffective, we can stop
       const oldest = filtered[filtered.length - 1];
-      if (oldest && Number(oldest.time) < fromMs) break;
+      if (oldest && Number(oldest.time) < fromMsEffective) break;
       if (filtered.length === 0) break;
     }
 
@@ -665,7 +671,9 @@ export class BinanceFuturesService {
 
     // V2: group by symbol+orderId+time+side then sessionize (one-way friendly)
     const v2 = buildClosedPositionsV2(userId, fillsAsc);
-    const positions = v2.closedPositions;
+
+    // Only count/persist closed positions that actually closed within the selected range.
+    const positions = v2.closedPositions.filter((p) => Number(p.closeTime) >= fromMs);
     const openPositions = v2.openPositions;
 
     if (debug) {
