@@ -582,12 +582,25 @@ export class BinanceFuturesService {
 
     const v2 = buildClosedPositionsV2(userId, fillsAsc);
 
+    const totals = fillsAsc.reduce(
+      (acc, f) => {
+        const side = String(f.side || '').toUpperCase();
+        const qty = Number(f.qty ?? 0);
+        if (!Number.isFinite(qty)) return acc;
+        if (side === 'BUY') acc.buyQty += qty;
+        if (side === 'SELL') acc.sellQty += qty;
+        return acc;
+      },
+      { buyQty: 0, sellQty: 0 },
+    );
+
     if (debug) {
       this.logger.log('[binance][rebuildPositionsPreview] v2', {
         scannedFills: fillsAsc.length,
         groups: v2.groups,
         closedPositions: v2.closedPositions.length,
         openPositions: v2.openPositions.length,
+        totals,
       });
     }
 
@@ -597,6 +610,10 @@ export class BinanceFuturesService {
         rebuiltCount: v2.closedPositions.length,
         openCount: v2.openPositions.length,
         scannedFills: fillsAsc.length,
+        totals: {
+          ...totals,
+          netQty: totals.buyQty - totals.sellQty,
+        },
         // return full output for debugging
         closedPositions: v2.closedPositions,
         openPositions: v2.openPositions,
