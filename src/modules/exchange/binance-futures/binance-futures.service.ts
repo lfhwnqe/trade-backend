@@ -47,14 +47,23 @@ export class BinanceFuturesService {
     this.encSecret = this.configService.getOrThrow('EXCHANGE_KEY_ENC_SECRET');
   }
 
-  async upsertApiKey(userId: string, apiKey: string, apiSecret: string) {
+  async upsertApiKey(
+    userId: string,
+    apiKey: string,
+    apiSecret: string,
+    defaultLeverage?: number,
+  ) {
     const now = new Date().toISOString();
     const secretEnc = encryptText(apiSecret, this.encSecret);
+
+    const leverageDefined =
+      typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage);
 
     const record: BinanceFuturesApiKeyRecord = {
       userId,
       apiKey,
       secretEnc,
+      defaultLeverage: leverageDefined ? defaultLeverage : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -78,6 +87,10 @@ export class BinanceFuturesService {
       data: {
         configured: Boolean(item?.apiKey && item?.secretEnc),
         apiKeyTail: item?.apiKey ? item.apiKey.slice(-6) : null,
+        defaultLeverage:
+          typeof item?.defaultLeverage === 'number'
+            ? item.defaultLeverage
+            : null,
         updatedAt: item?.updatedAt || null,
       },
     };
@@ -89,6 +102,26 @@ export class BinanceFuturesService {
       Key: { userId },
     });
     return { success: true, message: '删除成功' };
+  }
+
+  async updateSettings(userId: string, defaultLeverage?: number) {
+    const now = new Date().toISOString();
+
+    const leverageDefined =
+      typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage);
+
+    await this.db.update({
+      TableName: this.keysTableName,
+      Key: { userId },
+      UpdateExpression: `${leverageDefined ? 'SET defaultLeverage = :l, updatedAt = :t' : 'REMOVE defaultLeverage SET updatedAt = :t'}`,
+      ExpressionAttributeValues: {
+        ...(leverageDefined ? { ':l': defaultLeverage } : {}),
+        ':t': now,
+      },
+      ConditionExpression: 'attribute_exists(userId)',
+    });
+
+    return { success: true, message: '保存成功' };
   }
 
   private async getApiKey(userId: string) {
@@ -568,6 +601,11 @@ export class BinanceFuturesService {
           : 7 * 24 * 60 * 60 * 1000;
     const fromMs = now - rangeMs;
 
+    // Add a pre-window so we can properly close positions that were opened slightly before the selected range.
+    // This avoids fake OPEN sessions and missing CLOSED items.
+    const preWindowMs = 7 * 24 * 60 * 60 * 1000;
+    const fromMsEffective = fromMs - preWindowMs;
+
     const debug =
       String(process.env.DEBUG_BINANCE || '').toLowerCase() === 'true';
     if (debug) {
@@ -575,6 +613,7 @@ export class BinanceFuturesService {
         userId,
         range: range || '7d',
         fromMs,
+        fromMsEffective,
         toMs: now,
       });
     }
@@ -589,7 +628,7 @@ export class BinanceFuturesService {
     while (true) {
       const page = await this.listFills(userId, 200, nextToken);
       const items = (page.data.items || []) as any[];
-      const filtered = items.filter((it) => Number(it.time) >= fromMs);
+      const filtered = items.filter((it) => Number(it.time) >= fromMsEffective);
       all.push(...filtered);
 
       if (debug) {
@@ -604,9 +643,9 @@ export class BinanceFuturesService {
       if (all.length >= hardCap) break;
       nextToken = page.data.nextToken || null;
       if (!nextToken) break;
-      // If the oldest item in this page is already older than fromMs, we can stop
+      // If the oldest item in this page is already older than fromMsEffective, we can stop
       const oldest = filtered[filtered.length - 1];
-      if (oldest && Number(oldest.time) < fromMs) break;
+      if (oldest && Number(oldest.time) < fromMsEffective) break;
       if (filtered.length === 0) break;
     }
 
@@ -632,7 +671,9 @@ export class BinanceFuturesService {
 
     // V2: group by symbol+orderId+time+side then sessionize (one-way friendly)
     const v2 = buildClosedPositionsV2(userId, fillsAsc);
-    const positions = v2.closedPositions;
+
+    // Only persist closed positions that actually closed within the selected range.
+    const positions = v2.closedPositions.filter((p) => Number(p.closeTime) >= fromMs);
     const openPositions = v2.openPositions;
 
     if (debug) {
@@ -757,10 +798,45 @@ export class BinanceFuturesService {
       ExclusiveStartKey,
     });
 
+    let defaultLeverage: number | null = null;
+    try {
+      const keyRes = await this.db.get({
+        TableName: this.keysTableName,
+        Key: { userId },
+      });
+      const keyItem = keyRes.Item as BinanceFuturesApiKeyRecord | undefined;
+      if (
+        typeof keyItem?.defaultLeverage === 'number' &&
+        Number.isFinite(keyItem.defaultLeverage)
+      ) {
+        defaultLeverage = keyItem.defaultLeverage;
+      }
+    } catch {
+      // ignore
+    }
+
+    const items = (res.Items || []) as BinanceFuturesClosedPosition[];
+    const enriched = items.map((it: any) => {
+      const pnlPercentNotional =
+        typeof it.pnlPercent === 'number' && Number.isFinite(it.pnlPercent)
+          ? it.pnlPercent
+          : undefined;
+      const roiPercent =
+        defaultLeverage && pnlPercentNotional !== undefined
+          ? pnlPercentNotional * defaultLeverage
+          : undefined;
+      return {
+        ...it,
+        defaultLeverage,
+        pnlPercentNotional,
+        roiPercent,
+      };
+    });
+
     return {
       success: true,
       data: {
-        items: (res.Items || []) as BinanceFuturesClosedPosition[],
+        items: enriched,
         nextToken: this.encodeNextToken(res.LastEvaluatedKey),
       },
     };
