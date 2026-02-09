@@ -81,6 +81,19 @@ export class AuthMiddleware implements NestMiddleware {
         console.log('[AuthMiddleware] 命中白名单，放行');
         return next();
       }
+
+      // Webhooks must bypass auth (TradingView / Telegram)
+      // NOTE: In some deployments (e.g. API Gateway stage prefix), req.path/originalUrl may include extra prefixes.
+      const path = String((req as any).path || '');
+      const originalUrl = String((req as any).originalUrl || '');
+      const isWebhookRoute =
+        path.includes('/webhook/telegram') ||
+        path.includes('/webhook/trade-alert') ||
+        originalUrl.includes('/webhook/telegram') ||
+        originalUrl.includes('/webhook/trade-alert');
+      if (isWebhookRoute) {
+        return next();
+      }
       const accessToken = this.getCookieValue(req, 'token');
 
       // 1) 优先 cookie accessToken（Cognito）
