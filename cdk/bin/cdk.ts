@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
 import { TradingStack } from '../lib/cdk-stack';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+
+// Load repo-root .env (trade-backend/.env) for local `cdk deploy`
+// This makes sure secrets like TELEGRAM_WEBHOOK_SECRET are injected into Lambda env.
+const envPath = path.resolve(__dirname, '../../.env');
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+}
 
 const app = new cdk.App();
 
