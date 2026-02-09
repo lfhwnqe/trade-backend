@@ -17,7 +17,6 @@ import {
 import { Request } from 'express';
 import { BinanceFuturesService } from './binance-futures.service';
 import { SetBinanceFuturesKeyDto } from './dto/set-binance-futures-key.dto';
-import { UpdateBinanceFuturesSettingsDto } from './dto/update-binance-futures-settings.dto';
 import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
 import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
@@ -53,12 +52,7 @@ export class BinanceFuturesController {
   async setKey(@Req() req: Request, @Body() body: SetBinanceFuturesKeyDto) {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
-    return this.binance.upsertApiKey(
-      userId,
-      body.apiKey,
-      body.apiSecret,
-      body.defaultLeverage,
-    );
+    return this.binance.upsertApiKey(userId, body.apiKey, body.apiSecret);
   }
 
   @ApiOperation({ summary: '删除 Binance 合约 API Key' })
@@ -68,18 +62,6 @@ export class BinanceFuturesController {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.deleteApiKey(userId);
-  }
-
-  @ApiOperation({ summary: '更新 Binance 合约设置（无需重新填写 API Secret）' })
-  @ApiResponse({ status: 200 })
-  @Post('settings')
-  async updateSettings(
-    @Req() req: Request,
-    @Body() body: UpdateBinanceFuturesSettingsDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.updateSettings(userId, body.defaultLeverage);
   }
 
   @ApiOperation({ summary: '手动触发：导入 Binance 合约成交记录（fills）' })
