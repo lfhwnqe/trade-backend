@@ -21,6 +21,7 @@ import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
 import { RebuildPositionsPreviewDto } from './dto/rebuild-positions-preview.dto';
 import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
+import { AggregateBinanceFuturesFillsDto } from './dto/aggregate-binance-futures-fills.dto';
 import { ListBinanceFuturesPositionsDto } from './dto/list-binance-futures-positions.dto';
 import { ConvertBinanceFuturesPositionsDto } from './dto/convert-binance-futures-positions.dto';
 import { CleanupBinanceFuturesDto } from './dto/cleanup-binance-futures.dto';
@@ -105,6 +106,36 @@ export class BinanceFuturesController {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.convertFillsToTrades(userId, body.tradeKeys);
+  }
+
+  @ApiOperation({
+    summary:
+      '手动聚合：把选中的 fills 聚合为一笔仓位（预览，不写库）',
+  })
+  @ApiResponse({ status: 200 })
+  @Post('fills/aggregate-preview')
+  async aggregateFillsPreview(
+    @Req() req: Request,
+    @Body() body: AggregateBinanceFuturesFillsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.aggregateFillsPreview(userId, body.tradeKeys);
+  }
+
+  @ApiOperation({
+    summary:
+      '手动聚合：把选中的 fills 聚合为一笔系统 Trade（可后续编辑）',
+  })
+  @ApiResponse({ status: 200 })
+  @Post('fills/aggregate-convert')
+  async aggregateFillsConvert(
+    @Req() req: Request,
+    @Body() body: AggregateBinanceFuturesFillsDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.aggregateFillsConvert(userId, body.tradeKeys);
   }
 
   @ApiOperation({ summary: '分页查询：已平仓仓位历史（由成交聚合）' })

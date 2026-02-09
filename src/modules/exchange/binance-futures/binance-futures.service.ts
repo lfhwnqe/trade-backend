@@ -558,6 +558,199 @@ export class BinanceFuturesService {
     };
   }
 
+  async aggregateFillsPreview(userId: string, tradeKeys: string[]) {
+    if (!tradeKeys || tradeKeys.length === 0) {
+      return {
+        success: true,
+        data: {
+          scannedFills: 0,
+          totals: { buyQty: 0, sellQty: 0, netQty: 0 },
+          preview: null,
+          closedPositions: [],
+          openPositions: [],
+          warnings: ['未选择任何成交记录'],
+        },
+      };
+    }
+
+    const uniqueKeys = Array.from(new Set(tradeKeys)).slice(0, 100);
+    const keys = uniqueKeys.map((tradeKey) => ({ userId, tradeKey }));
+
+    const batch = await this.db.batchGet({
+      RequestItems: {
+        [this.fillsTableName]: {
+          Keys: keys,
+        },
+      },
+    });
+
+    const fills =
+      (batch.Responses?.[this.fillsTableName] as BinanceFuturesFillRecord[]) ||
+      [];
+
+    const fillsAsc = fills
+      .slice()
+      .sort((a, b) => Number(a.time) - Number(b.time));
+
+    const v2 = buildClosedPositionsV2(userId, fillsAsc);
+
+    const totals = fillsAsc.reduce(
+      (acc, f) => {
+        const side = String(f.side || '').toUpperCase();
+        const qty = Number(f.qty ?? 0);
+        if (!Number.isFinite(qty)) return acc;
+        if (side === 'BUY') acc.buyQty += qty;
+        if (side === 'SELL') acc.sellQty += qty;
+        return acc;
+      },
+      { buyQty: 0, sellQty: 0 },
+    );
+
+    const warnings: string[] = [];
+    if (fills.length !== uniqueKeys.length) {
+      warnings.push(
+        `部分 tradeKey 未找到：请求 ${uniqueKeys.length} 条，命中 ${fills.length} 条（可能数据未同步或已清理）`,
+      );
+    }
+
+    // If the selected fills correspond to a single closed position, we prefer returning that.
+    const preview =
+      v2.closedPositions.length > 0
+        ? v2.closedPositions[0]
+        : v2.openPositions.length > 0
+          ? v2.openPositions[0]
+          : null;
+
+    return {
+      success: true,
+      data: {
+        scannedFills: fillsAsc.length,
+        totals: {
+          ...totals,
+          netQty: totals.buyQty - totals.sellQty,
+        },
+        preview,
+        closedPositions: v2.closedPositions,
+        openPositions: v2.openPositions,
+        warnings,
+      },
+    };
+  }
+
+  async aggregateFillsConvert(userId: string, tradeKeys: string[]) {
+    const previewRes = await this.aggregateFillsPreview(userId, tradeKeys);
+    if (!previewRes.success) return previewRes;
+
+    const { preview, totals } = (previewRes as any).data || {};
+    if (!preview) {
+      return {
+        success: false,
+        errorType: 'VALIDATION',
+        errorCode: ERROR_CODES.VALIDATION_INVALID_VALUE,
+        error: '无法聚合：未产生任何预览结果',
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    const transactionId = (await import('uuid')).v4();
+
+    const {
+      TradeType,
+      TradeStatus,
+      EntryDirection,
+      TradeResult,
+      MarketStructure,
+    } = await import('../../trade/dto/create-trade.dto');
+
+    const openTimeMs = Number((preview as any).openTime || 0);
+    const closeTimeMs = Number((preview as any).closeTime || 0);
+
+    const entryTimeIso = Number.isFinite(openTimeMs)
+      ? new Date(openTimeMs).toISOString()
+      : new Date().toISOString();
+
+    const isClosed =
+      Array.isArray((previewRes as any).data?.closedPositions) &&
+      (previewRes as any).data.closedPositions.length > 0 &&
+      Math.abs(Number(totals?.netQty ?? 0)) < 1e-12;
+
+    const realized = Number((preview as any).realizedPnl ?? 0);
+    const tradeResult =
+      realized > 0
+        ? TradeResult.PROFIT
+        : realized < 0
+          ? TradeResult.LOSS
+          : TradeResult.BREAKEVEN;
+
+    const positionSide = String((preview as any).positionSide || '').toUpperCase();
+    const entryDirection =
+      positionSide === 'SHORT' ? EntryDirection.SHORT : EntryDirection.LONG;
+
+    const trade: any = {
+      transactionId,
+      userId,
+      status: isClosed ? TradeStatus.EXITED : TradeStatus.ENTERED,
+      tradeType: TradeType.REAL,
+      tradeSubject: (preview as any).symbol || 'UNKNOWN',
+      analysisTime: entryTimeIso,
+      analysisPeriod: '1小时',
+      marketStructure: MarketStructure.UNSEEN,
+      marketStructureAnalysis: 'Binance futures manual aggregate (selected fills)',
+      entryPlanA: {
+        entryReason: '自动聚合（手动勾选币安成交）',
+        entrySignal: '',
+        exitSignal: '',
+      },
+      entryDirection,
+      entryTime: entryTimeIso,
+      entryPrice: (preview as any).openPrice,
+      ...(isClosed
+        ? {
+            exitTime: Number.isFinite(closeTimeMs)
+              ? new Date(closeTimeMs).toISOString()
+              : entryTimeIso,
+            exitPrice: (preview as any).closePrice,
+            tradeResult,
+            profitLossPercentage:
+              typeof (preview as any).pnlPercent === 'number'
+                ? (preview as any).pnlPercent
+                : 0,
+          }
+        : { profitLossPercentage: 0 }),
+      tradeTags: ['binance', 'auto-import', 'manual-aggregate'],
+      remarks: JSON.stringify(
+        {
+          source: 'binance-futures-fills/manual-aggregate',
+          tradeKeys,
+          totals,
+          preview,
+        },
+        null,
+        2,
+      ),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const transactionsTable = this.configService.getOrThrow(
+      'TRANSACTIONS_TABLE_NAME',
+    );
+
+    await this.db.put({
+      TableName: transactionsTable,
+      Item: trade,
+    });
+
+    return {
+      success: true,
+      data: {
+        createdCount: 1,
+        transactionId,
+        isClosed,
+      },
+    };
+  }
+
   async rebuildPositionsPreview(userId: string, fillsJson: any[]) {
     const debug =
       String(process.env.DEBUG_BINANCE || '').toLowerCase() === 'true';
