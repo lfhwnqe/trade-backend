@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class AggregateBinanceFuturesFillsDto {
   @ApiProperty({
@@ -10,4 +10,11 @@ export class AggregateBinanceFuturesFillsDto {
   @IsArray()
   @IsString({ each: true })
   tradeKeys: string[];
+
+  @ApiPropertyOptional({ description: '用于 ROI 估算的杠杆', example: 30 })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(125)
+  leverage?: number;
 }

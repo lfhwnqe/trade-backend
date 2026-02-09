@@ -47,7 +47,12 @@ export class BinanceFuturesService {
     this.encSecret = this.configService.getOrThrow('EXCHANGE_KEY_ENC_SECRET');
   }
 
-  async upsertApiKey(userId: string, apiKey: string, apiSecret: string) {
+  async upsertApiKey(
+    userId: string,
+    apiKey: string,
+    apiSecret: string,
+    defaultLeverage?: number,
+  ) {
     const now = new Date().toISOString();
     const secretEnc = encryptText(apiSecret, this.encSecret);
 
@@ -55,6 +60,10 @@ export class BinanceFuturesService {
       userId,
       apiKey,
       secretEnc,
+      defaultLeverage:
+        typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage)
+          ? defaultLeverage
+          : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -78,6 +87,10 @@ export class BinanceFuturesService {
       data: {
         configured: Boolean(item?.apiKey && item?.secretEnc),
         apiKeyTail: item?.apiKey ? item.apiKey.slice(-6) : null,
+        defaultLeverage:
+          typeof item?.defaultLeverage === 'number'
+            ? item.defaultLeverage
+            : null,
         updatedAt: item?.updatedAt || null,
       },
     };
@@ -89,6 +102,27 @@ export class BinanceFuturesService {
       Key: { userId },
     });
     return { success: true, message: '删除成功' };
+  }
+
+  async updateSettings(userId: string, defaultLeverage?: number) {
+    const now = new Date().toISOString();
+    const leverageDefined =
+      typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage);
+
+    await this.db.update({
+      TableName: this.keysTableName,
+      Key: { userId },
+      UpdateExpression: leverageDefined
+        ? 'SET defaultLeverage = :l, updatedAt = :t'
+        : 'REMOVE defaultLeverage SET updatedAt = :t',
+      ExpressionAttributeValues: {
+        ...(leverageDefined ? { ':l': defaultLeverage } : {}),
+        ':t': now,
+      },
+      ConditionExpression: 'attribute_exists(userId)',
+    });
+
+    return { success: true, message: '保存成功' };
   }
 
   private async getApiKey(userId: string) {
@@ -558,7 +592,11 @@ export class BinanceFuturesService {
     };
   }
 
-  async aggregateFillsPreview(userId: string, tradeKeys: string[]) {
+  async aggregateFillsPreview(
+    userId: string,
+    tradeKeys: string[],
+    leverage?: number,
+  ) {
     if (!tradeKeys || tradeKeys.length === 0) {
       return {
         success: true,
@@ -621,6 +659,40 @@ export class BinanceFuturesService {
           ? v2.openPositions[0]
           : null;
 
+    let defaultLeverage: number | null = null;
+    try {
+      const keyRes = await this.db.get({
+        TableName: this.keysTableName,
+        Key: { userId },
+      });
+      const keyItem = keyRes.Item as BinanceFuturesApiKeyRecord | undefined;
+      if (
+        typeof keyItem?.defaultLeverage === 'number' &&
+        Number.isFinite(keyItem.defaultLeverage)
+      ) {
+        defaultLeverage = keyItem.defaultLeverage;
+      }
+    } catch {
+      // ignore
+    }
+
+    const leverageUsed =
+      typeof leverage === 'number' && Number.isFinite(leverage)
+        ? leverage
+        : defaultLeverage;
+
+    const pnlPercentNotional =
+      preview && typeof (preview as any).pnlPercent === 'number'
+        ? (preview as any).pnlPercent
+        : null;
+
+    const roiPercent =
+      typeof leverageUsed === 'number' &&
+      pnlPercentNotional !== null &&
+      Number.isFinite(pnlPercentNotional)
+        ? pnlPercentNotional * leverageUsed
+        : null;
+
     return {
       success: true,
       data: {
@@ -629,6 +701,10 @@ export class BinanceFuturesService {
           ...totals,
           netQty: totals.buyQty - totals.sellQty,
         },
+        defaultLeverage,
+        leverageUsed,
+        pnlPercentNotional,
+        roiPercent,
         preview,
         closedPositions: v2.closedPositions,
         openPositions: v2.openPositions,
@@ -715,11 +791,16 @@ export class BinanceFuturesService {
     };
   }
 
-  async aggregateFillsConvert(userId: string, tradeKeys: string[]) {
-    const previewRes = await this.aggregateFillsPreview(userId, tradeKeys);
+  async aggregateFillsConvert(
+    userId: string,
+    tradeKeys: string[],
+    leverage?: number,
+  ) {
+    const previewRes = await this.aggregateFillsPreview(userId, tradeKeys, leverage);
     if (!previewRes.success) return previewRes;
 
-    const { preview, totals } = (previewRes as any).data || {};
+    const { preview, totals, leverageUsed, roiPercent, pnlPercentNotional } =
+      (previewRes as any).data || {};
     if (!preview) {
       return {
         success: false,
@@ -790,9 +871,11 @@ export class BinanceFuturesService {
             exitPrice: (preview as any).closePrice,
             tradeResult,
             profitLossPercentage:
-              typeof (preview as any).pnlPercent === 'number'
-                ? (preview as any).pnlPercent
-                : 0,
+              typeof roiPercent === 'number' && Number.isFinite(roiPercent)
+                ? roiPercent
+                : typeof (preview as any).pnlPercent === 'number'
+                  ? (preview as any).pnlPercent
+                  : 0,
           }
         : { profitLossPercentage: 0 }),
       tradeTags: ['binance', 'auto-import', 'manual-aggregate'],
@@ -801,6 +884,9 @@ export class BinanceFuturesService {
           source: 'binance-futures-fills/manual-aggregate',
           tradeKeys,
           totals,
+          leverageUsed,
+          pnlPercentNotional,
+          roiPercent,
           preview,
         },
         null,

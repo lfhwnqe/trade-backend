@@ -2,6 +2,7 @@ export type BinanceFuturesApiKeyRecord = {
   userId: string;
   apiKey: string;
   secretEnc: string;
+  defaultLeverage?: number;
   createdAt: string;
   updatedAt: string;
 };
