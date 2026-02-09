@@ -637,6 +637,84 @@ export class BinanceFuturesService {
     };
   }
 
+  async aggregateFillsSavePosition(userId: string, tradeKeys: string[]) {
+    const previewRes = await this.aggregateFillsPreview(userId, tradeKeys);
+    if (!previewRes.success) return previewRes;
+
+    const data = (previewRes as any).data || {};
+    const totals = data.totals || { netQty: 0 };
+
+    // If we got at least one closed position, store it as CLOSED; otherwise store OPEN preview.
+    const isClosed =
+      Array.isArray(data.closedPositions) &&
+      data.closedPositions.length > 0 &&
+      Math.abs(Number(totals?.netQty ?? 0)) < 1e-12;
+
+    const nowIso = new Date().toISOString();
+
+    let item: any = null;
+    if (isClosed) {
+      const p = data.closedPositions[0];
+      item = {
+        ...p,
+        status: 'CLOSED',
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+    } else if (Array.isArray(data.openPositions) && data.openPositions.length > 0) {
+      const op = data.openPositions[0];
+      // Normalize open position shape into the same Dynamo item type
+      item = {
+        userId,
+        positionKey: `${op.symbol}#${op.positionSide}#${op.openTime}`,
+        symbol: op.symbol,
+        positionSide: op.positionSide,
+        openTime: op.openTime,
+        closeTime: op.lastTime,
+        openPrice: op.openPrice,
+        closePrice: op.openPrice,
+        closedQty: 0,
+        maxOpenQty: op.maxOpenQty,
+        currentQty: op.currentQty,
+        realizedPnl: op.realizedPnl,
+        pnlPercent: undefined,
+        fees: op.fees,
+        feeAsset: op.feeAsset,
+        status: 'OPEN',
+        source: 'binance-futures-fills/manual-aggregate',
+        fillCount: op.fillCount,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      };
+    }
+
+    if (!item) {
+      return {
+        success: false,
+        errorType: 'VALIDATION',
+        errorCode: ERROR_CODES.VALIDATION_INVALID_VALUE,
+        error: '无法保存：选中的成交未能聚合出仓位（可能数据不足）',
+        timestamp: nowIso,
+      };
+    }
+
+    await this.db.put({
+      TableName: this.positionsTableName,
+      Item: item,
+    });
+
+    return {
+      success: true,
+      data: {
+        saved: true,
+        status: item.status,
+        positionKey: item.positionKey,
+        item,
+        totals,
+      },
+    };
+  }
+
   async aggregateFillsConvert(userId: string, tradeKeys: string[]) {
     const previewRes = await this.aggregateFillsPreview(userId, tradeKeys);
     if (!previewRes.success) return previewRes;
