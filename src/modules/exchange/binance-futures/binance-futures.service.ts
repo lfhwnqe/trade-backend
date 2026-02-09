@@ -558,6 +558,52 @@ export class BinanceFuturesService {
     };
   }
 
+  async rebuildPositionsPreview(userId: string, fillsJson: any[]) {
+    const debug =
+      String(process.env.DEBUG_BINANCE || '').toLowerCase() === 'true';
+
+    const rawItems = Array.isArray(fillsJson) ? fillsJson : [];
+
+    const normalized = rawItems
+      .map((it) => {
+        // allow pasting a stored record shape: { raw: {...} }
+        const raw = it?.raw && typeof it?.raw === 'object' ? it.raw : it;
+        const fill = this.normalizeFill(userId, raw);
+        // keep some forward fields if present
+        if (it?.tradeKey) fill.tradeKey = it.tradeKey;
+        if (it?.orderId && !fill.orderId) fill.orderId = String(it.orderId);
+        return fill;
+      })
+      .filter((f) => f.symbol && f.time);
+
+    const fillsAsc = normalized
+      .slice()
+      .sort((a, b) => Number(a.time) - Number(b.time));
+
+    const v2 = buildClosedPositionsV2(userId, fillsAsc);
+
+    if (debug) {
+      this.logger.log('[binance][rebuildPositionsPreview] v2', {
+        scannedFills: fillsAsc.length,
+        groups: v2.groups,
+        closedPositions: v2.closedPositions.length,
+        openPositions: v2.openPositions.length,
+      });
+    }
+
+    return {
+      success: true,
+      data: {
+        rebuiltCount: v2.closedPositions.length,
+        openCount: v2.openPositions.length,
+        scannedFills: fillsAsc.length,
+        // return full output for debugging
+        closedPositions: v2.closedPositions,
+        openPositions: v2.openPositions,
+      },
+    };
+  }
+
   async rebuildClosedPositions(userId: string, range?: '7d' | '30d' | '1y') {
     const now = Date.now();
     const rangeMs =

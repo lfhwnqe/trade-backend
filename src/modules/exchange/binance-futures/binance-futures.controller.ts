@@ -18,6 +18,7 @@ import { Request } from 'express';
 import { BinanceFuturesService } from './binance-futures.service';
 import { SetBinanceFuturesKeyDto } from './dto/set-binance-futures-key.dto';
 import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
+import { RebuildPositionsPreviewDto } from './dto/rebuild-positions-preview.dto';
 import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
 import { ListBinanceFuturesPositionsDto } from './dto/list-binance-futures-positions.dto';
@@ -134,6 +135,21 @@ export class BinanceFuturesController {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
     return this.binance.rebuildClosedPositions(userId, body.range);
+  }
+
+  @ApiOperation({
+    summary:
+      '调试用：直接传入 fills JSON 数组，预览重建输出（不会写入数据库）',
+  })
+  @ApiResponse({ status: 200 })
+  @Post('positions/rebuild-preview')
+  async rebuildPreview(
+    @Req() req: Request,
+    @Body() body: RebuildPositionsPreviewDto,
+  ) {
+    this.requireCognito(req);
+    const userId = (req as any).user?.sub;
+    return this.binance.rebuildPositionsPreview(userId, body.fills);
   }
 
   @ApiOperation({ summary: '把选中的已平仓仓位转换为系统 Trade（推荐）' })
