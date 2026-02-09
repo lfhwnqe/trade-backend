@@ -104,26 +104,6 @@ export class BinanceFuturesService {
     return { success: true, message: '删除成功' };
   }
 
-  async updateSettings(userId: string, defaultLeverage?: number) {
-    const now = new Date().toISOString();
-
-    const leverageDefined =
-      typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage);
-
-    await this.db.update({
-      TableName: this.keysTableName,
-      Key: { userId },
-      UpdateExpression: `${leverageDefined ? 'SET defaultLeverage = :l, updatedAt = :t' : 'REMOVE defaultLeverage SET updatedAt = :t'}`,
-      ExpressionAttributeValues: {
-        ...(leverageDefined ? { ':l': defaultLeverage } : {}),
-        ':t': now,
-      },
-      ConditionExpression: 'attribute_exists(userId)',
-    });
-
-    return { success: true, message: '保存成功' };
-  }
-
   private async getApiKey(userId: string) {
     const res = await this.db.get({
       TableName: this.keysTableName,
