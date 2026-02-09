@@ -2,11 +2,6 @@ export type BinanceFuturesApiKeyRecord = {
   userId: string;
   apiKey: string;
   secretEnc: string;
-  /**
-   * Default leverage used for ROI estimate in UI.
-   * Note: Binance UI ROI is based on margin; without margin data we approximate ROI as notionalPnl% * leverage.
-   */
-  defaultLeverage?: number;
   createdAt: string;
   updatedAt: string;
 };

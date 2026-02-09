@@ -52,12 +52,7 @@ export class BinanceFuturesController {
   async setKey(@Req() req: Request, @Body() body: SetBinanceFuturesKeyDto) {
     this.requireCognito(req);
     const userId = (req as any).user?.sub;
-    return this.binance.upsertApiKey(
-      userId,
-      body.apiKey,
-      body.apiSecret,
-      body.defaultLeverage,
-    );
+    return this.binance.upsertApiKey(userId, body.apiKey, body.apiSecret);
   }
 
   @ApiOperation({ summary: '删除 Binance 合约 API Key' })

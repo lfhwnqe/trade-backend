@@ -47,12 +47,7 @@ export class BinanceFuturesService {
     this.encSecret = this.configService.getOrThrow('EXCHANGE_KEY_ENC_SECRET');
   }
 
-  async upsertApiKey(
-    userId: string,
-    apiKey: string,
-    apiSecret: string,
-    defaultLeverage?: number,
-  ) {
+  async upsertApiKey(userId: string, apiKey: string, apiSecret: string) {
     const now = new Date().toISOString();
     const secretEnc = encryptText(apiSecret, this.encSecret);
 
@@ -60,10 +55,6 @@ export class BinanceFuturesService {
       userId,
       apiKey,
       secretEnc,
-      defaultLeverage:
-        typeof defaultLeverage === 'number' && Number.isFinite(defaultLeverage)
-          ? defaultLeverage
-          : undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -87,10 +78,6 @@ export class BinanceFuturesService {
       data: {
         configured: Boolean(item?.apiKey && item?.secretEnc),
         apiKeyTail: item?.apiKey ? item.apiKey.slice(-6) : null,
-        defaultLeverage:
-          typeof item?.defaultLeverage === 'number'
-            ? item.defaultLeverage
-            : null,
         updatedAt: item?.updatedAt || null,
       },
     };
@@ -770,46 +757,10 @@ export class BinanceFuturesService {
       ExclusiveStartKey,
     });
 
-    // Attach ROI estimate when user configured default leverage.
-    let defaultLeverage: number | null = null;
-    try {
-      const keyRes = await this.db.get({
-        TableName: this.keysTableName,
-        Key: { userId },
-      });
-      const keyItem = keyRes.Item as BinanceFuturesApiKeyRecord | undefined;
-      if (
-        typeof keyItem?.defaultLeverage === 'number' &&
-        Number.isFinite(keyItem.defaultLeverage)
-      ) {
-        defaultLeverage = keyItem.defaultLeverage;
-      }
-    } catch {
-      // ignore
-    }
-
-    const items = (res.Items || []) as BinanceFuturesClosedPosition[];
-    const enriched = items.map((it: any) => {
-      const pnlPercentNotional =
-        typeof it.pnlPercent === 'number' && Number.isFinite(it.pnlPercent)
-          ? it.pnlPercent
-          : undefined;
-      const roiPercent =
-        defaultLeverage && pnlPercentNotional !== undefined
-          ? pnlPercentNotional * defaultLeverage
-          : undefined;
-      return {
-        ...it,
-        defaultLeverage,
-        pnlPercentNotional,
-        roiPercent,
-      };
-    });
-
     return {
       success: true,
       data: {
-        items: enriched,
+        items: (res.Items || []) as BinanceFuturesClosedPosition[],
         nextToken: this.encodeNextToken(res.LastEvaluatedKey),
       },
     };
