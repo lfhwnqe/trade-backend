@@ -1156,6 +1156,13 @@ export class TradeService {
         previous30SimulationTrades,
       );
 
+      const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+      const numOrNull = (value: unknown): number | null => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+
       const calculateAvgProfitLossPercentage = (trades: Trade[]) => {
         if (trades.length === 0) return 0;
 
@@ -1173,7 +1180,61 @@ export class TradeService {
         }, 0);
 
         // 保留2位小数，方便图表展示
-        return Math.round((sum / trades.length) * 100) / 100;
+        return round2(sum / trades.length);
+      };
+
+      const calculateRStats = (trades: Trade[]) => {
+        const plannedRRValues = trades
+          .map((t) => numOrNull((t as any).plannedRR))
+          .filter((v): v is number => v !== null);
+        const realizedRValues = trades
+          .map((t) => numOrNull((t as any).realizedR))
+          .filter((v): v is number => v !== null);
+        const rEfficiencyValues = trades
+          .map((t) => numOrNull((t as any).rEfficiency))
+          .filter((v): v is number => v !== null);
+
+        const avg = (values: number[]) =>
+          values.length > 0
+            ? round2(values.reduce((a, b) => a + b, 0) / values.length)
+            : 0;
+
+        const expectancyR = avg(realizedRValues);
+        const avgPlannedRR = avg(plannedRRValues);
+        const avgRealizedR = avg(realizedRValues);
+        const avgREfficiency = avg(rEfficiencyValues);
+
+        const quality = { TECHNICAL: 0, EMOTIONAL: 0, SYSTEM: 0, UNKNOWN: 0 };
+        trades.forEach((t) => {
+          const tag = String((t as any).exitQualityTag || 'UNKNOWN').toUpperCase();
+          if (tag === 'TECHNICAL') quality.TECHNICAL += 1;
+          else if (tag === 'EMOTIONAL') quality.EMOTIONAL += 1;
+          else if (tag === 'SYSTEM') quality.SYSTEM += 1;
+          else quality.UNKNOWN += 1;
+        });
+
+        const emotionalRealizedR = trades
+          .filter((t) => String((t as any).exitQualityTag || '').toUpperCase() === 'EMOTIONAL')
+          .map((t) => numOrNull((t as any).realizedR))
+          .filter((v): v is number => v !== null)
+          .reduce((a, b) => a + b, 0);
+
+        const technicalRealizedR = trades
+          .filter((t) => String((t as any).exitQualityTag || '').toUpperCase() === 'TECHNICAL')
+          .map((t) => numOrNull((t as any).realizedR))
+          .filter((v): v is number => v !== null)
+          .reduce((a, b) => a + b, 0);
+
+        const emotionalLeakageR = round2(Math.max(0, technicalRealizedR - emotionalRealizedR));
+
+        return {
+          expectancyR,
+          avgPlannedRR,
+          avgRealizedR,
+          avgREfficiency,
+          emotionalLeakageR,
+          qualityDistribution: quality,
+        };
       };
 
       // 两种交易数量字段（用于图表）
@@ -1192,6 +1253,9 @@ export class TradeService {
       );
       const previous30SimulationProfitLossAvg =
         calculateAvgProfitLossPercentage(previous30SimulationTrades);
+
+      const recent30RStats = calculateRStats(recent30Trades);
+      const recent30SimulationRStats = calculateRStats(recent30SimulationTrades);
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
@@ -1225,6 +1289,8 @@ export class TradeService {
           previous30ProfitLossAvg,
           recent30SimulationProfitLossAvg,
           previous30SimulationProfitLossAvg,
+          recent30RStats,
+          recent30SimulationRStats,
           summaryHighlights,
           recentTrades,
         },
