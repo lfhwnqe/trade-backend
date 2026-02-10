@@ -94,8 +94,6 @@ export interface Trade {
 
   // ===== R 模型（计划层） =====
   riskModelVersion?: string; // 风险模型版本，例如 r-v1
-  plannedStopLossPrice?: number; // 计划止损价
-  plannedTakeProfitPrice?: number; // 计划止盈价
   plannedRiskAmount?: number; // 计划风险金额（可选）
   plannedRiskPct?: number; // 计划风险占比（可选）
 

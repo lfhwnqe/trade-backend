@@ -546,17 +546,6 @@ export class UpdateTradeDto {
   @IsString()
   riskModelVersion?: string;
 
-  @ApiProperty({ description: '计划止损价', example: 145.0, required: false })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  plannedStopLossPrice?: number;
-
-  @ApiProperty({ description: '计划止盈价', example: 160.0, required: false })
-  @IsOptional()
-  @IsNumber()
-  @Type(() => Number)
-  plannedTakeProfitPrice?: number;
 
   @ApiProperty({ description: '计划风险金额（可选）', example: 100, required: false })
   @IsOptional()

@@ -53,9 +53,11 @@ export class TradeService {
   }
 
   private computeRiskMetrics(input: Partial<Trade>): Partial<Trade> {
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
     const entry = Number(input.entryPrice);
-    const stop = Number(input.plannedStopLossPrice ?? input.stopLoss);
-    const tp = Number(input.plannedTakeProfitPrice ?? input.takeProfit);
+    const stop = Number(input.stopLoss);
+    const tp = Number(input.takeProfit);
     const exit = Number(input.exitPrice);
     const direction = input.entryDirection;
     const status = input.status;
@@ -117,24 +119,14 @@ export class TradeService {
 
     return {
       riskModelVersion: input.riskModelVersion || 'r-v1',
-      plannedStopLossPrice:
-        Number.isFinite(Number(input.plannedStopLossPrice))
-          ? Number(input.plannedStopLossPrice)
-          : Number.isFinite(Number(input.stopLoss))
-            ? Number(input.stopLoss)
-            : undefined,
-      plannedTakeProfitPrice:
-        Number.isFinite(Number(input.plannedTakeProfitPrice))
-          ? Number(input.plannedTakeProfitPrice)
-          : Number.isFinite(Number(input.takeProfit))
-            ? Number(input.takeProfit)
-            : undefined,
-      plannedRiskPerUnit,
-      plannedRewardPerUnit,
-      plannedRR,
-      realizedR,
-      rEfficiency,
-      exitDeviationR,
+      plannedRiskPerUnit: plannedRiskPerUnit ? round2(plannedRiskPerUnit) : undefined,
+      plannedRewardPerUnit:
+        plannedRewardPerUnit !== undefined ? round2(plannedRewardPerUnit) : undefined,
+      plannedRR: plannedRR !== undefined ? round2(plannedRR) : undefined,
+      realizedR: realizedR !== undefined ? round2(realizedR) : undefined,
+      rEfficiency: rEfficiency !== undefined ? round2(rEfficiency) : undefined,
+      exitDeviationR:
+        exitDeviationR !== undefined ? round2(exitDeviationR) : undefined,
       rMetricsReady,
     };
   }
@@ -261,8 +253,6 @@ export class TradeService {
       analysisImagesDetailed: dto.analysisImagesDetailed,
       // R模型字段
       riskModelVersion: dto.riskModelVersion,
-      plannedStopLossPrice: dto.plannedStopLossPrice,
-      plannedTakeProfitPrice: dto.plannedTakeProfitPrice,
       plannedRiskAmount: dto.plannedRiskAmount,
       plannedRiskPct: dto.plannedRiskPct,
       maxFavorableExcursionR: dto.maxFavorableExcursionR,
