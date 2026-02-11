@@ -141,7 +141,10 @@ export class TradeController {
     }
 
     const trade = await this.tradeService.getTrade(userId, body.transactionId);
-    if (!trade?.success) {
+    const isApiToken = authType === 'apiToken';
+    const isDraftCreateFlow =
+      !isApiToken && !trade?.success && String(body.source || 'trade') === 'trade';
+    if (!trade?.success && !isDraftCreateFlow) {
       throw new NotFoundException('transactionId 对应交易不存在或无权限');
     }
 
