@@ -138,9 +138,7 @@ export class TradeController {
     const objectScanLimit = Math.min(Math.max(body.objectScanLimit || 3000, 1), 10000);
     const tradeScanLimit = Math.min(Math.max(body.tradeScanLimit || 3000, 1), 10000);
     const deleteLimit = Math.min(Math.max(body.deleteLimit || 500, 1), 5000);
-    const olderThanMinutes = Math.max(body.olderThanMinutes ?? 60, 0);
-    const olderThanMs = olderThanMinutes * 60 * 1000;
-    const nowMs = Date.now();
+    const todayKey = new Date().toISOString().slice(0, 10);
 
     const [uploadObjects, refsRes] = await Promise.all([
       this.imageService.listUserUploadObjects(targetUserId, objectScanLimit),
@@ -148,13 +146,11 @@ export class TradeController {
     ]);
 
     const refSet = new Set<string>(((refsRes as any)?.data?.keys || []) as string[]);
-    const orphans = uploadObjects.filter((item) => {
-      if (refSet.has(item.key)) return false;
-      if (!item.lastModified) return false;
-      const t = new Date(item.lastModified).getTime();
-      if (!Number.isFinite(t)) return false;
-      return nowMs - t >= olderThanMs;
-    });
+    const todayObjects = uploadObjects.filter((item) =>
+      item.key.includes(`/${todayKey}/`),
+    );
+
+    const orphans = todayObjects.filter((item) => !refSet.has(item.key));
 
     const candidates = orphans.slice(0, deleteLimit);
     let deleted: string[] = [];
@@ -174,6 +170,8 @@ export class TradeController {
         dryRun,
         targetUserId,
         scannedObjects: uploadObjects.length,
+        todayObjects: todayObjects.length,
+        todayKey,
         scannedTrades: (refsRes as any)?.data?.scannedTrades || 0,
         referencedCount: refSet.size,
         orphanCount: orphans.length,

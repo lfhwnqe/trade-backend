@@ -24,12 +24,6 @@ export class AdminCleanOrphanImagesDto {
   @Min(1)
   tradeScanLimit?: number;
 
-  @ApiPropertyOptional({ description: '仅清理多少分钟前的对象，默认 60', example: 60 })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  olderThanMinutes?: number;
-
   @ApiPropertyOptional({ description: '最多删除多少个对象，默认 500', example: 500 })
   @IsOptional()
   @IsNumber()

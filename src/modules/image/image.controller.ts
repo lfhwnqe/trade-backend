@@ -82,6 +82,25 @@ export class ImageController {
       );
     }
 
+    const claims = (req as any).user?.claims || (req as any).user;
+    const role = String(claims?.['custom:role'] || claims?.role || '');
+    const groups: string[] =
+      (claims?.['cognito:groups'] as string[]) ||
+      (req as any).user?.groups ||
+      [];
+    const isAdmin =
+      role === 'Admins' ||
+      role === 'SuperAdmins' ||
+      groups.includes('Admins') ||
+      groups.includes('SuperAdmins');
+    if (!isAdmin) {
+      throw new AuthorizationException(
+        'Only Admins/SuperAdmins can use legacy image upload endpoint',
+        ERROR_CODES.AUTH_UNAUTHORIZED,
+        '仅管理员可使用图床上传接口',
+      );
+    }
+
     const userId = req['user'].sub;
 
     return this.imageService.generateUploadUrl(
