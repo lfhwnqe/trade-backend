@@ -47,7 +47,14 @@ export class AuthMiddleware implements NestMiddleware {
     if (typeof fromHeader === 'string' && fromHeader.trim()) {
       return fromHeader.trim();
     }
-    return this.getBearerToken(req);
+
+    const bearer = this.getBearerToken(req);
+    // 仅把 tc_ 前缀识别为 API token，避免误把普通 JWT 当作 API token
+    if (typeof bearer === 'string' && bearer.startsWith('tc_')) {
+      return bearer;
+    }
+
+    return undefined;
   }
 
   private setAuthCookies(
@@ -94,9 +101,50 @@ export class AuthMiddleware implements NestMiddleware {
       if (isWebhookRoute) {
         return next();
       }
+      // 1) 若显式携带 API token（tc_），优先按 API token 认证
+      const apiToken = this.getApiToken(req);
+      if (apiToken) {
+        const auth = await this.apiTokenService.authenticateToken(apiToken);
+        if (!auth) {
+          throw new AuthenticationException(
+            'API token invalid',
+            ERROR_CODES.AUTH_TOKEN_INVALID,
+            'token 校验失败',
+          );
+        }
+
+        // 限制 API token 只能访问 trade 模块
+        const path = String((req as any).path || '');
+        const originalUrl = String((req as any).originalUrl || '');
+        const isTradeRoute =
+          path.startsWith('/trade') ||
+          path.startsWith('trade') ||
+          originalUrl.startsWith('/trade') ||
+          originalUrl.startsWith('trade');
+
+        if (!isTradeRoute) {
+          console.log('[AuthMiddleware][apiToken] blocked route', {
+            path,
+            originalUrl,
+            method: (req as any).method,
+          });
+          throw new AuthenticationException(
+            'API token not allowed for this route',
+            ERROR_CODES.AUTH_UNAUTHORIZED,
+            'API token 无权访问该接口',
+            { path, originalUrl },
+          );
+        }
+
+        (req as any).user = { sub: auth.userId };
+        (req as any).authType = 'apiToken';
+        (req as any).scopes = auth.scopes;
+        return next();
+      }
+
       const accessToken = this.getCookieValue(req, 'token');
 
-      // 1) 优先 cookie accessToken（Cognito）
+      // 2) 优先 cookie accessToken（Cognito）
       if (accessToken) {
         let user = null;
         let verifyError: any = null;
@@ -147,49 +195,6 @@ export class AuthMiddleware implements NestMiddleware {
 
         (req as any).user = user;
         (req as any).authType = 'cognito';
-        return next();
-      }
-
-      // 2) 兜底：API Token（给 claw/脚本）
-      const apiToken = this.getApiToken(req);
-      if (apiToken) {
-        const auth = await this.apiTokenService.authenticateToken(apiToken);
-        if (!auth) {
-          throw new AuthenticationException(
-            'API token invalid',
-            ERROR_CODES.AUTH_TOKEN_INVALID,
-            'token 校验失败',
-          );
-        }
-
-        // 限制 API token 只能访问 trade 模块
-        // 注意：在某些 adapter/代理场景下，req.path 可能不含前导斜杠，或与 originalUrl 不一致。
-        const path = String((req as any).path || '');
-        const originalUrl = String((req as any).originalUrl || '');
-        const isTradeRoute =
-          path.startsWith('/trade') ||
-          path.startsWith('trade') ||
-          originalUrl.startsWith('/trade') ||
-          originalUrl.startsWith('trade');
-
-        // Debug (do not log token)
-        if (!isTradeRoute) {
-          console.log('[AuthMiddleware][apiToken] blocked route', {
-            path,
-            originalUrl,
-            method: (req as any).method,
-          });
-          throw new AuthenticationException(
-            'API token not allowed for this route',
-            ERROR_CODES.AUTH_UNAUTHORIZED,
-            'API token 无权访问该接口',
-            { path, originalUrl },
-          );
-        }
-
-        (req as any).user = { sub: auth.userId };
-        (req as any).authType = 'apiToken';
-        (req as any).scopes = auth.scopes;
         return next();
       }
 
