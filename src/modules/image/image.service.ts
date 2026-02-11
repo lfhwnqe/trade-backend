@@ -14,6 +14,7 @@ import {
   ValidationException,
   AuthorizationException,
   ResourceNotFoundException,
+  RateLimitException,
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 
@@ -22,6 +23,9 @@ export class ImageService {
   private s3Client: S3Client;
   private readonly bucketName: string;
   private readonly cloudfrontDomain: string;
+  private readonly allowLegacyPublicImage: boolean;
+  private readonly resolveRateLimitPerMinute: number;
+  private readonly resolveRateCounters = new Map<string, { minute: number; count: number }>();
 
   constructor(private configService: ConfigService) {
     this.s3Client = new S3Client({
@@ -50,10 +54,19 @@ export class ImageService {
     }
     this.cloudfrontDomain = cloudfrontDomain;
 
+    this.allowLegacyPublicImage =
+      String(this.configService.get('ALLOW_LEGACY_PUBLIC_IMAGE') ?? 'true').toLowerCase() !==
+      'false';
+    this.resolveRateLimitPerMinute = Number(
+      this.configService.get('IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE') ?? 120,
+    );
+
     console.log('Image Service Configuration:', {
       region: this.configService.get('AWS_REGION'),
       bucketName: this.bucketName,
       cloudfrontDomain: this.cloudfrontDomain,
+      allowLegacyPublicImage: this.allowLegacyPublicImage,
+      resolveRateLimitPerMinute: this.resolveRateLimitPerMinute,
     });
   }
 
@@ -127,13 +140,17 @@ export class ImageService {
   private parseLegacyOwnerFromUrl(ref: string): string | null {
     try {
       const u = new URL(ref);
-      const host = u.hostname;
-      if (host !== this.cloudfrontDomain) return null;
       const pathname = u.pathname.replace(/^\/+/, '');
-      const parts = pathname.split('/');
-      // images/{ownerId}/yyyy-mm-dd/file
+      const parts = pathname.split('/').filter(Boolean);
+
+      // 支持两种常见格式：
+      // 1) images/{ownerId}/...
+      // 2) {bucket}/images/{ownerId}/... (path-style)
       if (parts.length >= 2 && parts[0] === 'images') {
         return parts[1] || null;
+      }
+      if (parts.length >= 3 && parts[1] === 'images') {
+        return parts[2] || null;
       }
       return null;
     } catch {
@@ -141,11 +158,36 @@ export class ImageService {
     }
   }
 
+  private checkResolveRateLimit(userId: string) {
+    const now = Date.now();
+    const minute = Math.floor(now / 60000);
+    const current = this.resolveRateCounters.get(userId);
+
+    if (!current || current.minute !== minute) {
+      this.resolveRateCounters.set(userId, { minute, count: 1 });
+      return;
+    }
+
+    if (current.count >= this.resolveRateLimitPerMinute) {
+      throw new RateLimitException(
+        `resolve rate limit exceeded for user ${userId}`,
+        ERROR_CODES.IMAGE_RATE_LIMITED,
+        '图片解析请求过于频繁，请稍后重试',
+        { userId, limit: this.resolveRateLimitPerMinute, minute },
+      );
+    }
+
+    current.count += 1;
+    this.resolveRateCounters.set(userId, current);
+  }
+
   private isOwnedKey(userId: string, key: string) {
     return key.startsWith(`images/${userId}/`) || key.startsWith(`uploads/${userId}/`);
   }
 
   async resolveTradeImageRefs(userId: string, refs: string[]) {
+    this.checkResolveRateLimit(userId);
+
     const safeRefs = Array.isArray(refs) ? refs.slice(0, 100) : [];
 
     const items = await Promise.all(
@@ -156,8 +198,26 @@ export class ImageService {
         }
 
         if (this.isHttpUrl(ref)) {
+          if (!this.allowLegacyPublicImage) {
+            throw new AuthorizationException(
+              `Legacy public image resolve disabled: ${ref}`,
+              ERROR_CODES.IMAGE_LEGACY_DISABLED,
+              '历史公开图片解析已关闭',
+              { ref },
+            );
+          }
+
           const legacyOwner = this.parseLegacyOwnerFromUrl(ref);
-          if (legacyOwner && legacyOwner !== userId) {
+          if (!legacyOwner) {
+            throw new ValidationException(
+              `Unsupported legacy image url format: ${ref}`,
+              ERROR_CODES.VALIDATION_INVALID_FORMAT,
+              '历史图片链接格式不受支持',
+              { ref },
+            );
+          }
+
+          if (legacyOwner !== userId) {
             throw new AuthorizationException(
               `Legacy image url not owned by current user: ${ref}`,
               ERROR_CODES.RESOURCE_ACCESS_DENIED,
