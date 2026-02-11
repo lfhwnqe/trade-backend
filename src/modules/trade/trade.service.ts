@@ -1823,48 +1823,6 @@ export class TradeService {
     }
   }
 
-  async collectReferencedImageKeys(userId: string, maxTrades = 3000) {
-    const items: Trade[] = [];
-    let lastKey: Record<string, any> | undefined;
-
-    do {
-      const res = await this.db.query({
-        TableName: this.tableName,
-        IndexName: this.createdAtIndexName,
-        KeyConditionExpression: 'userId = :userId',
-        ExpressionAttributeValues: { ':userId': userId },
-        ScanIndexForward: false,
-        Limit: 100,
-        ExclusiveStartKey: lastKey,
-      });
-      items.push(...((res.Items || []) as Trade[]));
-      lastKey = res.LastEvaluatedKey;
-    } while (lastKey && items.length < maxTrades);
-
-    const refs = new Set<string>();
-    for (const trade of items.slice(0, maxTrades)) {
-      for (const field of this.tradeImageFields) {
-        const arr = (trade as any)[field] as Array<any> | undefined;
-        if (!Array.isArray(arr)) continue;
-        for (const item of arr) {
-          const key = String(item?.image?.key || '').trim();
-          if (key.startsWith('uploads/')) {
-            refs.add(key);
-          }
-        }
-      }
-    }
-
-    return {
-      success: true,
-      data: {
-        scannedTrades: Math.min(items.length, maxTrades),
-        referencedCount: refs.size,
-        keys: Array.from(refs),
-      },
-    };
-  }
-
   async findByUserIdWithFilters(
     userId: string,
     page = 1,

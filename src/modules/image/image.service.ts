@@ -6,7 +6,6 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  ListObjectsV2Command,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
@@ -484,62 +483,6 @@ export class ImageService {
    * @param key 图片的S3 key
    * @returns 删除结果
    */
-  async listUserUploadObjects(userId: string, maxKeys = 3000) {
-    const prefix = `uploads/${userId}/`;
-    const objects: Array<{ key: string; lastModified?: string }> = [];
-    let continuationToken: string | undefined;
-
-    do {
-      const res = await this.s3Client.send(
-        new ListObjectsV2Command({
-          Bucket: this.bucketName,
-          Prefix: prefix,
-          ContinuationToken: continuationToken,
-          MaxKeys: 1000,
-        }),
-      );
-
-      for (const item of res.Contents || []) {
-        const key = String(item.Key || '');
-        if (!key) continue;
-        objects.push({
-          key,
-          lastModified: item.LastModified?.toISOString(),
-        });
-        if (objects.length >= maxKeys) {
-          return objects;
-        }
-      }
-
-      continuationToken = res.IsTruncated
-        ? res.NextContinuationToken
-        : undefined;
-    } while (continuationToken && objects.length < maxKeys);
-
-    return objects;
-  }
-
-  async deleteImagesByKeys(keys: string[]) {
-    const deleted: string[] = [];
-    const failed: Array<{ key: string; error: string }> = [];
-
-    for (const key of keys) {
-      try {
-        await this.s3Client.send(
-          new DeleteObjectCommand({
-            Bucket: this.bucketName,
-            Key: key,
-          }),
-        );
-        deleted.push(key);
-      } catch (error: any) {
-        failed.push({ key, error: String(error?.message || error) });
-      }
-    }
-
-    return { deleted, failed };
-  }
-
   async deleteImage(key: string) {
     const command = new DeleteObjectCommand({
       Bucket: this.bucketName,
