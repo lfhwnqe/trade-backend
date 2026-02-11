@@ -2,6 +2,10 @@ import { ImageService } from './image.service';
 import { ConfigService } from '../common/config.service';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn().mockResolvedValue('https://signed.example.com/upload'),
+}));
+
 describe('ImageService.consumeUploadQuota', () => {
   const makeConfig = (extra?: Record<string, string>) => {
     const base: Record<string, string> = {
@@ -111,5 +115,68 @@ describe('ImageService.consumeUploadQuota', () => {
     expect(firstCall.Key.configKey).toContain('token:tk-1');
     expect(secondCall.Key.configKey).toContain('token:tk-1');
     expect(secondCall.ExpressionAttributeValues[':maxCountBefore']).toBe(0); // api token daily count=1
+  });
+});
+
+describe('ImageService.generateTradeUploadUrl', () => {
+  const cfg = {
+    get: jest.fn((k: string) => {
+      const map: Record<string, string> = {
+        AWS_REGION: 'ap-southeast-1',
+        CONFIG_TABLE_NAME: 'cfg',
+        IMAGE_BUCKET_NAME: 'bucket',
+        CLOUDFRONT_DOMAIN_NAME: 'cdn.example.com',
+        IMAGE_UPLOAD_MAX_SIZE_BYTES: '1024',
+      };
+      return map[k];
+    }),
+    getOrThrow: jest.fn((k: string) => {
+      const map: Record<string, string> = {
+        CONFIG_TABLE_NAME: 'cfg',
+      };
+      const v = map[k] ?? (k === 'CONFIG_TABLE_NAME' ? 'cfg' : undefined);
+      if (!v) throw new Error(`missing ${k}`);
+      return v;
+    }),
+  } as unknown as ConfigService;
+
+  it('should reject unsupported content type', async () => {
+    const svc = new ImageService(cfg);
+    await expect(
+      svc.generateTradeUploadUrl('u1', {
+        fileName: 'x.txt',
+        fileType: 'text/plain',
+        date: '2026-02-11',
+        transactionId: 't1',
+      }),
+    ).rejects.toMatchObject({ errorCode: ERROR_CODES.IMAGE_FORMAT_INVALID });
+  });
+
+  it('should reject file too large', async () => {
+    const svc = new ImageService(cfg);
+    await expect(
+      svc.generateTradeUploadUrl('u1', {
+        fileName: 'x.png',
+        fileType: 'image/png',
+        date: '2026-02-11',
+        transactionId: 't1',
+        contentLength: 4096,
+      }),
+    ).rejects.toMatchObject({ errorCode: ERROR_CODES.IMAGE_SIZE_EXCEEDED });
+  });
+
+  it('should generate key under transaction path', async () => {
+    const svc = new ImageService(cfg);
+    const res = await svc.generateTradeUploadUrl('u1', {
+      fileName: 'x.png',
+      fileType: 'image/png',
+      date: '2026-02-11',
+      transactionId: 'tx-123',
+      contentLength: 100,
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.data.key).toContain('uploads/u1/tx-123/2026-02-11/');
+    expect(res.data.uploadUrl).toContain('https://signed.example.com/upload');
   });
 });
