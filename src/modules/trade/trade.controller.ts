@@ -115,13 +115,26 @@ export class TradeController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
 
-    // 复用 imageService 的校验与 key 规则
-    return this.imageService.generateUploadUrl(
-      userId,
-      body.fileName,
-      body.fileType,
-      body.date,
-    );
+    const authType = String((req as any).authType || '');
+    if (authType === 'apiToken' && !body.transactionId) {
+      throw new BadRequestException('API token 上传图片必须传 transactionId');
+    }
+
+    if (body.transactionId) {
+      const trade = await this.tradeService.getTrade(userId, body.transactionId);
+      if (!trade?.success) {
+        throw new NotFoundException('transactionId 对应交易不存在或无权限');
+      }
+    }
+
+    return this.imageService.generateTradeUploadUrl(userId, {
+      fileName: body.fileName,
+      fileType: body.fileType,
+      date: body.date,
+      transactionId: body.transactionId,
+      contentLength: body.contentLength,
+      source: body.source,
+    });
   }
 
   // 创建交易记录

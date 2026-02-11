@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class TradeImageUploadUrlDto {
   @ApiProperty({ example: 'image.jpg' })
@@ -13,4 +13,19 @@ export class TradeImageUploadUrlDto {
   @ApiProperty({ example: '2026-02-06', description: 'YYYY-MM-DD' })
   @IsString()
   date: string;
+
+  @ApiPropertyOptional({ example: 'trade-transaction-id', description: '绑定交易ID（API token 必填）' })
+  @IsOptional()
+  @IsString()
+  transactionId?: string;
+
+  @ApiPropertyOptional({ example: 345678, description: '文件字节大小（可选）' })
+  @IsOptional()
+  @IsNumber()
+  contentLength?: number;
+
+  @ApiPropertyOptional({ example: 'trade', description: '来源标识，建议固定 trade' })
+  @IsOptional()
+  @IsString()
+  source?: string;
 }

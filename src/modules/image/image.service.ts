@@ -8,7 +8,11 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { UploadUrlResponse, ImageUrlResponse } from './types/image.types';
+import {
+  UploadUrlResponse,
+  ImageUrlResponse,
+  ALLOWED_IMAGE_TYPES,
+} from './types/image.types';
 import {
   S3Exception,
   ValidationException,
@@ -84,7 +88,29 @@ export class ImageService {
     fileType: string,
     date: string,
   ): Promise<UploadUrlResponse> {
-    // 验证日期格式
+    // 兼容旧接口：走 unbound trade 路径
+    return this.generateTradeUploadUrl(userId, {
+      fileName,
+      fileType,
+      date,
+      transactionId: undefined,
+      source: 'legacy-image-module',
+    });
+  }
+
+  async generateTradeUploadUrl(
+    userId: string,
+    params: {
+      fileName: string;
+      fileType: string;
+      date: string;
+      transactionId?: string;
+      contentLength?: number;
+      source?: string;
+    },
+  ): Promise<UploadUrlResponse> {
+    const { fileName, fileType, date, transactionId, contentLength } = params;
+
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new ValidationException(
         `Invalid date format: ${date}. Expected YYYY-MM-DD format`,
@@ -94,9 +120,32 @@ export class ImageService {
       );
     }
 
-    // 构建文件路径: images/用户ID/日期/时间戳-文件名
+    if (!ALLOWED_IMAGE_TYPES.includes(fileType as any)) {
+      throw new ValidationException(
+        `Unsupported file type: ${fileType}`,
+        ERROR_CODES.IMAGE_FORMAT_INVALID,
+        '不支持的文件类型',
+        { fileType, allowed: ALLOWED_IMAGE_TYPES },
+      );
+    }
+
+    const maxSizeBytes = Number(this.configService.get('IMAGE_UPLOAD_MAX_SIZE_BYTES') ?? 5 * 1024 * 1024);
+    if (
+      typeof contentLength === 'number' &&
+      Number.isFinite(contentLength) &&
+      contentLength > maxSizeBytes
+    ) {
+      throw new ValidationException(
+        `Image file too large: ${contentLength}`,
+        ERROR_CODES.IMAGE_SIZE_EXCEEDED,
+        `图片大小超过限制（最大 ${maxSizeBytes} 字节）`,
+        { contentLength, maxSizeBytes },
+      );
+    }
+
     const timestamp = Date.now();
-    const key = `images/${userId}/${date}/${timestamp}-${fileName}`;
+    const safeTransactionId = transactionId?.trim() || 'unbound';
+    const key = `uploads/${userId}/${safeTransactionId}/${date}/${timestamp}-${fileName}`;
 
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
@@ -105,14 +154,14 @@ export class ImageService {
     });
 
     const signedUrl = await getSignedUrl(this.s3Client, command, {
-      expiresIn: 3600, // URL 有效期1小时
+      expiresIn: 300,
     });
 
     return {
       success: true,
       data: {
         uploadUrl: signedUrl,
-        key: key,
+        key,
       },
     };
   }
