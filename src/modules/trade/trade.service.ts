@@ -318,7 +318,7 @@ export class TradeService {
 
   async createTrade(userId: string, dto: CreateTradeDto) {
     const now = new Date().toISOString();
-    const transactionId = uuidv4();
+    const transactionId = (dto.transactionId || "").trim() || uuidv4();
     const tradeShortId = this.generateTradeShortId();
 
     const normalizedProfitLossPercentage =

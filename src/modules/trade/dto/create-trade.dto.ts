@@ -13,7 +13,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // 交易类型枚举
 export enum TradeType {
@@ -192,6 +192,11 @@ export const ANALYSIS_PERIOD_PRESETS = [
 ] as const;
 
 export class CreateTradeDto {
+  @ApiPropertyOptional({ description: '交易ID（可选；前端新建草稿时可预分配）', example: 'uuid' })
+  @IsOptional()
+  @IsString()
+  transactionId?: string;
+
   @ApiProperty({
     description: '行情分析时间',
     example: '2025-05-23T09:30:00+08:00',
@@ -233,27 +238,27 @@ export class CreateTradeDto {
   @ApiProperty({
     description: '成交量分布图（旧字段），最多5张图',
     type: [ImageResource],
-    maxItems: 5,
+    maxItems: 10,
     required: false,
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   volumeProfileImages?: ImageResource[];
 
   @ApiProperty({
     description: '市场结构分析图片，最多5张图',
     type: [MarketStructureAnalysisImage],
-    maxItems: 5,
+    maxItems: 10,
     required: false,
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MarketStructureAnalysisImage)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   marketStructureAnalysisImages?: MarketStructureAnalysisImage[];
 
   @ApiProperty({
