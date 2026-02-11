@@ -18,14 +18,11 @@ import { Request } from 'express';
 import { BinanceFuturesService } from './binance-futures.service';
 import { SetBinanceFuturesKeyDto } from './dto/set-binance-futures-key.dto';
 import { ImportBinanceFuturesDto } from './dto/import-binance-futures.dto';
-import { RebuildPositionsPreviewDto } from './dto/rebuild-positions-preview.dto';
 import { UpdateBinanceFuturesSettingsDto } from './dto/update-binance-futures-settings.dto';
 import { ListBinanceFuturesFillsDto } from './dto/list-binance-futures-fills.dto';
 import { ConvertBinanceFuturesFillsDto } from './dto/convert-binance-futures-fills.dto';
 import { AggregateBinanceFuturesFillsDto } from './dto/aggregate-binance-futures-fills.dto';
 import { SaveAggregatedPositionDto } from './dto/save-aggregated-position.dto';
-import { ListBinanceFuturesPositionsDto } from './dto/list-binance-futures-positions.dto';
-import { ConvertBinanceFuturesPositionsDto } from './dto/convert-binance-futures-positions.dto';
 import { CleanupBinanceFuturesDto } from './dto/cleanup-binance-futures.dto';
 
 @ApiTags('交易集成')
@@ -178,77 +175,6 @@ export class BinanceFuturesController {
       body.tradeKeys,
       body.leverage,
     );
-  }
-
-  @ApiOperation({ summary: '分页查询：已平仓仓位历史（由成交聚合）' })
-  @ApiResponse({ status: 200 })
-  @Get('positions')
-  async listPositions(
-    @Req() req: Request,
-    @Query() query: ListBinanceFuturesPositionsDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.listPositions(
-      userId,
-      query.pageSize ?? 20,
-      query.nextToken,
-      query.range,
-      query.status,
-    );
-  }
-
-  @ApiOperation({ summary: '手动触发：重建已平仓仓位历史（由成交聚合）' })
-  @ApiResponse({ status: 200 })
-  @Post('positions/rebuild')
-  async rebuildPositions(
-    @Req() req: Request,
-    @Body() body: ImportBinanceFuturesDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.rebuildClosedPositions(userId, body.range);
-  }
-
-  @ApiOperation({
-    summary:
-      '调试用：直接传入 fills JSON 数组，预览重建输出（不会写入数据库）',
-  })
-  @ApiResponse({ status: 200 })
-  @Post('positions/rebuild-preview')
-  async rebuildPreview(
-    @Req() req: Request,
-    @Body() body: RebuildPositionsPreviewDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.rebuildPositionsPreview(userId, body.fills);
-  }
-
-  @ApiOperation({ summary: '把选中的已平仓仓位转换为系统 Trade（推荐）' })
-  @ApiResponse({ status: 200 })
-  @Post('positions/convert')
-  async convertPositions(
-    @Req() req: Request,
-    @Body() body: ConvertBinanceFuturesPositionsDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.convertPositionsToTrades(userId, body.positionKeys);
-  }
-
-  @ApiOperation({
-    summary: '把选中的未平仓仓位转换为系统 Trade（进行中 / ENTERED）',
-  })
-  @ApiResponse({ status: 200 })
-  @Post('positions/convert-open')
-  async convertOpenPositions(
-    @Req() req: Request,
-    @Body() body: ConvertBinanceFuturesPositionsDto,
-  ) {
-    this.requireCognito(req);
-    const userId = (req as any).user?.sub;
-    return this.binance.convertOpenPositionsToTrades(userId, body.positionKeys);
   }
 
   @ApiOperation({ summary: '清空币安合约同步数据（不影响系统真实交易记录）' })
