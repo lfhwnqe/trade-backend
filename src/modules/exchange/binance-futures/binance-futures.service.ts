@@ -334,6 +334,7 @@ export class BinanceFuturesService {
           : EntryDirection.LONG;
 
       const entryPrice = Number(fill.price ?? 0);
+      const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
       const trade = {
         transactionId,
@@ -352,7 +353,7 @@ export class BinanceFuturesService {
         },
         entryDirection: dir,
         entryTime: timeIso,
-        entryPrice: Number.isFinite(entryPrice) ? entryPrice : undefined,
+        entryPrice: Number.isFinite(entryPrice) ? round2(entryPrice) : undefined,
         exitTime: timeIso,
         profitLossPercentage: 0,
         tradeResult,
@@ -865,13 +866,17 @@ export class BinanceFuturesService {
       },
       entryDirection,
       entryTime: entryTimeIso,
-      entryPrice: (preview as any).openPrice,
+      entryPrice: Number.isFinite(Number((preview as any).openPrice))
+        ? round2(Number((preview as any).openPrice))
+        : (preview as any).openPrice,
       ...(isClosed
         ? {
             exitTime: Number.isFinite(closeTimeMs)
               ? new Date(closeTimeMs).toISOString()
               : entryTimeIso,
-            exitPrice: (preview as any).closePrice,
+            exitPrice: Number.isFinite(Number((preview as any).closePrice))
+              ? round2(Number((preview as any).closePrice))
+              : (preview as any).closePrice,
             tradeResult,
             profitLossPercentage:
               typeof roiPercent === 'number' && Number.isFinite(roiPercent)
@@ -1276,9 +1281,15 @@ export class BinanceFuturesService {
         },
         entryDirection: dir,
         entryTime: openIso,
-        entryPrice: pos.openPrice,
+        entryPrice:
+          typeof pos.openPrice === "number" && Number.isFinite(pos.openPrice)
+            ? Math.round((pos.openPrice + Number.EPSILON) * 100) / 100
+            : pos.openPrice,
         exitTime: closeIso,
-        exitPrice: pos.closePrice,
+        exitPrice:
+          typeof pos.closePrice === "number" && Number.isFinite(pos.closePrice)
+            ? Math.round((pos.closePrice + Number.EPSILON) * 100) / 100
+            : pos.closePrice,
         tradeResult,
         profitLossPercentage,
         tradeTags: ['binance', 'auto-import', 'position'],
@@ -1415,7 +1426,10 @@ export class BinanceFuturesService {
         },
         entryDirection: dir,
         entryTime: openIso,
-        entryPrice: pos.openPrice,
+        entryPrice:
+          typeof pos.openPrice === "number" && Number.isFinite(pos.openPrice)
+            ? Math.round((pos.openPrice + Number.EPSILON) * 100) / 100
+            : pos.openPrice,
         profitLossPercentage: 0,
         tradeTags: ['binance', 'auto-import', 'open-position'],
         remarks: JSON.stringify(
