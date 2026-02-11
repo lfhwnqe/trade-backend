@@ -845,6 +845,9 @@ export class BinanceFuturesService {
     const entryDirection =
       positionSide === 'SHORT' ? EntryDirection.SHORT : EntryDirection.LONG;
 
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+    const ratioToPercent = (n: number) => round2(n * 100);
+
     const trade: any = {
       transactionId,
       userId,
@@ -872,9 +875,9 @@ export class BinanceFuturesService {
             tradeResult,
             profitLossPercentage:
               typeof roiPercent === 'number' && Number.isFinite(roiPercent)
-                ? roiPercent
+                ? ratioToPercent(roiPercent)
                 : typeof (preview as any).pnlPercent === 'number'
-                  ? (preview as any).pnlPercent
+                  ? ratioToPercent((preview as any).pnlPercent)
                   : 0,
           }
         : { profitLossPercentage: 0 }),
