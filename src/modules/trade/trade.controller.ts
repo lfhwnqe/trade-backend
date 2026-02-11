@@ -28,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { TradeQueryDto } from './dto/trade-query.dto';
 import { TradeImageUploadUrlDto } from './dto/trade-image-upload.dto';
+import { ResolveTradeImagesDto } from './dto/resolve-trade-images.dto';
 import { ImageService } from '../image/image.service';
 import { WebhookService } from '../webhook/webhook.service';
 
@@ -85,6 +86,22 @@ export class TradeController {
   }
 
   // ============ Trade-scoped Image Upload (for API token) ============
+  @ApiOperation({
+    summary: '解析交易图片引用（兼容 legacy 公链 + 私有 key）',
+  })
+  @ApiBody({ type: ResolveTradeImagesDto })
+  @ApiResponse({ status: 200, description: '返回可访问图片 URL 列表' })
+  @Post('image/resolve')
+  async resolveTradeImages(
+    @Req() req: Request,
+    @Body() body: ResolveTradeImagesDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    return this.imageService.resolveTradeImageRefs(userId, body.refs || []);
+  }
+
   @ApiOperation({
     summary: '获取交易截图上传URL（trade 域内，给 API token 使用）',
   })

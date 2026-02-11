@@ -4,12 +4,16 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { UploadUrlResponse, ImageUrlResponse } from './types/image.types';
 import {
   S3Exception,
   ValidationException,
+  AuthorizationException,
+  ResourceNotFoundException,
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
 
@@ -112,6 +116,83 @@ export class ImageService {
       success: true,
       data: {
         url: cloudfrontUrl,
+      },
+    };
+  }
+
+  private isHttpUrl(ref: string) {
+    return /^https?:\/\//i.test(ref);
+  }
+
+  private isOwnedKey(userId: string, key: string) {
+    return key.startsWith(`images/${userId}/`) || key.startsWith(`uploads/${userId}/`);
+  }
+
+  async resolveTradeImageRefs(userId: string, refs: string[]) {
+    const safeRefs = Array.isArray(refs) ? refs.slice(0, 100) : [];
+
+    const items = await Promise.all(
+      safeRefs.map(async (refRaw) => {
+        const ref = String(refRaw || '').trim();
+        if (!ref) {
+          return { ref, kind: 'invalid', url: '' };
+        }
+
+        if (this.isHttpUrl(ref)) {
+          return {
+            ref,
+            kind: 'legacy_public',
+            url: ref,
+          };
+        }
+
+        if (!this.isOwnedKey(userId, ref)) {
+          throw new AuthorizationException(
+            `Image ref is not owned by current user: ${ref}`,
+            ERROR_CODES.RESOURCE_ACCESS_DENIED,
+            '图片访问越权',
+            { ref },
+          );
+        }
+
+        try {
+          await this.s3Client.send(
+            new HeadObjectCommand({
+              Bucket: this.bucketName,
+              Key: ref,
+            }),
+          );
+        } catch {
+          throw new ResourceNotFoundException(
+            `Image key not found: ${ref}`,
+            ERROR_CODES.RESOURCE_NOT_FOUND,
+            '图片不存在',
+            { ref },
+          );
+        }
+
+        const signedUrl = await getSignedUrl(
+          this.s3Client,
+          new GetObjectCommand({
+            Bucket: this.bucketName,
+            Key: ref,
+          }),
+          { expiresIn: 300 },
+        );
+
+        return {
+          ref,
+          kind: 'private_key',
+          url: signedUrl,
+          expiresInSec: 300,
+        };
+      }),
+    );
+
+    return {
+      success: true,
+      data: {
+        items,
       },
     };
   }
