@@ -29,6 +29,7 @@ import {
 import { TradeQueryDto } from './dto/trade-query.dto';
 import { TradeImageUploadUrlDto } from './dto/trade-image-upload.dto';
 import { ResolveTradeImagesDto } from './dto/resolve-trade-images.dto';
+import { AdminCleanOrphanImagesDto } from './dto/admin-clean-orphan-images.dto';
 import { ImageService } from '../image/image.service';
 import { WebhookService } from '../webhook/webhook.service';
 
@@ -104,6 +105,85 @@ export class TradeController {
       limit: Number.isFinite(limit) ? limit : 200,
       dryRun,
     });
+  }
+
+  @ApiOperation({ summary: '管理员清理用户孤儿上传图片（uploads）' })
+  @ApiBody({ type: AdminCleanOrphanImagesDto })
+  @ApiResponse({ status: 200, description: '返回清理统计（支持 dryRun）' })
+  @Post('admin/image-orphans/cleanup')
+  async adminCleanupOrphanImages(
+    @Req() req: Request,
+    @Body() body: AdminCleanOrphanImagesDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    const claims = (req as any).user?.claims || (req as any).user;
+    const role = String(claims?.['custom:role'] || claims?.role || '');
+    const groups: string[] =
+      (claims?.['cognito:groups'] as string[]) ||
+      (req as any).user?.groups ||
+      [];
+    const isAdmin =
+      role === 'Admins' ||
+      role === 'SuperAdmins' ||
+      groups.includes('Admins') ||
+      groups.includes('SuperAdmins');
+    if (!isAdmin) {
+      throw new ForbiddenException('仅管理员可执行该操作');
+    }
+
+    const targetUserId = String(body.userId || userId);
+    const dryRun = body.dryRun !== false;
+    const objectScanLimit = Math.min(Math.max(body.objectScanLimit || 3000, 1), 10000);
+    const tradeScanLimit = Math.min(Math.max(body.tradeScanLimit || 3000, 1), 10000);
+    const deleteLimit = Math.min(Math.max(body.deleteLimit || 500, 1), 5000);
+    const olderThanMinutes = Math.max(body.olderThanMinutes ?? 60, 0);
+    const olderThanMs = olderThanMinutes * 60 * 1000;
+    const nowMs = Date.now();
+
+    const [uploadObjects, refsRes] = await Promise.all([
+      this.imageService.listUserUploadObjects(targetUserId, objectScanLimit),
+      this.tradeService.collectReferencedImageKeys(targetUserId, tradeScanLimit),
+    ]);
+
+    const refSet = new Set<string>(((refsRes as any)?.data?.keys || []) as string[]);
+    const orphans = uploadObjects.filter((item) => {
+      if (refSet.has(item.key)) return false;
+      if (!item.lastModified) return false;
+      const t = new Date(item.lastModified).getTime();
+      if (!Number.isFinite(t)) return false;
+      return nowMs - t >= olderThanMs;
+    });
+
+    const candidates = orphans.slice(0, deleteLimit);
+    let deleted: string[] = [];
+    let failed: Array<{ key: string; error: string }> = [];
+
+    if (!dryRun && candidates.length > 0) {
+      const delRes = await this.imageService.deleteImagesByKeys(
+        candidates.map((x) => x.key),
+      );
+      deleted = delRes.deleted;
+      failed = delRes.failed;
+    }
+
+    return {
+      success: true,
+      data: {
+        dryRun,
+        targetUserId,
+        scannedObjects: uploadObjects.length,
+        scannedTrades: (refsRes as any)?.data?.scannedTrades || 0,
+        referencedCount: refSet.size,
+        orphanCount: orphans.length,
+        candidateCount: candidates.length,
+        deletedCount: deleted.length,
+        failedCount: failed.length,
+        sampleCandidates: candidates.slice(0, 20).map((x) => x.key),
+        failed,
+      },
+    };
   }
 
   @ApiOperation({
