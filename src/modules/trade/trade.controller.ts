@@ -85,7 +85,27 @@ export class TradeController {
     return result;
   }
 
-  // ============ Trade-scoped Image Upload (for API token) ============
+  // ============ Trade-scoped Image ============
+  @ApiOperation({ summary: '迁移历史公开图片引用为 key（按当前用户）' })
+  @ApiQuery({ name: 'limit', required: false, description: '扫描交易上限，默认200，最大2000' })
+  @ApiQuery({ name: 'dryRun', required: false, description: '是否仅预览，默认 true' })
+  @ApiResponse({ status: 200, description: '返回迁移统计' })
+  @Post('image/migrate-legacy')
+  async migrateLegacyImageRefs(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+
+    const limitRaw = (req.query.limit as string) || '200';
+    const limit = Number(limitRaw);
+    const dryRunRaw = String(req.query.dryRun ?? 'true').toLowerCase();
+    const dryRun = dryRunRaw !== 'false';
+
+    return this.tradeService.migrateLegacyImageRefs(userId, {
+      limit: Number.isFinite(limit) ? limit : 200,
+      dryRun,
+    });
+  }
+
   @ApiOperation({
     summary: '解析交易图片引用（兼容 legacy 公链 + 私有 key）',
   })

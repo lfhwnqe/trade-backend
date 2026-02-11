@@ -24,6 +24,111 @@ export class TradeService {
   private readonly createdAtIndexName = 'userId-createdAt-index';
   private readonly shareIdIndexName = 'shareId-index';
 
+
+  private readonly tradeImageFields: (keyof Trade)[] = [
+    'volumeProfileImages',
+    'marketStructureAnalysisImages',
+    'trendAnalysisImages',
+    'expectedPathImages',
+    'expectedPathImagesDetailed',
+    'entryAnalysisImages',
+    'entryAnalysisImagesDetailed',
+    'actualPathImages',
+    'actualPathImagesDetailed',
+    'analysisImages',
+    'analysisImagesDetailed',
+  ];
+
+  private extractLegacyKeyFromUrl(url: string): string | null {
+    try {
+      const u = new URL(url);
+      const parts = u.pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0] === 'images') {
+        return parts.join('/');
+      }
+      if (parts.length >= 3 && parts[1] === 'images') {
+        return parts.slice(1).join('/');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  async migrateLegacyImageRefs(userId: string, opts?: { limit?: number; dryRun?: boolean }) {
+    const limit = Math.min(Math.max(opts?.limit ?? 200, 1), 2000);
+    const dryRun = opts?.dryRun !== false;
+
+    const items: Trade[] = [];
+    let lastKey: Record<string, any> | undefined;
+    do {
+      const res = await this.db.query({
+        TableName: this.tableName,
+        IndexName: this.createdAtIndexName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ScanIndexForward: false,
+        Limit: 100,
+        ExclusiveStartKey: lastKey,
+      });
+      items.push(...((res.Items || []) as Trade[]));
+      lastKey = res.LastEvaluatedKey;
+    } while (lastKey && items.length < limit);
+
+    let scannedTrades = 0;
+    let changedTrades = 0;
+    let changedRefs = 0;
+
+    for (const trade of items.slice(0, limit)) {
+      scannedTrades += 1;
+      let touched = false;
+      const nextTrade: Trade = { ...trade };
+
+      for (const field of this.tradeImageFields) {
+        const arr = (trade as any)[field] as Array<any> | undefined;
+        if (!Array.isArray(arr) || arr.length === 0) continue;
+
+        const patched = arr.map((item) => {
+          const refUrl = String(item?.image?.url || '').trim();
+          if (!refUrl.startsWith('http')) return item;
+          const key = this.extractLegacyKeyFromUrl(refUrl);
+          if (!key || !key.startsWith(`images/${userId}/`)) return item;
+          touched = true;
+          changedRefs += 1;
+          return {
+            ...item,
+            image: {
+              ...(item?.image || {}),
+              key,
+            },
+          };
+        });
+
+        (nextTrade as any)[field] = patched;
+      }
+
+      if (touched) {
+        changedTrades += 1;
+        if (!dryRun) {
+          nextTrade.updatedAt = new Date().toISOString();
+          await this.db.put({ TableName: this.tableName, Item: nextTrade });
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        dryRun,
+        scannedTrades,
+        changedTrades,
+        changedRefs,
+        limit,
+      },
+    };
+  }
+
+
   constructor(private readonly configService: ConfigService) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
