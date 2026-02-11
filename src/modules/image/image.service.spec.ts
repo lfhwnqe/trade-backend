@@ -180,3 +180,84 @@ describe('ImageService.generateTradeUploadUrl', () => {
     expect(res.data.uploadUrl).toContain('https://signed.example.com/upload');
   });
 });
+
+
+describe('ImageService.consumeUploadQuota concurrency-like behavior', () => {
+  const makeConfig = () => {
+    const map: Record<string, string> = {
+      AWS_REGION: 'ap-southeast-1',
+      CONFIG_TABLE_NAME: 'cfg',
+      IMAGE_BUCKET_NAME: 'bucket',
+      CLOUDFRONT_DOMAIN_NAME: 'cdn.example.com',
+      IMAGE_UPLOAD_DAILY_COUNT_FREE: '1',
+      IMAGE_UPLOAD_DAILY_BYTES_FREE: '1000',
+      IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_FREE: '10',
+    };
+    return {
+      get: jest.fn((k: string) => map[k]),
+      getOrThrow: jest.fn((k: string) => map[k] || 'cfg'),
+    } as unknown as ConfigService;
+  };
+
+  it('should only allow one success when daily count limit is 1 (atomic-like guard)', async () => {
+    const svc = new ImageService(makeConfig());
+
+    const store = new Map<string, { issuedCount: number; issuedBytes: number }>();
+    (svc as any).db = {
+      update: jest.fn(async (input: any) => {
+        const key = String(input?.Key?.configKey || '');
+        const rec = store.get(key) || { issuedCount: 0, issuedBytes: 0 };
+
+        // minute bucket
+        if (key.startsWith('imageRate#')) {
+          const maxBefore = Number(input.ExpressionAttributeValues[':maxMinuteBefore']);
+          if (rec.issuedCount > maxBefore) {
+            const err: any = new Error('maxMinuteBefore');
+            err.name = 'ConditionalCheckFailedException';
+            throw err;
+          }
+          rec.issuedCount += 1;
+          store.set(key, rec);
+          return {};
+        }
+
+        // daily bucket
+        const maxCountBefore = Number(input.ExpressionAttributeValues[':maxCountBefore']);
+        const maxBytesBefore = Number(input.ExpressionAttributeValues[':maxBytesBefore']);
+        const byteInc = Number(input.ExpressionAttributeValues[':byteInc']);
+
+        if (rec.issuedCount > maxCountBefore || rec.issuedBytes > maxBytesBefore) {
+          const err: any = new Error('quota reached');
+          err.name = 'ConditionalCheckFailedException';
+          throw err;
+        }
+
+        rec.issuedCount += 1;
+        rec.issuedBytes += byteInc;
+        store.set(key, rec);
+        return {};
+      }),
+    };
+
+    const req = {
+      userId: 'u1',
+      claims: {},
+      authType: 'cognito',
+      contentLength: 100,
+    };
+
+    const [r1, r2] = await Promise.allSettled([
+      svc.consumeUploadQuota(req),
+      svc.consumeUploadQuota(req),
+    ]);
+
+    const fulfilled = [r1, r2].filter((r) => r.status === 'fulfilled').length;
+    const rejected = [r1, r2].filter((r) => r.status === 'rejected').length;
+
+    expect(fulfilled).toBe(1);
+    expect(rejected).toBe(1);
+
+    const rejectReason = [r1, r2].find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect(rejectReason.reason?.errorCode).toBe(ERROR_CODES.IMAGE_QUOTA_EXCEEDED);
+  });
+});
