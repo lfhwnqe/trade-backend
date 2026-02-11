@@ -52,6 +52,39 @@ export class TradeService {
     return 'tr_' + this.base64Url(crypto.randomBytes(6));
   }
 
+  private isExitedStatus(status?: string) {
+    return status === '已离场' || status === '提前离场';
+  }
+
+  private isBinanceAutoImport(tradeTags?: string[]) {
+    if (!Array.isArray(tradeTags)) return false;
+    return tradeTags.includes('binance') && tradeTags.includes('auto-import');
+  }
+
+  private ensureExitQualityTagForExited(input: {
+    status?: string;
+    exitQualityTag?: string;
+    tradeTags?: string[];
+  }) {
+    if (!this.isExitedStatus(input.status)) {
+      return input.exitQualityTag;
+    }
+
+    if (input.exitQualityTag) {
+      return input.exitQualityTag;
+    }
+
+    if (this.isBinanceAutoImport(input.tradeTags)) {
+      return 'SYSTEM';
+    }
+
+    throw new ValidationException(
+      'exitQualityTag is required when status is EXITED/EARLY_EXITED',
+      ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+      '已离场/提前离场时，离场质量标签为必填项',
+    );
+  }
+
   private computeRiskMetrics(input: Partial<Trade>): Partial<Trade> {
     const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 
@@ -173,6 +206,12 @@ export class TradeService {
         { value: dto.profitLossPercentage },
       );
     }
+
+    const normalizedExitQualityTag = this.ensureExitQualityTagForExited({
+      status: dto.status,
+      exitQualityTag: dto.exitQualityTag,
+      tradeTags: dto.tradeTags,
+    });
 
     /**
      * 创建一个新的 Trade 实例。
@@ -1515,6 +1554,12 @@ export class TradeService {
         ...updatedTradeData, // updatedTradeData 现在包含了正确映射的属性
         updatedAt: new Date().toISOString(),
       };
+
+      merged.exitQualityTag = this.ensureExitQualityTagForExited({
+        status: merged.status,
+        exitQualityTag: merged.exitQualityTag,
+        tradeTags: merged.tradeTags,
+      }) as any;
 
       const updated: Trade = {
         ...merged,
