@@ -142,9 +142,25 @@ export class TradeController {
 
     const trade = await this.tradeService.getTrade(userId, body.transactionId);
     const isApiToken = authType === 'apiToken';
-    const isDraftCreateFlow =
-      !isApiToken && !trade?.success && String(body.source || 'trade') === 'trade';
+    const source = String(body.source || 'trade');
+    const isDraftCreateFlow = !isApiToken && !trade?.success && source === 'trade';
+
+    console.log('[trade/image/upload-url] precheck', {
+      userId,
+      authType,
+      source,
+      transactionId: body.transactionId,
+      tradeFound: !!trade?.success,
+      isDraftCreateFlow,
+    });
+
     if (!trade?.success && !isDraftCreateFlow) {
+      console.warn('[trade/image/upload-url] reject_not_found_or_forbidden', {
+        userId,
+        authType,
+        source,
+        transactionId: body.transactionId,
+      });
       throw new NotFoundException('transactionId 对应交易不存在或无权限');
     }
 
