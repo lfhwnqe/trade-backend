@@ -39,6 +39,32 @@ export class TradeService {
     'analysisImagesDetailed',
   ];
 
+
+  private normalizeImageArrayForStorage(items: any[] | undefined) {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      const image = item?.image;
+      if (!image || typeof image !== 'object') return item;
+      const key = typeof image.key === 'string' ? image.key : undefined;
+      return {
+        ...item,
+        image: {
+          ...(image || {}),
+          ...(key ? { key } : {}),
+          url: key ? '' : image.url || '',
+        },
+      };
+    });
+  }
+
+  private sanitizeTradeImageUrlsForStorage<T extends Partial<Trade>>(trade: T): T {
+    const out: any = { ...trade };
+    for (const field of this.tradeImageFields) {
+      out[field] = this.normalizeImageArrayForStorage((out as any)[field]);
+    }
+    return out as T;
+  }
+
   private extractLegacyKeyFromUrl(url: string): string | null {
     try {
       const u = new URL(url);
@@ -100,6 +126,7 @@ export class TradeService {
             image: {
               ...(item?.image || {}),
               key,
+              url: '',
             },
           };
         });
@@ -413,10 +440,10 @@ export class TradeService {
       updatedAt: now,
     };
 
-    const newTrade: Trade = {
+    const newTrade: Trade = this.sanitizeTradeImageUrlsForStorage({
       ...rawTrade,
       ...this.computeRiskMetrics(rawTrade),
-    };
+    });
     console.log('[TradeService] createTrade userId:', userId);
     try {
       await this.db.put({
@@ -1666,10 +1693,10 @@ export class TradeService {
         tradeTags: merged.tradeTags,
       }) as any;
 
-      const updated: Trade = {
+      const updated: Trade = this.sanitizeTradeImageUrlsForStorage({
         ...merged,
         ...this.computeRiskMetrics(merged),
-      };
+      });
       await this.db.put({
         TableName: this.tableName,
         Item: updated,
@@ -1758,14 +1785,14 @@ export class TradeService {
       const newTransactionId = uuidv4();
 
       // 创建新的交易记录，复制原始交易的所有数据
-      const newTrade: Trade = {
+      const newTrade: Trade = this.sanitizeTradeImageUrlsForStorage({
         ...originalTrade,
         transactionId: newTransactionId, // 新的交易ID
         analysisExpired: false, // 将分析已过期字段设置为未过期
         isShareable: false,
         createdAt: now,
         updatedAt: now,
-      };
+      });
 
       if (newTrade.shareId) {
         delete newTrade.shareId;
