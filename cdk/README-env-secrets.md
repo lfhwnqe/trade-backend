@@ -11,6 +11,8 @@ To make local `cdk deploy` work without exporting a lot of shell env vars, `cdk/
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_WEBHOOK_SECRET`
 - `WEBHOOK_BIND_SECRET`
+- `ALLOW_LEGACY_PUBLIC_IMAGE`（`true|false`，是否允许解析 legacy 公链）
+- `IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE`（每用户每分钟 resolve 次数限制）
 
 ## Optional (only if enabling Binance integration)
 

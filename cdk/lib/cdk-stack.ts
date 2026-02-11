@@ -342,6 +342,12 @@ export class TradingStack extends cdk.Stack {
           TELEGRAM_WEBHOOK_SECRET: process.env.TELEGRAM_WEBHOOK_SECRET || '',
           WEBHOOK_BIND_SECRET: process.env.WEBHOOK_BIND_SECRET || '',
 
+          // Image resolve controls
+          ALLOW_LEGACY_PUBLIC_IMAGE:
+            process.env.ALLOW_LEGACY_PUBLIC_IMAGE || 'true',
+          IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE:
+            process.env.IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE || '120',
+
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,
           COGNITO_ADMIN_GROUP_NAME: adminGroupName, // Add admin group name to Lambda environment
