@@ -136,15 +136,13 @@ export class TradeController {
     if (!userId) throw new NotFoundException('用户信息异常');
 
     const authType = String((req as any).authType || '');
-    if (authType === 'apiToken' && !body.transactionId) {
-      throw new BadRequestException('API token 上传图片必须传 transactionId');
+    if (!body.transactionId) {
+      throw new BadRequestException('上传图片必须传 transactionId');
     }
 
-    if (body.transactionId) {
-      const trade = await this.tradeService.getTrade(userId, body.transactionId);
-      if (!trade?.success) {
-        throw new NotFoundException('transactionId 对应交易不存在或无权限');
-      }
+    const trade = await this.tradeService.getTrade(userId, body.transactionId);
+    if (!trade?.success) {
+      throw new NotFoundException('transactionId 对应交易不存在或无权限');
     }
 
     await this.imageService.consumeUploadQuota({

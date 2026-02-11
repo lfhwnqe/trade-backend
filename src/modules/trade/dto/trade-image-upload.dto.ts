@@ -14,10 +14,9 @@ export class TradeImageUploadUrlDto {
   @IsString()
   date: string;
 
-  @ApiPropertyOptional({ example: 'trade-transaction-id', description: '绑定交易ID（API token 必填）' })
-  @IsOptional()
+  @ApiProperty({ example: 'trade-transaction-id', description: '绑定交易ID（必填）' })
   @IsString()
-  transactionId?: string;
+  transactionId: string;
 
   @ApiPropertyOptional({ example: 345678, description: '文件字节大小（可选）' })
   @IsOptional()
