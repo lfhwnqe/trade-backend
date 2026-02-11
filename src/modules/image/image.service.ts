@@ -126,6 +126,15 @@ export class ImageService {
     return Number(this.configService.get('IMAGE_UPLOAD_DAILY_BYTES_FREE') ?? 64 * 1024 * 1024);
   }
 
+
+  private getPerMinuteCountLimit(plan: 'free' | 'pro' | 'admin', isApiToken: boolean) {
+    if (isApiToken) {
+      return Number(this.configService.get('IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_API_TOKEN') ?? 20);
+    }
+    if (plan === 'admin') return Number(this.configService.get('IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_ADMIN') ?? 120);
+    if (plan === 'pro') return Number(this.configService.get('IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_PRO') ?? 40);
+    return Number(this.configService.get('IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_FREE') ?? 10);
+  }
   async consumeUploadQuota(params: {
     userId: string;
     claims?: any;
@@ -138,16 +147,41 @@ export class ImageService {
     const plan = this.getPlanFromClaims(claims);
     const countLimit = this.getDailyCountLimit(plan, isApiToken);
     const bytesLimit = this.getDailyBytesLimit(plan, isApiToken);
+    const minuteLimit = this.getPerMinuteCountLimit(plan, isApiToken);
 
     const date = this.getTodayDateKey();
+    const now = new Date();
+    const minuteKey = `${now.toISOString().slice(0, 16)}`; // YYYY-MM-DDTHH:mm
     const actor = isApiToken ? `token:${apiTokenId || 'unknown'}` : 'cognito';
     const configKey = `imageQuota#${date}#${userId}#${actor}`;
+    const rateConfigKey = `imageRate#${minuteKey}#${userId}#${actor}`;
     const byteInc =
       typeof contentLength === 'number' && Number.isFinite(contentLength)
         ? Math.max(0, Math.trunc(contentLength))
         : 0;
 
     try {
+      await this.db.update({
+        TableName: this.configTableName,
+        Key: { configKey: rateConfigKey },
+        UpdateExpression:
+          'SET #issuedCount = if_not_exists(#issuedCount, :zero) + :one, #updatedAt = :updatedAt, #rateMinute = :rateMinute',
+        ConditionExpression:
+          '(attribute_not_exists(#issuedCount) OR #issuedCount <= :maxMinuteBefore)',
+        ExpressionAttributeNames: {
+          '#issuedCount': 'issuedCount',
+          '#updatedAt': 'updatedAt',
+          '#rateMinute': 'rateMinute',
+        },
+        ExpressionAttributeValues: {
+          ':zero': 0,
+          ':one': 1,
+          ':updatedAt': now.toISOString(),
+          ':rateMinute': minuteKey,
+          ':maxMinuteBefore': Math.max(0, minuteLimit - 1),
+        },
+      });
+
       await this.db.update({
         TableName: this.configTableName,
         Key: { configKey },
@@ -173,6 +207,15 @@ export class ImageService {
       });
     } catch (e: any) {
       if (String(e?.name || '').includes('ConditionalCheckFailed')) {
+        const isMinute = String(e?.message || '').includes('maxMinuteBefore') || String(e?.message || '').includes('rateMinute');
+        if (isMinute) {
+          throw new RateLimitException(
+            `upload rate limit exceeded for ${userId}`,
+            ERROR_CODES.IMAGE_RATE_LIMITED,
+            '上传过于频繁，请稍后重试',
+            { userId, actor, minuteLimit, minuteKey },
+          );
+        }
         throw new RateLimitException(
           `upload quota exceeded for ${userId}`,
           ERROR_CODES.IMAGE_QUOTA_EXCEEDED,

@@ -365,6 +365,14 @@ export class TradingStack extends cdk.Stack {
             process.env.IMAGE_UPLOAD_DAILY_BYTES_ADMIN || String(2048 * 1024 * 1024),
           IMAGE_UPLOAD_DAILY_BYTES_API_TOKEN:
             process.env.IMAGE_UPLOAD_DAILY_BYTES_API_TOKEN || String(120 * 1024 * 1024),
+          IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_FREE:
+            process.env.IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_FREE || '10',
+          IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_PRO:
+            process.env.IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_PRO || '40',
+          IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_ADMIN:
+            process.env.IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_ADMIN || '120',
+          IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_API_TOKEN:
+            process.env.IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_API_TOKEN || '20',
 
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,

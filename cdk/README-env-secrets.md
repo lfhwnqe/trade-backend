@@ -16,6 +16,7 @@ To make local `cdk deploy` work without exporting a lot of shell env vars, `cdk/
 - `IMAGE_UPLOAD_MAX_SIZE_BYTES`（单文件大小上限）
 - `IMAGE_UPLOAD_DAILY_COUNT_FREE/PRO/ADMIN/API_TOKEN`（每日上传次数）
 - `IMAGE_UPLOAD_DAILY_BYTES_FREE/PRO/ADMIN/API_TOKEN`（每日上传字节）
+- `IMAGE_UPLOAD_RATE_LIMIT_PER_MINUTE_FREE/PRO/ADMIN/API_TOKEN`（每分钟上传签发次数）
 
 ## Optional (only if enabling Binance integration)
 
