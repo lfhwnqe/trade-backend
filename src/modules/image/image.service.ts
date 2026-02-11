@@ -124,6 +124,23 @@ export class ImageService {
     return /^https?:\/\//i.test(ref);
   }
 
+  private parseLegacyOwnerFromUrl(ref: string): string | null {
+    try {
+      const u = new URL(ref);
+      const host = u.hostname;
+      if (host !== this.cloudfrontDomain) return null;
+      const pathname = u.pathname.replace(/^\/+/, '');
+      const parts = pathname.split('/');
+      // images/{ownerId}/yyyy-mm-dd/file
+      if (parts.length >= 2 && parts[0] === 'images') {
+        return parts[1] || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   private isOwnedKey(userId: string, key: string) {
     return key.startsWith(`images/${userId}/`) || key.startsWith(`uploads/${userId}/`);
   }
@@ -139,6 +156,16 @@ export class ImageService {
         }
 
         if (this.isHttpUrl(ref)) {
+          const legacyOwner = this.parseLegacyOwnerFromUrl(ref);
+          if (legacyOwner && legacyOwner !== userId) {
+            throw new AuthorizationException(
+              `Legacy image url not owned by current user: ${ref}`,
+              ERROR_CODES.RESOURCE_ACCESS_DENIED,
+              '图片访问越权',
+              { ref, owner: legacyOwner, userId },
+            );
+          }
+
           return {
             ref,
             kind: 'legacy_public',
