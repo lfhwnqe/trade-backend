@@ -8,6 +8,8 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import {
   UploadUrlResponse,
   ImageUrlResponse,
@@ -30,11 +32,18 @@ export class ImageService {
   private readonly allowLegacyPublicImage: boolean;
   private readonly resolveRateLimitPerMinute: number;
   private readonly resolveRateCounters = new Map<string, { minute: number; count: number }>();
+  private readonly db: DynamoDBDocument;
+  private readonly configTableName: string;
 
   constructor(private configService: ConfigService) {
     this.s3Client = new S3Client({
       region: this.configService.get('AWS_REGION'),
     });
+    this.db = DynamoDBDocument.from(
+      new DynamoDB({ region: this.configService.get('AWS_REGION') }),
+      { marshallOptions: { convertClassInstanceToMap: true } },
+    );
+    this.configTableName = this.configService.getOrThrow('CONFIG_TABLE_NAME');
 
     const bucketName = this.configService.get('IMAGE_BUCKET_NAME');
     if (!bucketName) {
@@ -82,6 +91,99 @@ export class ImageService {
    * @param date 日期 (YYYY-MM-DD)
    * @returns 上传URL和文件key
    */
+  private getTodayDateKey() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  private getPlanFromClaims(claims: any): 'free' | 'pro' | 'admin' {
+    const role = String(claims?.['custom:role'] || claims?.role || '');
+    const groups = (claims?.['cognito:groups'] as string[]) || [];
+    const isAdmin =
+      role === 'Admins' ||
+      role === 'SuperAdmins' ||
+      groups.includes('Admins') ||
+      groups.includes('SuperAdmins');
+    if (isAdmin) return 'admin';
+    if (role === 'ProPlan') return 'pro';
+    return 'free';
+  }
+
+  private getDailyCountLimit(plan: 'free' | 'pro' | 'admin', isApiToken: boolean) {
+    if (isApiToken) {
+      return Number(this.configService.get('IMAGE_UPLOAD_DAILY_COUNT_API_TOKEN') ?? 60);
+    }
+    if (plan === 'admin') return Number(this.configService.get('IMAGE_UPLOAD_DAILY_COUNT_ADMIN') ?? 500);
+    if (plan === 'pro') return Number(this.configService.get('IMAGE_UPLOAD_DAILY_COUNT_PRO') ?? 120);
+    return Number(this.configService.get('IMAGE_UPLOAD_DAILY_COUNT_FREE') ?? 20);
+  }
+
+  private getDailyBytesLimit(plan: 'free' | 'pro' | 'admin', isApiToken: boolean) {
+    if (isApiToken) {
+      return Number(this.configService.get('IMAGE_UPLOAD_DAILY_BYTES_API_TOKEN') ?? 120 * 1024 * 1024);
+    }
+    if (plan === 'admin') return Number(this.configService.get('IMAGE_UPLOAD_DAILY_BYTES_ADMIN') ?? 2048 * 1024 * 1024);
+    if (plan === 'pro') return Number(this.configService.get('IMAGE_UPLOAD_DAILY_BYTES_PRO') ?? 512 * 1024 * 1024);
+    return Number(this.configService.get('IMAGE_UPLOAD_DAILY_BYTES_FREE') ?? 64 * 1024 * 1024);
+  }
+
+  async consumeUploadQuota(params: {
+    userId: string;
+    claims?: any;
+    authType?: string;
+    apiTokenId?: string;
+    contentLength?: number;
+  }) {
+    const { userId, claims, authType, apiTokenId, contentLength } = params;
+    const isApiToken = authType === 'apiToken';
+    const plan = this.getPlanFromClaims(claims);
+    const countLimit = this.getDailyCountLimit(plan, isApiToken);
+    const bytesLimit = this.getDailyBytesLimit(plan, isApiToken);
+
+    const date = this.getTodayDateKey();
+    const actor = isApiToken ? `token:${apiTokenId || 'unknown'}` : 'cognito';
+    const configKey = `imageQuota#${date}#${userId}#${actor}`;
+    const byteInc =
+      typeof contentLength === 'number' && Number.isFinite(contentLength)
+        ? Math.max(0, Math.trunc(contentLength))
+        : 0;
+
+    try {
+      await this.db.update({
+        TableName: this.configTableName,
+        Key: { configKey },
+        UpdateExpression:
+          'SET #issuedCount = if_not_exists(#issuedCount, :zero) + :one, #issuedBytes = if_not_exists(#issuedBytes, :zero) + :byteInc, #updatedAt = :updatedAt, #quotaDate = :quotaDate',
+        ConditionExpression:
+          '(attribute_not_exists(#issuedCount) OR #issuedCount <= :maxCountBefore) AND (attribute_not_exists(#issuedBytes) OR #issuedBytes <= :maxBytesBefore)',
+        ExpressionAttributeNames: {
+          '#issuedCount': 'issuedCount',
+          '#issuedBytes': 'issuedBytes',
+          '#updatedAt': 'updatedAt',
+          '#quotaDate': 'quotaDate',
+        },
+        ExpressionAttributeValues: {
+          ':zero': 0,
+          ':one': 1,
+          ':byteInc': byteInc,
+          ':updatedAt': new Date().toISOString(),
+          ':quotaDate': date,
+          ':maxCountBefore': Math.max(0, countLimit - 1),
+          ':maxBytesBefore': Math.max(0, bytesLimit - byteInc),
+        },
+      });
+    } catch (e: any) {
+      if (String(e?.name || '').includes('ConditionalCheckFailed')) {
+        throw new RateLimitException(
+          `upload quota exceeded for ${userId}`,
+          ERROR_CODES.IMAGE_QUOTA_EXCEEDED,
+          '图片上传额度已达上限，请明天再试或升级套餐',
+          { userId, actor, countLimit, bytesLimit },
+        );
+      }
+      throw e;
+    }
+  }
+
   async generateUploadUrl(
     userId: string,
     fileName: string,

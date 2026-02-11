@@ -347,6 +347,24 @@ export class TradingStack extends cdk.Stack {
             process.env.ALLOW_LEGACY_PUBLIC_IMAGE || 'true',
           IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE:
             process.env.IMAGE_RESOLVE_RATE_LIMIT_PER_MINUTE || '120',
+          IMAGE_UPLOAD_MAX_SIZE_BYTES:
+            process.env.IMAGE_UPLOAD_MAX_SIZE_BYTES || String(5 * 1024 * 1024),
+          IMAGE_UPLOAD_DAILY_COUNT_FREE:
+            process.env.IMAGE_UPLOAD_DAILY_COUNT_FREE || '20',
+          IMAGE_UPLOAD_DAILY_COUNT_PRO:
+            process.env.IMAGE_UPLOAD_DAILY_COUNT_PRO || '120',
+          IMAGE_UPLOAD_DAILY_COUNT_ADMIN:
+            process.env.IMAGE_UPLOAD_DAILY_COUNT_ADMIN || '500',
+          IMAGE_UPLOAD_DAILY_COUNT_API_TOKEN:
+            process.env.IMAGE_UPLOAD_DAILY_COUNT_API_TOKEN || '60',
+          IMAGE_UPLOAD_DAILY_BYTES_FREE:
+            process.env.IMAGE_UPLOAD_DAILY_BYTES_FREE || String(64 * 1024 * 1024),
+          IMAGE_UPLOAD_DAILY_BYTES_PRO:
+            process.env.IMAGE_UPLOAD_DAILY_BYTES_PRO || String(512 * 1024 * 1024),
+          IMAGE_UPLOAD_DAILY_BYTES_ADMIN:
+            process.env.IMAGE_UPLOAD_DAILY_BYTES_ADMIN || String(2048 * 1024 * 1024),
+          IMAGE_UPLOAD_DAILY_BYTES_API_TOKEN:
+            process.env.IMAGE_UPLOAD_DAILY_BYTES_API_TOKEN || String(120 * 1024 * 1024),
 
           USER_POOL_ID: userPool.userPoolId,
           USER_POOL_CLIENT_ID: userPoolClient.userPoolClientId,

@@ -139,6 +139,7 @@ export class AuthMiddleware implements NestMiddleware {
         (req as any).user = { sub: auth.userId };
         (req as any).authType = 'apiToken';
         (req as any).scopes = auth.scopes;
+        (req as any).apiTokenId = auth.tokenId;
         return next();
       }
 

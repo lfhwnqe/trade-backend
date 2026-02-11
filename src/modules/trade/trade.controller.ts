@@ -127,6 +127,14 @@ export class TradeController {
       }
     }
 
+    await this.imageService.consumeUploadQuota({
+      userId,
+      claims: (req as any).user,
+      authType,
+      apiTokenId: (req as any).apiTokenId,
+      contentLength: body.contentLength,
+    });
+
     return this.imageService.generateTradeUploadUrl(userId, {
       fileName: body.fileName,
       fileType: body.fileType,
