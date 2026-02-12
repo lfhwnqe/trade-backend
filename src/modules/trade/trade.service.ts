@@ -1274,13 +1274,15 @@ export class TradeService {
             TableName: this.tableName,
             IndexName: indexName,
             KeyConditionExpression: 'userId = :userId',
-            FilterExpression: '#status = :exited AND tradeType = :tradeType',
+            FilterExpression:
+              '(#status = :exited OR #status = :earlyExited) AND tradeType = :tradeType',
             ExpressionAttributeNames: {
               '#status': 'status',
             },
             ExpressionAttributeValues: {
               ':userId': userId,
               ':exited': '已离场',
+              ':earlyExited': '提前离场',
               ':tradeType': tradeType,
             },
             ScanIndexForward: false,
