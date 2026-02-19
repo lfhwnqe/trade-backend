@@ -1356,6 +1356,52 @@ export class TradeService {
         return round2(sum / trades.length);
       };
 
+      const calculateDisciplineStats = (
+        recent: Trade[],
+        previous: Trade[],
+      ) => {
+        const scoreTrade = (t: Trade) => {
+          let score = 100;
+
+          const followedPlan = (t as any).followedPlan;
+          const followedSystemStrictly = (t as any).followedSystemStrictly;
+          const exitTag = String((t as any).exitQualityTag || '').toUpperCase();
+          const remarks = String((t as any).remarks || '').trim();
+          const lessonsLearned = String((t as any).lessonsLearned || '').trim();
+
+          if (followedPlan === false) score -= 20;
+          if (followedSystemStrictly === false) score -= 15;
+          if (exitTag === 'EMOTIONAL') score -= 25;
+          if (exitTag === 'UNKNOWN' || !exitTag) score -= 10;
+          if (!remarks) score -= 10;
+          if (!lessonsLearned) score -= 10;
+
+          if (score < 0) score = 0;
+          if (score > 100) score = 100;
+          return score;
+        };
+
+        const avgScore = (arr: Trade[]) => {
+          if (!arr.length) return 0;
+          const total = arr.reduce((acc, t) => acc + scoreTrade(t), 0);
+          return round2(total / arr.length);
+        };
+
+        const recentAvg = avgScore(recent);
+        const previousAvg = avgScore(previous);
+        const delta = round2(recentAvg - previousAvg);
+
+        const level =
+          recentAvg >= 80 ? 'excellent' : recentAvg >= 60 ? 'fair' : 'needs_improvement';
+
+        return {
+          avgScore: recentAvg,
+          previousAvgScore: previousAvg,
+          delta,
+          level,
+        };
+      };
+
       const calculateRStats = (trades: Trade[]) => {
         const plannedRRValues = trades
           .map((t) => numOrNull((t as any).plannedRR))
@@ -1446,6 +1492,14 @@ export class TradeService {
 
       const recent30RStats = calculateRStats(recent30Trades);
       const recent30SimulationRStats = calculateRStats(recent30SimulationTrades);
+      const recent30DisciplineStats = calculateDisciplineStats(
+        recent30Trades,
+        previous30Trades,
+      );
+      const recent30SimulationDisciplineStats = calculateDisciplineStats(
+        recent30SimulationTrades,
+        previous30SimulationTrades,
+      );
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
@@ -1481,6 +1535,8 @@ export class TradeService {
           previous30SimulationProfitLossAvg,
           recent30RStats,
           recent30SimulationRStats,
+          recent30DisciplineStats,
+          recent30SimulationDisciplineStats,
           summaryHighlights,
           recentTrades,
         },
