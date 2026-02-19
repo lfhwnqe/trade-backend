@@ -1386,19 +1386,35 @@ export class TradeService {
           else quality.UNKNOWN += 1;
         });
 
-        const emotionalRealizedR = trades
+        const emotionalRealizedRValues = trades
           .filter((t) => String((t as any).exitQualityTag || '').toUpperCase() === 'EMOTIONAL')
           .map((t) => numOrNull((t as any).realizedR))
-          .filter((v): v is number => v !== null)
-          .reduce((a, b) => a + b, 0);
+          .filter((v): v is number => v !== null);
 
-        const technicalRealizedR = trades
+        const technicalRealizedRValues = trades
           .filter((t) => String((t as any).exitQualityTag || '').toUpperCase() === 'TECHNICAL')
           .map((t) => numOrNull((t as any).realizedR))
-          .filter((v): v is number => v !== null)
-          .reduce((a, b) => a + b, 0);
+          .filter((v): v is number => v !== null);
 
-        const emotionalLeakageR = round2(Math.max(0, technicalRealizedR - emotionalRealizedR));
+        const emotionalAvgR = avg(emotionalRealizedRValues);
+        const technicalAvgR = avg(technicalRealizedRValues);
+        const emotionalCount = emotionalRealizedRValues.length;
+
+        // v2: 样本归一化的情绪泄露估算
+        // emotionalLeakageR = max(0, (technicalAvgR - emotionalAvgR) * emotionalCount)
+        const emotionalLeakageR = round2(
+          Math.max(0, (technicalAvgR - emotionalAvgR) * emotionalCount),
+        );
+
+        let emotionalLeakageConfidence: 'low' | 'medium' | 'high' = 'high';
+        if (technicalRealizedRValues.length < 5 || emotionalRealizedRValues.length < 5) {
+          emotionalLeakageConfidence = 'low';
+        } else if (
+          technicalRealizedRValues.length < 10 ||
+          emotionalRealizedRValues.length < 10
+        ) {
+          emotionalLeakageConfidence = 'medium';
+        }
 
         return {
           expectancyR,
@@ -1406,6 +1422,7 @@ export class TradeService {
           avgRealizedR,
           avgREfficiency,
           emotionalLeakageR,
+          emotionalLeakageConfidence,
           qualityDistribution: quality,
         };
       };
