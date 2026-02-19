@@ -1387,6 +1387,20 @@ export class TradeService {
           return round2(total / arr.length);
         };
 
+        const breakdown = recent.reduce(
+          (acc, t) => {
+            if ((t as any).followedPlan === false) acc.notFollowedPlan += 1;
+            if (String((t as any).exitQualityTag || '').toUpperCase() === 'EMOTIONAL') {
+              acc.emotionalExit += 1;
+            }
+            const remarks = String((t as any).remarks || '').trim();
+            const lessonsLearned = String((t as any).lessonsLearned || '').trim();
+            if (!remarks || !lessonsLearned) acc.missingReviewNotes += 1;
+            return acc;
+          },
+          { notFollowedPlan: 0, emotionalExit: 0, missingReviewNotes: 0 },
+        );
+
         const recentAvg = avgScore(recent);
         const previousAvg = avgScore(previous);
         const delta = round2(recentAvg - previousAvg);
@@ -1401,6 +1415,7 @@ export class TradeService {
           level,
           sampleCount: recent.length,
           scoreVersion: 'v1',
+          breakdown,
         };
       };
 
