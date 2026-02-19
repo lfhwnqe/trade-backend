@@ -1399,6 +1399,8 @@ export class TradeService {
           previousAvgScore: previousAvg,
           delta,
           level,
+          sampleCount: recent.length,
+          scoreVersion: 'v1',
         };
       };
 
