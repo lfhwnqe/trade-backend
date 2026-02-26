@@ -80,27 +80,27 @@ export class UpdateTradeDto {
   @ApiProperty({
     description: '成交量分布图（旧字段），最多5张图',
     type: [ImageResource],
-    maxItems: 5,
+    maxItems: 10,
     required: false,
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ImageResource)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   volumeProfileImages?: ImageResource[];
 
   @ApiProperty({
     description: '市场结构分析图片，最多5张图',
     type: [MarketStructureAnalysisImage],
-    maxItems: 5,
+    maxItems: 10,
     required: false,
   })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => MarketStructureAnalysisImage)
-  @ArrayMaxSize(5)
+  @ArrayMaxSize(10)
   marketStructureAnalysisImages?: MarketStructureAnalysisImage[];
 
   @ApiProperty({

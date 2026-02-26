@@ -5,6 +5,7 @@ import {
   Headers,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Req,
 } from '@nestjs/common';
@@ -21,6 +22,8 @@ import { TelegramUpdate } from './telegram.types';
 @ApiTags('Telegram Integration')
 @Controller()
 export class TelegramController {
+  private readonly logger = new Logger(TelegramController.name);
+
   constructor(private readonly telegramService: TelegramService) {}
 
   @ApiOperation({ summary: '获取 telegram 绑定信息' })
@@ -103,7 +106,11 @@ export class TelegramController {
             chatId,
             '绑定失败：链接无效或已过期。请在网页端重新生成绑定链接。',
           )
-          .catch(() => undefined);
+          .catch((error: any) => {
+            this.logger.warn(
+              `telegram feedback(/start invalid) failed chatId=${chatId}: ${error?.message || error}`,
+            );
+          });
         return { success: true };
       }
 
@@ -116,7 +123,11 @@ export class TelegramController {
 
       await this.telegramService
         .sendMessage(chatId, '绑定成功：后续系统会把交易提醒推送到这里。')
-        .catch(() => undefined);
+        .catch((error: any) => {
+          this.logger.warn(
+            `telegram feedback(/start success) failed chatId=${chatId}: ${error?.message || error}`,
+          );
+        });
 
       return { success: true };
     }
@@ -128,7 +139,11 @@ export class TelegramController {
       if (!bindCode) {
         await this.telegramService
           .sendMessage(chatId, '绑定失败：缺少 bindCode。请从网页复制绑定码。')
-          .catch(() => undefined);
+          .catch((error: any) => {
+            this.logger.warn(
+              `telegram feedback(/bind missing code) failed chatId=${chatId}: ${error?.message || error}`,
+            );
+          });
         return { success: true };
       }
 
@@ -136,7 +151,11 @@ export class TelegramController {
       if (!verified) {
         await this.telegramService
           .sendMessage(chatId, '绑定失败：bindCode 无效。请从网页重新生成。')
-          .catch(() => undefined);
+          .catch((error: any) => {
+            this.logger.warn(
+              `telegram feedback(/bind invalid code) failed chatId=${chatId}: ${error?.message || error}`,
+            );
+          });
         return { success: true };
       }
 
@@ -154,7 +173,11 @@ export class TelegramController {
           chatId,
           `绑定成功：该群已绑定到 webhook（hookId=${verified.hookId}）。`,
         )
-        .catch(() => undefined);
+        .catch((error: any) => {
+          this.logger.warn(
+            `telegram feedback(/bind success) failed chatId=${chatId}: ${error?.message || error}`,
+          );
+        });
 
       return { success: true };
     }
