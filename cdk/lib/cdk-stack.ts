@@ -138,6 +138,25 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // DynamoDB Table for flashcards
+    const flashcardsTable = new dynamodb.Table(
+      this,
+      `${appName}FlashcardsTable${envName}`,
+      {
+        tableName: `${appName}-flashcards-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'cardId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    flashcardsTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // DynamoDB Table for common config
     const configTable = new dynamodb.Table(
       this,
@@ -326,6 +345,7 @@ export class TradingStack extends cdk.Stack {
           IMAGE_BUCKET_NAME: imageBucket.bucketName,
           CLOUDFRONT_DOMAIN_NAME: distribution.distributionDomainName,
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
+          FLASHCARDS_TABLE_NAME: flashcardsTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
@@ -385,6 +405,7 @@ export class TradingStack extends cdk.Stack {
     // Grant Lambda permissions
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
+    flashcardsTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
@@ -448,6 +469,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'TRANSACTIONS_TABLE_NAME', {
       value: transactionsTable.tableName,
       description: `Name of the DynamoDB table for transactions in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'FLASHCARDS_TABLE_NAME', {
+      value: flashcardsTable.tableName,
+      description: `Name of the DynamoDB table for flashcards in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'CONFIG_TABLE_NAME', {

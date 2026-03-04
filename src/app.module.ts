@@ -8,6 +8,7 @@ import { RoleModule } from './modules/role/role.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { BinanceFuturesModule } from './modules/exchange/binance-futures/binance-futures.module';
+import { FlashcardModule } from './modules/flashcard/flashcard.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { BinanceFuturesModule } from './modules/exchange/binance-futures/binance
     TelegramModule,
     WebhookModule,
     BinanceFuturesModule,
+    FlashcardModule,
     // RAGModule,
   ],
 })
