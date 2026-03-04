@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Patch,
   Get,
   NotFoundException,
   Param,
@@ -24,6 +25,9 @@ import { GetFlashcardUploadUrlDto } from './dto/get-upload-url.dto';
 import { CreateFlashcardCardDto } from './dto/create-flashcard-card.dto';
 import { RandomFlashcardCardsDto } from './dto/random-flashcard-cards.dto';
 import { ListFlashcardCardsDto } from './dto/list-flashcard-cards.dto';
+import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-session.dto';
+import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
+import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -105,5 +109,95 @@ export class FlashcardController {
     }
 
     return this.flashcardService.deleteCard(userId, cardId);
+  }
+
+  @ApiOperation({ summary: '开始一次闪卡练习并创建会话' })
+  @ApiBody({ type: StartFlashcardDrillSessionDto })
+  @ApiResponse({ status: 200, description: '返回 sessionId 与抽题结果' })
+  @Post('drill/session/start')
+  async startSession(
+    @Req() req: Request,
+    @Body() dto: StartFlashcardDrillSessionDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.startSession(userId, dto);
+  }
+
+  @ApiOperation({ summary: '提交单题作答结果（写入会话记录）' })
+  @ApiBody({ type: CreateFlashcardDrillAttemptDto })
+  @ApiResponse({ status: 200, description: '返回本题判定与会话实时统计' })
+  @Post('drill/session/:sessionId/attempt')
+  async submitAttempt(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() dto: CreateFlashcardDrillAttemptDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.submitAttempt(userId, sessionId, dto);
+  }
+
+  @ApiOperation({ summary: '结束一次闪卡练习并返回分数' })
+  @ApiResponse({ status: 200, description: '返回 score 与会话统计' })
+  @Post('drill/session/:sessionId/finish')
+  async finishSession(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.finishSession(userId, sessionId);
+  }
+
+  @ApiOperation({ summary: '获取错题集' })
+  @ApiResponse({ status: 200, description: '返回错题集卡片列表' })
+  @Get('review/wrong-book')
+  async listWrongBook(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.listWrongBook(userId);
+  }
+
+  @ApiOperation({ summary: '获取收藏库' })
+  @ApiResponse({ status: 200, description: '返回收藏卡片列表' })
+  @Get('review/favorites')
+  async listFavorites(@Req() req: Request) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.listFavorites(userId);
+  }
+
+  @ApiOperation({ summary: '更新题目备注' })
+  @ApiParam({ name: 'cardId', description: '卡片 ID' })
+  @ApiBody({ type: UpdateFlashcardNoteDto })
+  @ApiResponse({ status: 200, description: '更新成功并返回卡片对象' })
+  @Patch('cards/:cardId/note')
+  async updateCardNote(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: UpdateFlashcardNoteDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.updateCardNote(userId, cardId, dto.note);
   }
 }

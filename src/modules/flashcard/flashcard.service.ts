@@ -8,10 +8,19 @@ import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { CreateFlashcardCardDto } from './dto/create-flashcard-card.dto';
 import { GetFlashcardUploadUrlDto } from './dto/get-upload-url.dto';
 import { RandomFlashcardCardsDto } from './dto/random-flashcard-cards.dto';
-import { FlashcardCard } from './flashcard.types';
+import {
+  FlashcardCard,
+  FlashcardDrillAttemptItem,
+  FlashcardDrillSessionItem,
+  FlashcardFavoriteItem,
+  FlashcardSource,
+  FlashcardWrongBookItem,
+} from './flashcard.types';
 import { ListFlashcardCardsDto } from './dto/list-flashcard-cards.dto';
 import { ResourceNotFoundException } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
+import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-session.dto';
+import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -66,16 +75,21 @@ export class FlashcardService {
     const now = new Date().toISOString();
     const cardId = uuidv4();
 
+    const direction = dto.expectedAction || dto.direction;
+
     const item: FlashcardCard = {
       id: cardId,
       userId,
       cardId,
+      entityType: 'CARD',
       questionImageUrl: dto.questionImageUrl,
       answerImageUrl: dto.answerImageUrl,
-      direction: dto.direction,
-      context: dto.context,
-      orderFlowFeature: dto.orderFlowFeature,
-      result: dto.result,
+      expectedAction: direction,
+      // legacy fields for backward compatibility with existing UI
+      direction,
+      context: dto.context || 'RANGE',
+      orderFlowFeature: dto.orderFlowFeature || 'NO_CLEAR_ANOMALY',
+      result: dto.result || 'BREAK_EVEN',
       notes: dto.notes,
       createdAt: now,
       updatedAt: now,
@@ -105,10 +119,15 @@ export class FlashcardService {
   }
 
   async listCards(userId: string, dto: ListFlashcardCardsDto) {
-    const filterExpressions: string[] = [];
-    const expressionAttributeNames: Record<string, string> = {};
+    const filterExpressions: string[] = [
+      '(attribute_not_exists(#entityType) OR #entityType = :entityTypeCard)',
+    ];
+    const expressionAttributeNames: Record<string, string> = {
+      '#entityType': 'entityType',
+    };
     const expressionAttributeValues: Record<string, unknown> = {
       ':userId': userId,
+      ':entityTypeCard': 'CARD',
     };
 
     if (dto.direction) {
@@ -137,9 +156,7 @@ export class FlashcardService {
       IndexName: this.createdAtIndexName,
       KeyConditionExpression: 'userId = :userId',
       ExpressionAttributeValues: expressionAttributeValues,
-      ...(filterExpressions.length
-        ? { FilterExpression: filterExpressions.join(' AND ') }
-        : {}),
+      FilterExpression: filterExpressions.join(' AND '),
       ...(Object.keys(expressionAttributeNames).length
         ? { ExpressionAttributeNames: expressionAttributeNames }
         : {}),
@@ -191,6 +208,347 @@ export class FlashcardService {
     };
   }
 
+  async updateCardNote(userId: string, cardId: string, note?: string) {
+    const now = new Date().toISOString();
+    const trimmedNote = note?.trim();
+    const hasNote = typeof trimmedNote === 'string' && trimmedNote.length > 0;
+
+    const result = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId },
+      ConditionExpression:
+        'attribute_exists(cardId) AND (attribute_not_exists(entityType) OR entityType = :entityTypeCard)',
+      UpdateExpression: hasNote
+        ? 'SET notes = :notes, updatedAt = :updatedAt, entityType = if_not_exists(entityType, :entityTypeCard)'
+        : 'SET updatedAt = :updatedAt, entityType = if_not_exists(entityType, :entityTypeCard) REMOVE notes',
+      ExpressionAttributeValues: hasNote
+        ? {
+            ':notes': trimmedNote,
+            ':updatedAt': now,
+            ':entityTypeCard': 'CARD',
+          }
+        : {
+            ':updatedAt': now,
+            ':entityTypeCard': 'CARD',
+          },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    return {
+      success: true,
+      data: result.Attributes as FlashcardCard,
+    };
+  }
+
+  async startSession(userId: string, dto: StartFlashcardDrillSessionDto) {
+    const cards = await this.pickCardsBySource(userId, dto.source, dto.count);
+    const sessionId = uuidv4();
+    const now = new Date().toISOString();
+
+    const sessionItem: FlashcardDrillSessionItem = {
+      userId,
+      cardId: this.makeSessionKey(sessionId),
+      entityType: 'SESSION',
+      sessionId,
+      source: dto.source,
+      total: cards.length,
+      answered: 0,
+      correct: 0,
+      wrong: 0,
+      score: 0,
+      status: 'IN_PROGRESS',
+      cardIds: cards.map((card) => card.cardId),
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: sessionItem,
+    });
+
+    return {
+      success: true,
+      data: {
+        sessionId,
+        source: dto.source,
+        count: cards.length,
+        cards,
+      },
+    };
+  }
+
+  async submitAttempt(
+    userId: string,
+    sessionId: string,
+    dto: CreateFlashcardDrillAttemptDto,
+  ) {
+    const now = new Date().toISOString();
+    const session = await this.getSession(userId, sessionId);
+
+    if (!session.cardIds.includes(dto.cardId)) {
+      throw new ResourceNotFoundException(
+        `card ${dto.cardId} not in session ${sessionId}`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '该题目不属于当前练习会话',
+        { userId, sessionId, cardId: dto.cardId },
+      );
+    }
+
+    const card = await this.getCardById(userId, dto.cardId);
+    const expectedAction = card.expectedAction || card.direction;
+    const isCorrect = expectedAction === dto.userAction;
+
+    const attemptKey = this.makeAttemptKey(sessionId, dto.cardId);
+    const existingAttemptResult = await this.db.get({
+      TableName: this.tableName,
+      Key: { userId, cardId: attemptKey },
+    });
+
+    if (existingAttemptResult.Item) {
+      if (typeof dto.isFavorite === 'boolean') {
+        await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
+        await this.db.update({
+          TableName: this.tableName,
+          Key: { userId, cardId: attemptKey },
+          UpdateExpression: 'SET isFavorite = :isFavorite, updatedAt = :updatedAt',
+          ExpressionAttributeValues: {
+            ':isFavorite': dto.isFavorite,
+            ':updatedAt': now,
+          },
+        });
+      }
+
+      if (typeof dto.note === 'string') {
+        await this.updateCardNote(userId, dto.cardId, dto.note);
+      }
+
+      return {
+        success: true,
+        data: {
+          isCorrect: (existingAttemptResult.Item as FlashcardDrillAttemptItem)
+            .isCorrect,
+          expectedAction,
+          runningStats: this.toSessionStats(session),
+        },
+      };
+    }
+
+    if (typeof dto.isFavorite === 'boolean') {
+      await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
+    }
+
+    if (typeof dto.note === 'string') {
+      await this.updateCardNote(userId, dto.cardId, dto.note);
+      card.notes = dto.note.trim();
+    }
+
+    if (!isCorrect) {
+      await this.upsertWrongBook(userId, dto.cardId, sessionId, now);
+    }
+
+    const attemptItem: FlashcardDrillAttemptItem = {
+      userId,
+      cardId: attemptKey,
+      entityType: 'ATTEMPT',
+      sessionId,
+      targetCardId: dto.cardId,
+      userAction: dto.userAction,
+      expectedAction,
+      isCorrect,
+      isFavorite: dto.isFavorite === true,
+      noteSnapshot: card.notes,
+      answeredAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: attemptItem,
+    });
+
+    const sessionUpdate = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSessionKey(sessionId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeSession',
+      UpdateExpression:
+        'SET answered = answered + :incAnswered, correct = correct + :incCorrect, wrong = wrong + :incWrong, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':entityTypeSession': 'SESSION',
+        ':incAnswered': 1,
+        ':incCorrect': isCorrect ? 1 : 0,
+        ':incWrong': isCorrect ? 0 : 1,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    const updatedSession = sessionUpdate.Attributes as FlashcardDrillSessionItem;
+
+    return {
+      success: true,
+      data: {
+        isCorrect,
+        expectedAction,
+        runningStats: this.toSessionStats(updatedSession),
+      },
+    };
+  }
+
+  async finishSession(userId: string, sessionId: string) {
+    const now = new Date().toISOString();
+    const session = await this.getSession(userId, sessionId);
+
+    const score = this.calcScore(session.correct, session.answered);
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSessionKey(sessionId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeSession',
+      UpdateExpression:
+        'SET #status = :statusCompleted, endedAt = :endedAt, score = :score, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':entityTypeSession': 'SESSION',
+        ':statusCompleted': 'COMPLETED',
+        ':endedAt': now,
+        ':score': score,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    const updatedSession = updated.Attributes as FlashcardDrillSessionItem;
+
+    return {
+      success: true,
+      data: {
+        sessionId,
+        score: updatedSession.score,
+        stats: this.toSessionStats(updatedSession),
+      },
+    };
+  }
+
+  async listWrongBook(userId: string) {
+    const wrongItems = await this.queryByPrefix<FlashcardWrongBookItem>(
+      userId,
+      'wrong#',
+    );
+
+    const cards = await this.batchGetCardsByIds(
+      userId,
+      wrongItems.map((item) => item.targetCardId),
+    );
+
+    return {
+      success: true,
+      data: cards,
+    };
+  }
+
+  async listFavorites(userId: string) {
+    const favoriteItems = await this.queryByPrefix<FlashcardFavoriteItem>(
+      userId,
+      'favorite#',
+    );
+
+    const cards = await this.batchGetCardsByIds(
+      userId,
+      favoriteItems.map((item) => item.targetCardId),
+    );
+
+    return {
+      success: true,
+      data: cards,
+    };
+  }
+
+  private async pickCardsBySource(
+    userId: string,
+    source: FlashcardSource,
+    count: number,
+  ): Promise<FlashcardCard[]> {
+    if (source === 'ALL') {
+      const cards = await this.listAllCards(userId);
+      this.shuffleInPlace(cards);
+      return cards.slice(0, count);
+    }
+
+    const relationPrefix = source === 'WRONG_BOOK' ? 'wrong#' : 'favorite#';
+    const relationItems = await this.queryByPrefix<
+      FlashcardWrongBookItem | FlashcardFavoriteItem
+    >(userId, relationPrefix);
+
+    if (!relationItems.length) {
+      return [];
+    }
+
+    const cardIds = relationItems.map((item) => item.targetCardId);
+    const cards = await this.batchGetCardsByIds(userId, cardIds);
+    this.shuffleInPlace(cards);
+    return cards.slice(0, count);
+  }
+
+  private async getSession(
+    userId: string,
+    sessionId: string,
+  ): Promise<FlashcardDrillSessionItem> {
+    const result = await this.db.get({
+      TableName: this.tableName,
+      Key: {
+        userId,
+        cardId: this.makeSessionKey(sessionId),
+      },
+    });
+
+    const item = result.Item as FlashcardDrillSessionItem | undefined;
+
+    if (!item || item.entityType !== 'SESSION') {
+      throw new ResourceNotFoundException(
+        `session not found: ${sessionId}`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '练习会话不存在',
+        { userId, sessionId },
+      );
+    }
+
+    return item;
+  }
+
+  private async getCardById(userId: string, cardId: string): Promise<FlashcardCard> {
+    const result = await this.db.get({
+      TableName: this.tableName,
+      Key: {
+        userId,
+        cardId,
+      },
+    });
+
+    const card = result.Item as FlashcardCard | undefined;
+    const isCardEntity =
+      !!card &&
+      (card.entityType === 'CARD' ||
+        (!card.entityType && !!card.questionImageUrl && !!card.answerImageUrl));
+
+    if (!isCardEntity) {
+      throw new ResourceNotFoundException(
+        `flashcard not found: ${cardId}`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '卡片不存在或已删除',
+        { userId, cardId },
+      );
+    }
+
+    return card;
+  }
+
   private async listAllCards(userId: string): Promise<FlashcardCard[]> {
     const cards: FlashcardCard[] = [];
     let lastEvaluatedKey: Record<string, unknown> | undefined;
@@ -206,12 +564,154 @@ export class FlashcardService {
         Limit: 200,
       });
 
-      const pageCards = (result.Items || []) as FlashcardCard[];
+      const pageItems = (result.Items || []) as FlashcardCard[];
+      const pageCards = pageItems.filter(
+        (item) =>
+          item.entityType === 'CARD' ||
+          (!item.entityType && !!item.questionImageUrl && !!item.answerImageUrl),
+      );
+
       cards.push(...pageCards);
       lastEvaluatedKey = result.LastEvaluatedKey;
     } while (lastEvaluatedKey);
 
     return cards;
+  }
+
+  private async batchGetCardsByIds(
+    userId: string,
+    cardIds: string[],
+  ): Promise<FlashcardCard[]> {
+    if (!cardIds.length) {
+      return [];
+    }
+
+    const uniqueCardIds = Array.from(new Set(cardIds));
+    const cards: FlashcardCard[] = [];
+
+    for (let i = 0; i < uniqueCardIds.length; i += 100) {
+      const chunk = uniqueCardIds.slice(i, i + 100);
+      const result = await this.db.batchGet({
+        RequestItems: {
+          [this.tableName]: {
+            Keys: chunk.map((cardId) => ({ userId, cardId })),
+          },
+        },
+      });
+
+      const items =
+        ((result.Responses?.[this.tableName] as FlashcardCard[] | undefined) || [])
+          .filter(
+            (item) =>
+              item.entityType === 'CARD' ||
+              (!item.entityType && !!item.questionImageUrl && !!item.answerImageUrl),
+          );
+
+      cards.push(...items);
+    }
+
+    return cards;
+  }
+
+  private async queryByPrefix<T extends { targetCardId: string }>(
+    userId: string,
+    prefix: string,
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression:
+          'userId = :userId AND begins_with(cardId, :prefix)',
+        ExpressionAttributeValues: {
+          ':userId': userId,
+          ':prefix': prefix,
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+
+      items.push(...((result.Items || []) as T[]));
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return items;
+  }
+
+  private async setFavorite(
+    userId: string,
+    targetCardId: string,
+    isFavorite: boolean,
+    now: string,
+  ) {
+    const key = this.makeFavoriteKey(targetCardId);
+
+    if (!isFavorite) {
+      await this.db.delete({
+        TableName: this.tableName,
+        Key: {
+          userId,
+          cardId: key,
+        },
+      });
+      return;
+    }
+
+    const item: FlashcardFavoriteItem = {
+      userId,
+      cardId: key,
+      entityType: 'FAVORITE',
+      targetCardId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: item,
+    });
+  }
+
+  private async upsertWrongBook(
+    userId: string,
+    targetCardId: string,
+    sessionId: string,
+    now: string,
+  ) {
+    const item: FlashcardWrongBookItem = {
+      userId,
+      cardId: this.makeWrongBookKey(targetCardId),
+      entityType: 'WRONG_BOOK',
+      targetCardId,
+      lastSessionId: sessionId,
+      lastAnsweredAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: item,
+    });
+  }
+
+  private toSessionStats(session: FlashcardDrillSessionItem) {
+    return {
+      total: session.total,
+      answered: session.answered,
+      correct: session.correct,
+      wrong: session.wrong,
+      accuracy: session.answered > 0 ? session.correct / session.answered : 0,
+      score: this.calcScore(session.correct, session.answered),
+      status: session.status,
+    };
+  }
+
+  private calcScore(correct: number, answered: number) {
+    if (answered <= 0) return 0;
+    return Math.round((correct / answered) * 100);
   }
 
   private matchesFilters(card: FlashcardCard, dto: RandomFlashcardCardsDto) {
@@ -242,6 +742,22 @@ export class FlashcardService {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
     }
+  }
+
+  private makeSessionKey(sessionId: string) {
+    return `session#${sessionId}`;
+  }
+
+  private makeAttemptKey(sessionId: string, cardId: string) {
+    return `attempt#${sessionId}#${cardId}`;
+  }
+
+  private makeWrongBookKey(cardId: string) {
+    return `wrong#${cardId}`;
+  }
+
+  private makeFavoriteKey(cardId: string) {
+    return `favorite#${cardId}`;
   }
 
   private resolveFileExtension(fileName: string, contentType: string) {

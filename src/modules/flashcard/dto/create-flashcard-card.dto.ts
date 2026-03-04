@@ -5,6 +5,7 @@ import {
   FLASHCARD_DIRECTION_VALUES,
   FLASHCARD_ORDER_FLOW_FEATURE_VALUES,
   FLASHCARD_RESULT_VALUES,
+  FlashcardAction,
   FlashcardContext,
   FlashcardDirection,
   FlashcardOrderFlowFeature,
@@ -22,25 +23,42 @@ export class CreateFlashcardCardDto {
   @IsUrl()
   answerImageUrl: string;
 
-  @ApiProperty({ enum: FLASHCARD_DIRECTION_VALUES, example: 'SHORT' })
+  @ApiProperty({
+    enum: FLASHCARD_DIRECTION_VALUES,
+    example: 'SHORT',
+    description: '标准动作（推荐字段）',
+  })
   @IsString()
   @IsIn(FLASHCARD_DIRECTION_VALUES)
-  direction: FlashcardDirection;
+  expectedAction: FlashcardAction;
 
-  @ApiProperty({ enum: FLASHCARD_CONTEXT_VALUES, example: 'RANGE' })
+  @ApiPropertyOptional({
+    enum: FLASHCARD_DIRECTION_VALUES,
+    example: 'SHORT',
+    description: '兼容旧字段，若传 expectedAction 可省略',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_DIRECTION_VALUES)
+  direction?: FlashcardDirection;
+
+  @ApiPropertyOptional({ enum: FLASHCARD_CONTEXT_VALUES, example: 'RANGE' })
+  @IsOptional()
   @IsString()
   @IsIn(FLASHCARD_CONTEXT_VALUES)
-  context: FlashcardContext;
+  context?: FlashcardContext;
 
-  @ApiProperty({ enum: FLASHCARD_ORDER_FLOW_FEATURE_VALUES, example: 'SWEEP' })
+  @ApiPropertyOptional({ enum: FLASHCARD_ORDER_FLOW_FEATURE_VALUES, example: 'SWEEP' })
+  @IsOptional()
   @IsString()
   @IsIn(FLASHCARD_ORDER_FLOW_FEATURE_VALUES)
-  orderFlowFeature: FlashcardOrderFlowFeature;
+  orderFlowFeature?: FlashcardOrderFlowFeature;
 
-  @ApiProperty({ enum: FLASHCARD_RESULT_VALUES, example: 'LOSS' })
+  @ApiPropertyOptional({ enum: FLASHCARD_RESULT_VALUES, example: 'LOSS' })
+  @IsOptional()
   @IsString()
   @IsIn(FLASHCARD_RESULT_VALUES)
-  result: FlashcardResult;
+  result?: FlashcardResult;
 
   @ApiPropertyOptional({ example: 'sweep 后失败回落。' })
   @IsOptional()
