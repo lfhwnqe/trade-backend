@@ -21,6 +21,7 @@ import { ResourceNotFoundException } from '../../base/exceptions/custom.exceptio
 import { ERROR_CODES } from '../../base/constants/error-codes';
 import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-session.dto';
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
+import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -467,6 +468,62 @@ export class FlashcardService {
     return {
       success: true,
       data: cards,
+    };
+  }
+
+  async listDrillSessions(userId: string, dto: ListFlashcardDrillSessionsDto) {
+    const filterExpressions: string[] = ['#entityType = :entityTypeSession'];
+    const expressionAttributeNames: Record<string, string> = {
+      '#entityType': 'entityType',
+    };
+    const expressionAttributeValues: Record<string, unknown> = {
+      ':userId': userId,
+      ':entityTypeSession': 'SESSION',
+    };
+
+    if (dto.status) {
+      filterExpressions.push('#status = :status');
+      expressionAttributeNames['#status'] = 'status';
+      expressionAttributeValues[':status'] = dto.status;
+    }
+
+    const queryResult = await this.db.query({
+      TableName: this.tableName,
+      IndexName: this.createdAtIndexName,
+      KeyConditionExpression: 'userId = :userId',
+      ExpressionAttributeValues: expressionAttributeValues,
+      ExpressionAttributeNames: expressionAttributeNames,
+      FilterExpression: filterExpressions.join(' AND '),
+      ScanIndexForward: false,
+      Limit: dto.pageSize || 20,
+      ExclusiveStartKey: this.decodeCursor(dto.cursor),
+    });
+
+    const items = ((queryResult.Items || []) as FlashcardDrillSessionItem[]).map(
+      (session) => ({
+        sessionId: session.sessionId,
+        source: session.source,
+        total: session.total,
+        answered: session.answered,
+        correct: session.correct,
+        wrong: session.wrong,
+        accuracy: session.answered > 0 ? session.correct / session.answered : 0,
+        score: this.calcScore(session.correct, session.answered),
+        status: session.status,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        updatedAt: session.updatedAt,
+      }),
+    );
+
+    return {
+      success: true,
+      data: {
+        items,
+        nextCursor: queryResult.LastEvaluatedKey
+          ? this.encodeCursor(queryResult.LastEvaluatedKey)
+          : null,
+      },
     };
   }
 

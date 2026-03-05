@@ -28,6 +28,7 @@ import { ListFlashcardCardsDto } from './dto/list-flashcard-cards.dto';
 import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-session.dto';
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
+import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -157,6 +158,24 @@ export class FlashcardController {
     }
 
     return this.flashcardService.finishSession(userId, sessionId);
+  }
+
+  @ApiOperation({ summary: '分页查询闪卡练习历史（按时间倒序）' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'status', required: false, enum: ['IN_PROGRESS', 'COMPLETED', 'ABANDONED'] })
+  @ApiResponse({ status: 200, description: '返回历史会话 items + nextCursor' })
+  @Get('drill/sessions')
+  async listDrillSessions(
+    @Req() req: Request,
+    @Query() query: ListFlashcardDrillSessionsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.listDrillSessions(userId, query);
   }
 
   @ApiOperation({ summary: '获取错题集' })
