@@ -120,61 +120,33 @@ export class FlashcardService {
   }
 
   async listCards(userId: string, dto: ListFlashcardCardsDto) {
-    const filterExpressions: string[] = [
-      '(attribute_not_exists(#entityType) OR #entityType = :entityTypeCard)',
-    ];
-    const expressionAttributeNames: Record<string, string> = {
-      '#entityType': 'entityType',
-    };
-    const expressionAttributeValues: Record<string, unknown> = {
-      ':userId': userId,
-      ':entityTypeCard': 'CARD',
-    };
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
 
-    if (dto.direction) {
-      filterExpressions.push('#direction = :direction');
-      expressionAttributeNames['#direction'] = 'direction';
-      expressionAttributeValues[':direction'] = dto.direction;
-    }
-    if (dto.context) {
-      filterExpressions.push('#context = :context');
-      expressionAttributeNames['#context'] = 'context';
-      expressionAttributeValues[':context'] = dto.context;
-    }
-    if (dto.orderFlowFeature) {
-      filterExpressions.push('#orderFlowFeature = :orderFlowFeature');
-      expressionAttributeNames['#orderFlowFeature'] = 'orderFlowFeature';
-      expressionAttributeValues[':orderFlowFeature'] = dto.orderFlowFeature;
-    }
-    if (dto.result) {
-      filterExpressions.push('#result = :result');
-      expressionAttributeNames['#result'] = 'result';
-      expressionAttributeValues[':result'] = dto.result;
-    }
+    const cards = await this.listAllCards(userId);
+    const filtered = cards
+      .filter((card) => {
+        if (dto.direction && card.direction !== dto.direction) return false;
+        if (dto.context && card.context !== dto.context) return false;
+        if (dto.orderFlowFeature && card.orderFlowFeature !== dto.orderFlowFeature) {
+          return false;
+        }
+        if (dto.result && card.result !== dto.result) return false;
+        return true;
+      })
+      .sort((a, b) => this.cardSortTs(b) - this.cardSortTs(a));
 
-    const queryResult = await this.db.query({
-      TableName: this.tableName,
-      IndexName: this.createdAtIndexName,
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: expressionAttributeValues,
-      FilterExpression: filterExpressions.join(' AND '),
-      ...(Object.keys(expressionAttributeNames).length
-        ? { ExpressionAttributeNames: expressionAttributeNames }
-        : {}),
-      ScanIndexForward: false,
-      Limit: dto.pageSize || 20,
-      ExclusiveStartKey: this.decodeCursor(dto.cursor),
-    });
-
-    const items = (queryResult.Items || []) as FlashcardCard[];
+    const items = filtered.slice(offset, offset + pageSize);
+    const nextOffset = offset + items.length;
 
     return {
       success: true,
       data: {
         items,
-        nextCursor: queryResult.LastEvaluatedKey
-          ? this.encodeCursor(queryResult.LastEvaluatedKey)
-          : null,
+        nextCursor:
+          nextOffset < filtered.length
+            ? this.encodeOffsetCursor(nextOffset)
+            : null,
       },
     };
   }
@@ -559,6 +531,7 @@ export class FlashcardService {
   ): Promise<FlashcardDrillSessionItem> {
     const result = await this.db.get({
       TableName: this.tableName,
+      ConsistentRead: true,
       Key: {
         userId,
         cardId: this.makeSessionKey(sessionId),
@@ -857,6 +830,30 @@ export class FlashcardService {
       return JSON.parse(decoded) as Record<string, unknown>;
     } catch {
       return undefined;
+    }
+  }
+
+  private cardSortTs(card: FlashcardCard) {
+    const updated = Date.parse(card.updatedAt || '');
+    if (!Number.isNaN(updated)) return updated;
+    const created = Date.parse(card.createdAt || '');
+    if (!Number.isNaN(created)) return created;
+    return 0;
+  }
+
+  private encodeOffsetCursor(offset: number) {
+    return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
+  }
+
+  private decodeOffsetCursor(cursor?: string) {
+    if (!cursor) return 0;
+    try {
+      const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+      const parsed = JSON.parse(decoded) as { offset?: unknown };
+      const offset = typeof parsed.offset === 'number' ? parsed.offset : 0;
+      return Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+    } catch {
+      return 0;
     }
   }
 }
