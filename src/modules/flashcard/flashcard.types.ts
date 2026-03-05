@@ -39,6 +39,8 @@ export interface FlashcardCard {
   context: FlashcardContext;
   orderFlowFeature: FlashcardOrderFlowFeature;
   result: FlashcardResult;
+  marketTimeInfo?: string;
+  symbolPairInfo?: string;
   notes?: string;
   createdAt: string;
   updatedAt: string;

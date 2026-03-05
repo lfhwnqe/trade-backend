@@ -65,4 +65,16 @@ export class CreateFlashcardCardDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({ example: '2026-03-05 09:30 UTC+8', description: '行情时间信息（选填）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  marketTimeInfo?: string;
+
+  @ApiPropertyOptional({ example: 'BTC/USDT', description: '币对信息（选填）' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  symbolPairInfo?: string;
 }

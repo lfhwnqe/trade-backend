@@ -47,4 +47,17 @@ export class ListFlashcardCardsDto {
   @IsOptional()
   @IsIn(FLASHCARD_RESULT_VALUES)
   result?: FlashcardResult;
+
+  @ApiPropertyOptional({ description: '币对信息（模糊匹配）', example: 'BTC/USDT' })
+  @IsOptional()
+  @IsString()
+  symbolPairInfo?: string;
+
+  @ApiPropertyOptional({
+    description: '行情时间信息（模糊匹配）',
+    example: '2026-03-05',
+  })
+  @IsOptional()
+  @IsString()
+  marketTimeInfo?: string;
 }

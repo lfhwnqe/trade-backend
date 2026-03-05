@@ -85,6 +85,8 @@ export class FlashcardController {
   @ApiQuery({ name: 'context', required: false })
   @ApiQuery({ name: 'orderFlowFeature', required: false })
   @ApiQuery({ name: 'result', required: false })
+  @ApiQuery({ name: 'symbolPairInfo', required: false })
+  @ApiQuery({ name: 'marketTimeInfo', required: false })
   @ApiResponse({ status: 200, description: '返回分页数据 items + nextCursor' })
   @Get('cards')
   async listCards(

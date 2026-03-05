@@ -91,6 +91,8 @@ export class FlashcardService {
       context: dto.context || 'RANGE',
       orderFlowFeature: dto.orderFlowFeature || 'NO_CLEAR_ANOMALY',
       result: dto.result || 'BREAK_EVEN',
+      marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
+      symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       notes: dto.notes,
       createdAt: now,
       updatedAt: now,
@@ -132,6 +134,18 @@ export class FlashcardService {
           return false;
         }
         if (dto.result && card.result !== dto.result) return false;
+        if (dto.symbolPairInfo) {
+          const keyword = dto.symbolPairInfo.trim().toLowerCase();
+          if (keyword && !(card.symbolPairInfo || '').toLowerCase().includes(keyword)) {
+            return false;
+          }
+        }
+        if (dto.marketTimeInfo) {
+          const keyword = dto.marketTimeInfo.trim().toLowerCase();
+          if (keyword && !(card.marketTimeInfo || '').toLowerCase().includes(keyword)) {
+            return false;
+          }
+        }
         return true;
       })
       .sort((a, b) => this.cardSortTs(b) - this.cardSortTs(a));
