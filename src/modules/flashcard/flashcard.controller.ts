@@ -29,6 +29,7 @@ import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-sessi
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
+import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -89,10 +90,7 @@ export class FlashcardController {
   @ApiQuery({ name: 'marketTimeInfo', required: false })
   @ApiResponse({ status: 200, description: '返回分页数据 items + nextCursor' })
   @Get('cards')
-  async listCards(
-    @Req() req: Request,
-    @Query() query: ListFlashcardCardsDto,
-  ) {
+  async listCards(@Req() req: Request, @Query() query: ListFlashcardCardsDto) {
     const userId = (req as any).user?.sub;
     if (!userId) {
       throw new NotFoundException('用户信息异常');
@@ -165,7 +163,11 @@ export class FlashcardController {
   @ApiOperation({ summary: '分页查询闪卡练习历史（按时间倒序）' })
   @ApiQuery({ name: 'pageSize', required: false, example: 20 })
   @ApiQuery({ name: 'cursor', required: false })
-  @ApiQuery({ name: 'status', required: false, enum: ['IN_PROGRESS', 'COMPLETED', 'ABANDONED'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['IN_PROGRESS', 'COMPLETED', 'ABANDONED'],
+  })
   @ApiResponse({ status: 200, description: '返回历史会话 items + nextCursor' })
   @Get('drill/sessions')
   async listDrillSessions(
@@ -220,5 +222,23 @@ export class FlashcardController {
     }
 
     return this.flashcardService.updateCardNote(userId, cardId, dto.note);
+  }
+
+  @ApiOperation({ summary: '更新闪卡信息' })
+  @ApiParam({ name: 'cardId', description: '卡片 ID' })
+  @ApiBody({ type: UpdateFlashcardCardDto })
+  @ApiResponse({ status: 200, description: '更新成功并返回卡片对象' })
+  @Patch('cards/:cardId')
+  async updateCard(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: UpdateFlashcardCardDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.updateCard(userId, cardId, dto);
   }
 }

@@ -22,6 +22,7 @@ import { ERROR_CODES } from '../../base/constants/error-codes';
 import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-session.dto';
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
+import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -130,19 +131,28 @@ export class FlashcardService {
       .filter((card) => {
         if (dto.direction && card.direction !== dto.direction) return false;
         if (dto.context && card.context !== dto.context) return false;
-        if (dto.orderFlowFeature && card.orderFlowFeature !== dto.orderFlowFeature) {
+        if (
+          dto.orderFlowFeature &&
+          card.orderFlowFeature !== dto.orderFlowFeature
+        ) {
           return false;
         }
         if (dto.result && card.result !== dto.result) return false;
         if (dto.symbolPairInfo) {
           const keyword = dto.symbolPairInfo.trim().toLowerCase();
-          if (keyword && !(card.symbolPairInfo || '').toLowerCase().includes(keyword)) {
+          if (
+            keyword &&
+            !(card.symbolPairInfo || '').toLowerCase().includes(keyword)
+          ) {
             return false;
           }
         }
         if (dto.marketTimeInfo) {
           const keyword = dto.marketTimeInfo.trim().toLowerCase();
-          if (keyword && !(card.marketTimeInfo || '').toLowerCase().includes(keyword)) {
+          if (
+            keyword &&
+            !(card.marketTimeInfo || '').toLowerCase().includes(keyword)
+          ) {
             return false;
           }
         }
@@ -227,6 +237,54 @@ export class FlashcardService {
     };
   }
 
+  async updateCard(
+    userId: string,
+    cardId: string,
+    dto: UpdateFlashcardCardDto,
+  ) {
+    const now = new Date().toISOString();
+    const current = await this.getCardById(userId, cardId);
+
+    const nextAction =
+      dto.expectedAction ||
+      dto.direction ||
+      current.expectedAction ||
+      current.direction;
+    const marketTimeInfo =
+      dto.marketTimeInfo === undefined
+        ? current.marketTimeInfo
+        : dto.marketTimeInfo.trim() || undefined;
+    const symbolPairInfo =
+      dto.symbolPairInfo === undefined
+        ? current.symbolPairInfo
+        : dto.symbolPairInfo.trim() || undefined;
+    const notes =
+      dto.notes === undefined ? current.notes : dto.notes.trim() || undefined;
+
+    const updated: FlashcardCard = {
+      ...current,
+      entityType: 'CARD',
+      questionImageUrl: dto.questionImageUrl || current.questionImageUrl,
+      answerImageUrl: dto.answerImageUrl || current.answerImageUrl,
+      expectedAction: nextAction,
+      direction: nextAction,
+      marketTimeInfo,
+      symbolPairInfo,
+      notes,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: updated,
+    });
+
+    return {
+      success: true,
+      data: updated,
+    };
+  }
+
   async startSession(userId: string, dto: StartFlashcardDrillSessionDto) {
     const cards = await this.pickCardsBySource(userId, dto.source, dto.count);
     const sessionId = uuidv4();
@@ -299,7 +357,8 @@ export class FlashcardService {
         await this.db.update({
           TableName: this.tableName,
           Key: { userId, cardId: attemptKey },
-          UpdateExpression: 'SET isFavorite = :isFavorite, updatedAt = :updatedAt',
+          UpdateExpression:
+            'SET isFavorite = :isFavorite, updatedAt = :updatedAt',
           ExpressionAttributeValues: {
             ':isFavorite': dto.isFavorite,
             ':updatedAt': now,
@@ -373,7 +432,8 @@ export class FlashcardService {
       ReturnValues: 'ALL_NEW',
     });
 
-    const updatedSession = sessionUpdate.Attributes as FlashcardDrillSessionItem;
+    const updatedSession =
+      sessionUpdate.Attributes as FlashcardDrillSessionItem;
 
     return {
       success: true,
@@ -466,22 +526,20 @@ export class FlashcardService {
       .filter((session) => (dto.status ? session.status === dto.status : true))
       .sort((a, b) => this.sessionSortTs(b) - this.sessionSortTs(a));
 
-    const items = filtered.slice(offset, offset + pageSize).map(
-      (session) => ({
-        sessionId: session.sessionId,
-        source: session.source,
-        total: session.total,
-        answered: session.answered,
-        correct: session.correct,
-        wrong: session.wrong,
-        accuracy: session.answered > 0 ? session.correct / session.answered : 0,
-        score: this.calcScore(session.correct, session.answered),
-        status: session.status,
-        startedAt: session.startedAt,
-        endedAt: session.endedAt,
-        updatedAt: session.updatedAt,
-      }),
-    );
+    const items = filtered.slice(offset, offset + pageSize).map((session) => ({
+      sessionId: session.sessionId,
+      source: session.source,
+      total: session.total,
+      answered: session.answered,
+      correct: session.correct,
+      wrong: session.wrong,
+      accuracy: session.answered > 0 ? session.correct / session.answered : 0,
+      score: this.calcScore(session.correct, session.answered),
+      status: session.status,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      updatedAt: session.updatedAt,
+    }));
     const nextOffset = offset + items.length;
 
     return {
@@ -549,7 +607,10 @@ export class FlashcardService {
     return item;
   }
 
-  private async getCardById(userId: string, cardId: string): Promise<FlashcardCard> {
+  private async getCardById(
+    userId: string,
+    cardId: string,
+  ): Promise<FlashcardCard> {
     const result = await this.db.get({
       TableName: this.tableName,
       Key: {
@@ -595,7 +656,9 @@ export class FlashcardService {
       const pageCards = pageItems.filter(
         (item) =>
           item.entityType === 'CARD' ||
-          (!item.entityType && !!item.questionImageUrl && !!item.answerImageUrl),
+          (!item.entityType &&
+            !!item.questionImageUrl &&
+            !!item.answerImageUrl),
       );
 
       cards.push(...pageCards);
@@ -652,13 +715,16 @@ export class FlashcardService {
         },
       });
 
-      const items =
-        ((result.Responses?.[this.tableName] as FlashcardCard[] | undefined) || [])
-          .filter(
-            (item) =>
-              item.entityType === 'CARD' ||
-              (!item.entityType && !!item.questionImageUrl && !!item.answerImageUrl),
-          );
+      const items = (
+        (result.Responses?.[this.tableName] as FlashcardCard[] | undefined) ||
+        []
+      ).filter(
+        (item) =>
+          item.entityType === 'CARD' ||
+          (!item.entityType &&
+            !!item.questionImageUrl &&
+            !!item.answerImageUrl),
+      );
 
       cards.push(...items);
     }
@@ -771,7 +837,10 @@ export class FlashcardService {
     const filters = dto.filters;
     if (!filters) return true;
 
-    if (filters.direction?.length && !filters.direction.includes(card.direction)) {
+    if (
+      filters.direction?.length &&
+      !filters.direction.includes(card.direction)
+    ) {
       return false;
     }
     if (filters.context?.length && !filters.context.includes(card.context)) {
@@ -875,7 +944,9 @@ export class FlashcardService {
   }
 
   private encodeOffsetCursor(offset: number) {
-    return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
+    return Buffer.from(JSON.stringify({ offset }), 'utf8').toString(
+      'base64url',
+    );
   }
 
   private decodeOffsetCursor(cursor?: string) {
