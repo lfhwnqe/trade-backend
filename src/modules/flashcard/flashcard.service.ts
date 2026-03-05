@@ -444,34 +444,15 @@ export class FlashcardService {
   }
 
   async listDrillSessions(userId: string, dto: ListFlashcardDrillSessionsDto) {
-    const filterExpressions: string[] = ['#entityType = :entityTypeSession'];
-    const expressionAttributeNames: Record<string, string> = {
-      '#entityType': 'entityType',
-    };
-    const expressionAttributeValues: Record<string, unknown> = {
-      ':userId': userId,
-      ':entityTypeSession': 'SESSION',
-    };
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
 
-    if (dto.status) {
-      filterExpressions.push('#status = :status');
-      expressionAttributeNames['#status'] = 'status';
-      expressionAttributeValues[':status'] = dto.status;
-    }
+    const sessions = await this.listAllDrillSessions(userId);
+    const filtered = sessions
+      .filter((session) => (dto.status ? session.status === dto.status : true))
+      .sort((a, b) => this.sessionSortTs(b) - this.sessionSortTs(a));
 
-    const queryResult = await this.db.query({
-      TableName: this.tableName,
-      IndexName: this.createdAtIndexName,
-      KeyConditionExpression: 'userId = :userId',
-      ExpressionAttributeValues: expressionAttributeValues,
-      ExpressionAttributeNames: expressionAttributeNames,
-      FilterExpression: filterExpressions.join(' AND '),
-      ScanIndexForward: false,
-      Limit: dto.pageSize || 20,
-      ExclusiveStartKey: this.decodeCursor(dto.cursor),
-    });
-
-    const items = ((queryResult.Items || []) as FlashcardDrillSessionItem[]).map(
+    const items = filtered.slice(offset, offset + pageSize).map(
       (session) => ({
         sessionId: session.sessionId,
         source: session.source,
@@ -487,14 +468,16 @@ export class FlashcardService {
         updatedAt: session.updatedAt,
       }),
     );
+    const nextOffset = offset + items.length;
 
     return {
       success: true,
       data: {
         items,
-        nextCursor: queryResult.LastEvaluatedKey
-          ? this.encodeCursor(queryResult.LastEvaluatedKey)
-          : null,
+        nextCursor:
+          nextOffset < filtered.length
+            ? this.encodeOffsetCursor(nextOffset)
+            : null,
       },
     };
   }
@@ -606,6 +589,32 @@ export class FlashcardService {
     } while (lastEvaluatedKey);
 
     return cards;
+  }
+
+  private async listAllDrillSessions(
+    userId: string,
+  ): Promise<FlashcardDrillSessionItem[]> {
+    const sessions: FlashcardDrillSessionItem[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression:
+          'userId = :userId AND begins_with(cardId, :prefix)',
+        ExpressionAttributeValues: {
+          ':userId': userId,
+          ':prefix': 'session#',
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+
+      sessions.push(...((result.Items || []) as FlashcardDrillSessionItem[]));
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return sessions.filter((item) => item.entityType === 'SESSION');
   }
 
   private async batchGetCardsByIds(
@@ -838,6 +847,16 @@ export class FlashcardService {
     if (!Number.isNaN(updated)) return updated;
     const created = Date.parse(card.createdAt || '');
     if (!Number.isNaN(created)) return created;
+    return 0;
+  }
+
+  private sessionSortTs(session: FlashcardDrillSessionItem) {
+    const updated = Date.parse(session.updatedAt || '');
+    if (!Number.isNaN(updated)) return updated;
+    const ended = Date.parse(session.endedAt || '');
+    if (!Number.isNaN(ended)) return ended;
+    const started = Date.parse(session.startedAt || '');
+    if (!Number.isNaN(started)) return started;
     return 0;
   }
 
