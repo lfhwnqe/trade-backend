@@ -2,14 +2,10 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
-  FLASHCARD_CONTEXT_VALUES,
-  FLASHCARD_DIRECTION_VALUES,
-  FLASHCARD_ORDER_FLOW_FEATURE_VALUES,
-  FLASHCARD_RESULT_VALUES,
-  FlashcardContext,
-  FlashcardDirection,
-  FlashcardOrderFlowFeature,
-  FlashcardResult,
+  FLASHCARD_BEHAVIOR_TYPE_VALUES,
+  FLASHCARD_INVALIDATION_TYPE_VALUES,
+  FlashcardBehaviorType,
+  FlashcardInvalidationType,
 } from '../flashcard.types';
 
 export class ListFlashcardCardsDto {
@@ -28,25 +24,15 @@ export class ListFlashcardCardsDto {
   @IsString()
   cursor?: string;
 
-  @ApiPropertyOptional({ enum: FLASHCARD_DIRECTION_VALUES })
+  @ApiPropertyOptional({ enum: FLASHCARD_BEHAVIOR_TYPE_VALUES })
   @IsOptional()
-  @IsIn(FLASHCARD_DIRECTION_VALUES)
-  direction?: FlashcardDirection;
+  @IsIn(FLASHCARD_BEHAVIOR_TYPE_VALUES)
+  behaviorType?: FlashcardBehaviorType;
 
-  @ApiPropertyOptional({ enum: FLASHCARD_CONTEXT_VALUES })
+  @ApiPropertyOptional({ enum: FLASHCARD_INVALIDATION_TYPE_VALUES })
   @IsOptional()
-  @IsIn(FLASHCARD_CONTEXT_VALUES)
-  context?: FlashcardContext;
-
-  @ApiPropertyOptional({ enum: FLASHCARD_ORDER_FLOW_FEATURE_VALUES })
-  @IsOptional()
-  @IsIn(FLASHCARD_ORDER_FLOW_FEATURE_VALUES)
-  orderFlowFeature?: FlashcardOrderFlowFeature;
-
-  @ApiPropertyOptional({ enum: FLASHCARD_RESULT_VALUES })
-  @IsOptional()
-  @IsIn(FLASHCARD_RESULT_VALUES)
-  result?: FlashcardResult;
+  @IsIn(FLASHCARD_INVALIDATION_TYPE_VALUES)
+  invalidationType?: FlashcardInvalidationType;
 
   @ApiPropertyOptional({ description: '币对信息（模糊匹配）', example: 'BTC/USDT' })
   @IsOptional()

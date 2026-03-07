@@ -2,20 +2,26 @@ export const FLASHCARD_DIRECTION_VALUES = ['LONG', 'SHORT', 'NO_TRADE'] as const
 export type FlashcardDirection = (typeof FLASHCARD_DIRECTION_VALUES)[number];
 export type FlashcardAction = FlashcardDirection;
 
-export const FLASHCARD_CONTEXT_VALUES = ['TREND', 'RANGE', 'REVERSAL'] as const;
-export type FlashcardContext = (typeof FLASHCARD_CONTEXT_VALUES)[number];
-
-export const FLASHCARD_ORDER_FLOW_FEATURE_VALUES = [
-  'CVD_ABSORPTION_DIVERGENCE',
-  'FOOTPRINT_IMBALANCE_CLUSTER',
-  'NO_CLEAR_ANOMALY',
-  'SWEEP',
+export const FLASHCARD_BEHAVIOR_TYPE_VALUES = [
+  'REJECTION',
+  'FAKE_BREAK_RECLAIM',
+  'BREAK_ACCEPTANCE',
+  'BREAK_RETEST',
+  'CHOP',
+  'SECOND_CONFIRMATION',
 ] as const;
-export type FlashcardOrderFlowFeature =
-  (typeof FLASHCARD_ORDER_FLOW_FEATURE_VALUES)[number];
+export type FlashcardBehaviorType =
+  (typeof FLASHCARD_BEHAVIOR_TYPE_VALUES)[number];
 
-export const FLASHCARD_RESULT_VALUES = ['WIN', 'LOSS', 'BREAK_EVEN'] as const;
-export type FlashcardResult = (typeof FLASHCARD_RESULT_VALUES)[number];
+export const FLASHCARD_INVALIDATION_TYPE_VALUES = [
+  'ZONE_OUTSIDE',
+  'WICK_EXTREME',
+  'MICRO_STRUCTURE',
+  'REENTER_ZONE',
+  'NONE',
+] as const;
+export type FlashcardInvalidationType =
+  (typeof FLASHCARD_INVALIDATION_TYPE_VALUES)[number];
 
 export const FLASHCARD_IMAGE_SCOPE_VALUES = ['question', 'answer'] as const;
 export type FlashcardImageScope = (typeof FLASHCARD_IMAGE_SCOPE_VALUES)[number];
@@ -35,10 +41,9 @@ export interface FlashcardCard {
   questionImageUrl: string;
   answerImageUrl: string;
   expectedAction?: FlashcardAction;
-  direction: FlashcardDirection;
-  context: FlashcardContext;
-  orderFlowFeature: FlashcardOrderFlowFeature;
-  result: FlashcardResult;
+  behaviorType?: FlashcardBehaviorType;
+  invalidationType?: FlashcardInvalidationType;
+  direction?: FlashcardDirection;
   marketTimeInfo?: string;
   symbolPairInfo?: string;
   notes?: string;

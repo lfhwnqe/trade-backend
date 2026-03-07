@@ -11,45 +11,30 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  FLASHCARD_CONTEXT_VALUES,
-  FLASHCARD_DIRECTION_VALUES,
-  FLASHCARD_ORDER_FLOW_FEATURE_VALUES,
-  FLASHCARD_RESULT_VALUES,
-  FlashcardContext,
-  FlashcardDirection,
-  FlashcardOrderFlowFeature,
-  FlashcardResult,
+  FLASHCARD_BEHAVIOR_TYPE_VALUES,
+  FLASHCARD_INVALIDATION_TYPE_VALUES,
+  FlashcardBehaviorType,
+  FlashcardInvalidationType,
 } from '../flashcard.types';
 import { IsIn } from 'class-validator';
 
 class FlashcardRandomFiltersDto {
-  @ApiPropertyOptional({ enum: FLASHCARD_DIRECTION_VALUES, isArray: true })
+  @ApiPropertyOptional({ enum: FLASHCARD_BEHAVIOR_TYPE_VALUES, isArray: true })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(10)
-  @IsIn(FLASHCARD_DIRECTION_VALUES, { each: true })
-  direction?: FlashcardDirection[];
+  @IsIn(FLASHCARD_BEHAVIOR_TYPE_VALUES, { each: true })
+  behaviorType?: FlashcardBehaviorType[];
 
-  @ApiPropertyOptional({ enum: FLASHCARD_CONTEXT_VALUES, isArray: true })
+  @ApiPropertyOptional({
+    enum: FLASHCARD_INVALIDATION_TYPE_VALUES,
+    isArray: true,
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(10)
-  @IsIn(FLASHCARD_CONTEXT_VALUES, { each: true })
-  context?: FlashcardContext[];
-
-  @ApiPropertyOptional({ enum: FLASHCARD_ORDER_FLOW_FEATURE_VALUES, isArray: true })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(10)
-  @IsIn(FLASHCARD_ORDER_FLOW_FEATURE_VALUES, { each: true })
-  orderFlowFeature?: FlashcardOrderFlowFeature[];
-
-  @ApiPropertyOptional({ enum: FLASHCARD_RESULT_VALUES, isArray: true })
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(10)
-  @IsIn(FLASHCARD_RESULT_VALUES, { each: true })
-  result?: FlashcardResult[];
+  @IsIn(FLASHCARD_INVALIDATION_TYPE_VALUES, { each: true })
+  invalidationType?: FlashcardInvalidationType[];
 }
 
 export class RandomFlashcardCardsDto {

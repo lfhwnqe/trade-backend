@@ -1,9 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import {
+  FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_DIRECTION_VALUES,
   FlashcardAction,
+  FlashcardBehaviorType,
   FlashcardDirection,
+  FLASHCARD_INVALIDATION_TYPE_VALUES,
+  FlashcardInvalidationType,
 } from '../flashcard.types';
 
 export class UpdateFlashcardCardDto {
@@ -35,9 +39,29 @@ export class UpdateFlashcardCardDto {
   expectedAction?: FlashcardAction;
 
   @ApiPropertyOptional({
+    enum: FLASHCARD_BEHAVIOR_TYPE_VALUES,
+    example: 'FAKE_BREAK_RECLAIM',
+    description: '价格行为依据类型',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_BEHAVIOR_TYPE_VALUES)
+  behaviorType?: FlashcardBehaviorType;
+
+  @ApiPropertyOptional({
+    enum: FLASHCARD_INVALIDATION_TYPE_VALUES,
+    example: 'WICK_EXTREME',
+    description: '失效/止损逻辑类型',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_INVALIDATION_TYPE_VALUES)
+  invalidationType?: FlashcardInvalidationType;
+
+  @ApiPropertyOptional({
     enum: FLASHCARD_DIRECTION_VALUES,
     example: 'SHORT',
-    description: '兼容旧字段，若传 expectedAction 可省略',
+    description: '兼容旧字段，仅用于历史请求兼容',
   })
   @IsOptional()
   @IsString()

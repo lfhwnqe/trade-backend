@@ -1,15 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import {
-  FLASHCARD_CONTEXT_VALUES,
+  FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_DIRECTION_VALUES,
-  FLASHCARD_ORDER_FLOW_FEATURE_VALUES,
-  FLASHCARD_RESULT_VALUES,
   FlashcardAction,
-  FlashcardContext,
+  FlashcardBehaviorType,
   FlashcardDirection,
-  FlashcardOrderFlowFeature,
-  FlashcardResult,
+  FLASHCARD_INVALIDATION_TYPE_VALUES,
+  FlashcardInvalidationType,
 } from '../flashcard.types';
 
 export class CreateFlashcardCardDto {
@@ -33,32 +31,34 @@ export class CreateFlashcardCardDto {
   expectedAction: FlashcardAction;
 
   @ApiPropertyOptional({
+    enum: FLASHCARD_BEHAVIOR_TYPE_VALUES,
+    example: 'FAKE_BREAK_RECLAIM',
+    description: '价格行为依据类型',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_BEHAVIOR_TYPE_VALUES)
+  behaviorType?: FlashcardBehaviorType;
+
+  @ApiPropertyOptional({
+    enum: FLASHCARD_INVALIDATION_TYPE_VALUES,
+    example: 'WICK_EXTREME',
+    description: '失效/止损逻辑类型',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_INVALIDATION_TYPE_VALUES)
+  invalidationType?: FlashcardInvalidationType;
+
+  @ApiPropertyOptional({
     enum: FLASHCARD_DIRECTION_VALUES,
     example: 'SHORT',
-    description: '兼容旧字段，若传 expectedAction 可省略',
+    description: '兼容旧字段，仅用于历史请求兼容',
   })
   @IsOptional()
   @IsString()
   @IsIn(FLASHCARD_DIRECTION_VALUES)
   direction?: FlashcardDirection;
-
-  @ApiPropertyOptional({ enum: FLASHCARD_CONTEXT_VALUES, example: 'RANGE' })
-  @IsOptional()
-  @IsString()
-  @IsIn(FLASHCARD_CONTEXT_VALUES)
-  context?: FlashcardContext;
-
-  @ApiPropertyOptional({ enum: FLASHCARD_ORDER_FLOW_FEATURE_VALUES, example: 'SWEEP' })
-  @IsOptional()
-  @IsString()
-  @IsIn(FLASHCARD_ORDER_FLOW_FEATURE_VALUES)
-  orderFlowFeature?: FlashcardOrderFlowFeature;
-
-  @ApiPropertyOptional({ enum: FLASHCARD_RESULT_VALUES, example: 'LOSS' })
-  @IsOptional()
-  @IsString()
-  @IsIn(FLASHCARD_RESULT_VALUES)
-  result?: FlashcardResult;
 
   @ApiPropertyOptional({ example: 'sweep 后失败回落。' })
   @IsOptional()

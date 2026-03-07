@@ -77,7 +77,7 @@ export class FlashcardService {
     const now = new Date().toISOString();
     const cardId = uuidv4();
 
-    const direction = dto.expectedAction || dto.direction;
+    const expectedAction = dto.expectedAction || dto.direction;
 
     const item: FlashcardCard = {
       id: cardId,
@@ -86,15 +86,13 @@ export class FlashcardService {
       entityType: 'CARD',
       questionImageUrl: dto.questionImageUrl,
       answerImageUrl: dto.answerImageUrl,
-      expectedAction: direction,
-      // legacy fields for backward compatibility with existing UI
-      direction,
-      context: dto.context || 'RANGE',
-      orderFlowFeature: dto.orderFlowFeature || 'NO_CLEAR_ANOMALY',
-      result: dto.result || 'BREAK_EVEN',
+      expectedAction,
+      behaviorType: dto.behaviorType,
+      invalidationType: dto.invalidationType,
+      direction: expectedAction,
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
-      notes: dto.notes,
+      notes: dto.notes?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -106,7 +104,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: item,
+      data: this.normalizeCard(item),
     };
   }
 
@@ -129,15 +127,15 @@ export class FlashcardService {
     const cards = await this.listAllCards(userId);
     const filtered = cards
       .filter((card) => {
-        if (dto.direction && card.direction !== dto.direction) return false;
-        if (dto.context && card.context !== dto.context) return false;
+        if (dto.behaviorType && card.behaviorType !== dto.behaviorType) {
+          return false;
+        }
         if (
-          dto.orderFlowFeature &&
-          card.orderFlowFeature !== dto.orderFlowFeature
+          dto.invalidationType &&
+          card.invalidationType !== dto.invalidationType
         ) {
           return false;
         }
-        if (dto.result && card.result !== dto.result) return false;
         if (dto.symbolPairInfo) {
           const keyword = dto.symbolPairInfo.trim().toLowerCase();
           if (
@@ -233,7 +231,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: result.Attributes as FlashcardCard,
+      data: this.normalizeCard(result.Attributes as FlashcardCard),
     };
   }
 
@@ -250,6 +248,12 @@ export class FlashcardService {
       dto.direction ||
       current.expectedAction ||
       current.direction;
+    const behaviorType =
+      dto.behaviorType === undefined ? current.behaviorType : dto.behaviorType;
+    const invalidationType =
+      dto.invalidationType === undefined
+        ? current.invalidationType
+        : dto.invalidationType;
     const marketTimeInfo =
       dto.marketTimeInfo === undefined
         ? current.marketTimeInfo
@@ -268,6 +272,8 @@ export class FlashcardService {
       answerImageUrl: dto.answerImageUrl || current.answerImageUrl,
       expectedAction: nextAction,
       direction: nextAction,
+      behaviorType,
+      invalidationType,
       marketTimeInfo,
       symbolPairInfo,
       notes,
@@ -281,7 +287,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: updated,
+      data: this.normalizeCard(updated),
     };
   }
 
@@ -342,7 +348,7 @@ export class FlashcardService {
     }
 
     const card = await this.getCardById(userId, dto.cardId);
-    const expectedAction = card.expectedAction || card.direction;
+    const expectedAction = this.resolveExpectedAction(card);
     const isCorrect = expectedAction === dto.userAction;
 
     const attemptKey = this.makeAttemptKey(sessionId, dto.cardId);
@@ -634,7 +640,7 @@ export class FlashcardService {
       );
     }
 
-    return card;
+    return this.normalizeCard(card);
   }
 
   private async listAllCards(userId: string): Promise<FlashcardCard[]> {
@@ -661,7 +667,7 @@ export class FlashcardService {
             !!item.answerImageUrl),
       );
 
-      cards.push(...pageCards);
+      cards.push(...pageCards.map((item) => this.normalizeCard(item)));
       lastEvaluatedKey = result.LastEvaluatedKey;
     } while (lastEvaluatedKey);
 
@@ -726,7 +732,7 @@ export class FlashcardService {
             !!item.answerImageUrl),
       );
 
-      cards.push(...items);
+      cards.push(...items.map((item) => this.normalizeCard(item)));
     }
 
     return cards;
@@ -838,25 +844,34 @@ export class FlashcardService {
     if (!filters) return true;
 
     if (
-      filters.direction?.length &&
-      !filters.direction.includes(card.direction)
+      filters.behaviorType?.length &&
+      (!card.behaviorType || !filters.behaviorType.includes(card.behaviorType))
     ) {
-      return false;
-    }
-    if (filters.context?.length && !filters.context.includes(card.context)) {
       return false;
     }
     if (
-      filters.orderFlowFeature?.length &&
-      !filters.orderFlowFeature.includes(card.orderFlowFeature)
+      filters.invalidationType?.length &&
+      (!card.invalidationType ||
+        !filters.invalidationType.includes(card.invalidationType))
     ) {
-      return false;
-    }
-    if (filters.result?.length && !filters.result.includes(card.result)) {
       return false;
     }
 
     return true;
+  }
+
+  private normalizeCard(card: FlashcardCard): FlashcardCard {
+    const expectedAction = this.resolveExpectedAction(card);
+
+    return {
+      ...card,
+      expectedAction,
+      direction: expectedAction,
+    };
+  }
+
+  private resolveExpectedAction(card: FlashcardCard) {
+    return card.expectedAction || card.direction || 'NO_TRADE';
   }
 
   private shuffleInPlace<T>(arr: T[]) {
