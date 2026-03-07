@@ -10,6 +10,9 @@ import { GetFlashcardUploadUrlDto } from './dto/get-upload-url.dto';
 import { RandomFlashcardCardsDto } from './dto/random-flashcard-cards.dto';
 import {
   FlashcardCard,
+  FlashcardDrillAnalyticsDimensionStat,
+  FlashcardDrillAnalyticsTrendPoint,
+  FlashcardDrillAnalyticsWindow,
   FlashcardDrillAttemptItem,
   FlashcardDrillSessionItem,
   FlashcardFavoriteItem,
@@ -23,6 +26,7 @@ import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-sessi
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
+import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -560,6 +564,97 @@ export class FlashcardService {
     };
   }
 
+  async getDrillAnalytics(
+    userId: string,
+    dto: GetFlashcardDrillAnalyticsDto,
+  ) {
+    const recentWindow = dto.recentWindow || 30;
+    const sessions = await this.listAllDrillSessions(userId);
+    const completedSessions = sessions
+      .filter((session) => session.status === 'COMPLETED')
+      .sort((a, b) => this.sessionSortTs(b) - this.sessionSortTs(a));
+
+    const recent7 = completedSessions.slice(0, 7);
+    const previous7 = completedSessions.slice(7, 14);
+    const recentN = completedSessions.slice(0, recentWindow);
+    const previousN = completedSessions.slice(recentWindow, recentWindow * 2);
+
+    const recentAttempts = await this.listAttemptsForSessions(
+      userId,
+      recentN.map((session) => session.sessionId),
+    );
+
+    const referencedCards = await this.batchGetCardsByIds(
+      userId,
+      recentAttempts.map((attempt) => attempt.targetCardId),
+    );
+    const cardsById = new Map(
+      referencedCards.map((card) => [card.cardId, card] as const),
+    );
+
+    const behaviorAggregation = this.aggregateAttemptDimensionStats(
+      recentAttempts,
+      cardsById,
+      'behaviorType',
+    );
+    const invalidationAggregation = this.aggregateAttemptDimensionStats(
+      recentAttempts,
+      cardsById,
+      'invalidationType',
+    );
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalCompletedSessions: completedSessions.length,
+          averageScore: this.averageScore(completedSessions),
+          bestScore: this.bestScore(completedSessions),
+          recentScore: completedSessions[0]
+            ? this.calcScore(
+                completedSessions[0].correct,
+                completedSessions[0].answered,
+              )
+            : 0,
+          recentAccuracy:
+            completedSessions[0]?.answered && completedSessions[0].answered > 0
+              ? completedSessions[0].correct / completedSessions[0].answered
+              : 0,
+        },
+        windows: {
+          recent7: this.buildAnalyticsWindow(recent7, previous7),
+          recent30: this.buildAnalyticsWindow(recentN, previousN),
+        },
+        trend: {
+          recentWindow,
+          points: recentN
+            .slice()
+            .reverse()
+            .map((session): FlashcardDrillAnalyticsTrendPoint => ({
+              sessionId: session.sessionId,
+              score: this.calcScore(session.correct, session.answered),
+              accuracy:
+                session.answered > 0 ? session.correct / session.answered : 0,
+              startedAt: session.startedAt,
+              endedAt: session.endedAt,
+            })),
+        },
+        weaknesses: {
+          basedOnCompletedSessions: recentN.length,
+          labeledAttemptCount:
+            behaviorAggregation.labeledAttemptCount +
+            invalidationAggregation.labeledAttemptCount,
+          unlabeledBehaviorAttemptCount:
+            behaviorAggregation.unlabeledAttemptCount,
+          unlabeledInvalidationAttemptCount:
+            invalidationAggregation.unlabeledAttemptCount,
+          behaviorTypes: behaviorAggregation.stats,
+          invalidationTypes: invalidationAggregation.stats,
+        },
+      },
+    };
+  }
+
   private async pickCardsBySource(
     userId: string,
     source: FlashcardSource,
@@ -700,6 +795,26 @@ export class FlashcardService {
     return sessions.filter((item) => item.entityType === 'SESSION');
   }
 
+  private async listAttemptsForSessions(
+    userId: string,
+    sessionIds: string[],
+  ): Promise<FlashcardDrillAttemptItem[]> {
+    const attempts: FlashcardDrillAttemptItem[] = [];
+
+    for (const sessionId of sessionIds) {
+      const sessionAttempts =
+        await this.queryByPrefix<FlashcardDrillAttemptItem>(
+          userId,
+          `attempt#${sessionId}#`,
+        );
+      attempts.push(
+        ...sessionAttempts.filter((item) => item.entityType === 'ATTEMPT'),
+      );
+    }
+
+    return attempts;
+  }
+
   private async batchGetCardsByIds(
     userId: string,
     cardIds: string[],
@@ -837,6 +952,104 @@ export class FlashcardService {
   private calcScore(correct: number, answered: number) {
     if (answered <= 0) return 0;
     return Math.round((correct / answered) * 100);
+  }
+
+  private averageScore(sessions: FlashcardDrillSessionItem[]) {
+    if (!sessions.length) return 0;
+    const total = sessions.reduce(
+      (sum, session) => sum + this.calcScore(session.correct, session.answered),
+      0,
+    );
+    return Math.round(total / sessions.length);
+  }
+
+  private bestScore(sessions: FlashcardDrillSessionItem[]) {
+    if (!sessions.length) return 0;
+    return Math.max(
+      ...sessions.map((session) =>
+        this.calcScore(session.correct, session.answered),
+      ),
+    );
+  }
+
+  private lowestScore(sessions: FlashcardDrillSessionItem[]) {
+    if (!sessions.length) return 0;
+    return Math.min(
+      ...sessions.map((session) =>
+        this.calcScore(session.correct, session.answered),
+      ),
+    );
+  }
+
+  private buildAnalyticsWindow(
+    current: FlashcardDrillSessionItem[],
+    previous: FlashcardDrillSessionItem[],
+  ): FlashcardDrillAnalyticsWindow {
+    const currentAverage = this.averageScore(current);
+    const previousAverage = this.averageScore(previous);
+
+    return {
+      sampleSize: current.length,
+      averageScore: currentAverage,
+      bestScore: this.bestScore(current),
+      lowestScore: this.lowestScore(current),
+      deltaFromPrevious:
+        previous.length > 0 ? currentAverage - previousAverage : null,
+    };
+  }
+
+  private aggregateAttemptDimensionStats(
+    attempts: FlashcardDrillAttemptItem[],
+    cardsById: Map<string, FlashcardCard>,
+    field: 'behaviorType' | 'invalidationType',
+  ): {
+    stats: FlashcardDrillAnalyticsDimensionStat[];
+    labeledAttemptCount: number;
+    unlabeledAttemptCount: number;
+  } {
+    const grouped = new Map<
+      string,
+      { total: number; correct: number; wrong: number }
+    >();
+    let unlabeledAttemptCount = 0;
+    let labeledAttemptCount = 0;
+
+    for (const attempt of attempts) {
+      const card = cardsById.get(attempt.targetCardId);
+      const key = card?.[field];
+
+      if (!key) {
+        unlabeledAttemptCount += 1;
+        continue;
+      }
+
+      labeledAttemptCount += 1;
+      const current = grouped.get(key) || { total: 0, correct: 0, wrong: 0 };
+      current.total += 1;
+      if (attempt.isCorrect) {
+        current.correct += 1;
+      } else {
+        current.wrong += 1;
+      }
+      grouped.set(key, current);
+    }
+
+    const stats = Array.from(grouped.entries())
+      .map(([key, value]): FlashcardDrillAnalyticsDimensionStat => ({
+        key,
+        total: value.total,
+        correct: value.correct,
+        wrong: value.wrong,
+        accuracy: value.total > 0 ? value.correct / value.total : 0,
+        wrongRate: value.total > 0 ? value.wrong / value.total : 0,
+      }))
+      .sort((a, b) => {
+        if (b.wrong !== a.wrong) return b.wrong - a.wrong;
+        if (a.accuracy !== b.accuracy) return a.accuracy - b.accuracy;
+        return b.total - a.total;
+      });
+
+    return { stats, labeledAttemptCount, unlabeledAttemptCount };
   }
 
   private matchesFilters(card: FlashcardCard, dto: RandomFlashcardCardsDto) {

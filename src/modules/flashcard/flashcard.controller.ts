@@ -30,6 +30,7 @@ import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-att
 import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
+import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -178,6 +179,25 @@ export class FlashcardController {
     }
 
     return this.flashcardService.listDrillSessions(userId, query);
+  }
+
+  @ApiOperation({ summary: '获取训练成绩聚合分析' })
+  @ApiQuery({ name: 'recentWindow', required: false, example: 30 })
+  @ApiResponse({
+    status: 200,
+    description: '返回全量成绩概览、近 N 轮趋势与 behavior/invalidation 统计',
+  })
+  @Get('drill/analytics')
+  async getDrillAnalytics(
+    @Req() req: Request,
+    @Query() query: GetFlashcardDrillAnalyticsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getDrillAnalytics(userId, query);
   }
 
   @ApiOperation({ summary: '获取错题集' })

@@ -3,6 +3,13 @@ export type FlashcardDirection = (typeof FLASHCARD_DIRECTION_VALUES)[number];
 export type FlashcardAction = FlashcardDirection;
 
 export const FLASHCARD_BEHAVIOR_TYPE_VALUES = [
+  'ZONE_REJECTION',
+  'ZONE_FAKE_BREAK',
+  'STRONG_BREAKOUT_CLOSE',
+  'BREAKOUT_RETEST_CONTINUATION',
+  'HH_LL_RECLAIM_CONTINUATION',
+  'SECOND_TEST_CONFIRMATION',
+  'ZONE_CHOP_NO_EDGE',
   'REJECTION',
   'FAKE_BREAK_RECLAIM',
   'BREAK_ACCEPTANCE',
@@ -14,6 +21,14 @@ export type FlashcardBehaviorType =
   (typeof FLASHCARD_BEHAVIOR_TYPE_VALUES)[number];
 
 export const FLASHCARD_INVALIDATION_TYPE_VALUES = [
+  'REJECTION_EXTREME_BROKEN',
+  'FALSE_BREAK_SIDE_REACCEPTED',
+  'BREAKOUT_BACK_IN_ZONE',
+  'RETEST_FLIP_FAILED',
+  'HH_LL_CONFIRMATION_FAILED',
+  'MICRO_STRUCTURE_BROKEN',
+  'NO_EXPANSION_AFTER_TRIGGER',
+  'ZONE_DWELL_FAILURE',
   'ZONE_OUTSIDE',
   'WICK_EXTREME',
   'MICRO_STRUCTURE',
@@ -104,4 +119,29 @@ export interface FlashcardFavoriteItem {
   targetCardId: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface FlashcardDrillAnalyticsWindow {
+  sampleSize: number;
+  averageScore: number;
+  bestScore: number;
+  lowestScore: number;
+  deltaFromPrevious: number | null;
+}
+
+export interface FlashcardDrillAnalyticsTrendPoint {
+  sessionId: string;
+  score: number;
+  accuracy: number;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface FlashcardDrillAnalyticsDimensionStat {
+  key: string;
+  total: number;
+  correct: number;
+  wrong: number;
+  accuracy: number;
+  wrongRate: number;
 }
