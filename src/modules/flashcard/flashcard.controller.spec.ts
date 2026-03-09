@@ -13,6 +13,7 @@ describe('FlashcardController', () => {
       getUploadUrl: jest.fn(),
       createCard: jest.fn(),
       randomCards: jest.fn(),
+      getTodaySummary: jest.fn(),
       listCards: jest.fn(),
       deleteCard: jest.fn(),
       startSession: jest.fn(),
@@ -67,6 +68,28 @@ describe('FlashcardController', () => {
       dto,
     );
     expect(result).toEqual({ success: true });
+  });
+
+  it('should forward today summary with current user id and timezone', async () => {
+    const { controller, flashcardService } = makeController();
+    flashcardService.getTodaySummary.mockResolvedValue({
+      success: true,
+      data: { date: '2026-03-09', hasNewCardsToday: true, newCardsCount: 2 },
+    });
+
+    const result = await controller.getTodaySummary(
+      makeReq(),
+      'Asia/Shanghai',
+    );
+
+    expect(flashcardService.getTodaySummary).toHaveBeenCalledWith(
+      'user-1',
+      'Asia/Shanghai',
+    );
+    expect(result).toEqual({
+      success: true,
+      data: { date: '2026-03-09', hasNewCardsToday: true, newCardsCount: 2 },
+    });
   });
 
   it('should forward analytics query with current user id', async () => {

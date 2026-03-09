@@ -257,6 +257,52 @@ describe('FlashcardService', () => {
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
   });
 
+  it('should summarize today new cards in Asia/Shanghai timezone', async () => {
+    const service = makeService();
+
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'q1',
+          answerImageUrl: 'a1',
+          expectedAction: 'LONG',
+          createdAt: '2026-03-09T00:30:00.000Z',
+          updatedAt: '2026-03-09T00:30:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-2',
+          entityType: 'CARD',
+          questionImageUrl: 'q2',
+          answerImageUrl: 'a2',
+          expectedAction: 'SHORT',
+          createdAt: '2026-03-08T15:30:00.000Z',
+          updatedAt: '2026-03-08T15:30:00.000Z',
+        },
+      ],
+    });
+
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-09T14:00:00.000Z'));
+
+    const result = await service.getTodaySummary('user-1');
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        date: '2026-03-09',
+        timezone: 'Asia/Shanghai',
+        hasNewCardsToday: true,
+        newCardsCount: 1,
+        latestCreatedAt: '2026-03-09T00:30:00.000Z',
+      },
+    });
+
+    jest.useRealTimers();
+  });
+
   it('should aggregate analytics from completed sessions and labeled attempts', async () => {
     const service = makeService();
 

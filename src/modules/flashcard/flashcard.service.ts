@@ -124,6 +124,38 @@ export class FlashcardService {
     };
   }
 
+  async getTodaySummary(userId: string, timezone = 'Asia/Shanghai') {
+    const resolvedTimezone = this.normalizeTimezone(timezone);
+    const today = this.formatDateInTimezone(new Date(), resolvedTimezone);
+    const cards = await this.listAllCards(userId);
+    const todayCards = cards.filter((card) => {
+      if (!card.createdAt) {
+        return false;
+      }
+
+      return (
+        this.formatDateInTimezone(new Date(card.createdAt), resolvedTimezone) ===
+        today
+      );
+    });
+
+    const latestCreatedAt = todayCards
+      .map((card) => card.createdAt)
+      .filter((value): value is string => typeof value === 'string')
+      .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+
+    return {
+      success: true,
+      data: {
+        date: today,
+        timezone: resolvedTimezone,
+        hasNewCardsToday: todayCards.length > 0,
+        newCardsCount: todayCards.length,
+        latestCreatedAt: latestCreatedAt || null,
+      },
+    };
+  }
+
   async listCards(userId: string, dto: ListFlashcardCardsDto) {
     const pageSize = dto.pageSize || 20;
     const offset = this.decodeOffsetCursor(dto.cursor);
@@ -1169,6 +1201,34 @@ export class FlashcardService {
     const started = Date.parse(session.startedAt || '');
     if (!Number.isNaN(started)) return started;
     return 0;
+  }
+
+  private normalizeTimezone(timezone?: string) {
+    const fallback = 'Asia/Shanghai';
+    if (!timezone) {
+      return fallback;
+    }
+
+    try {
+      Intl.DateTimeFormat('en-CA', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date());
+      return timezone;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private formatDateInTimezone(date: Date, timezone: string) {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
   }
 
   private encodeOffsetCursor(offset: number) {

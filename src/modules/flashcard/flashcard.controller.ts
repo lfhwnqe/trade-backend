@@ -80,6 +80,30 @@ export class FlashcardController {
     return this.flashcardService.randomCards(userId, dto);
   }
 
+  @ApiOperation({ summary: '获取闪卡当日新增统计' })
+  @ApiQuery({
+    name: 'timezone',
+    required: false,
+    example: 'Asia/Shanghai',
+    description: '按指定 IANA 时区统计当日新增，默认 Asia/Shanghai',
+  })
+  @ApiResponse({
+    status: 200,
+    description: '返回当日是否有新增、数量与当日日期',
+  })
+  @Get('cards/today-summary')
+  async getTodaySummary(
+    @Req() req: Request,
+    @Query('timezone') timezone?: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getTodaySummary(userId, timezone);
+  }
+
   @ApiOperation({ summary: '分页查询闪卡（管理页）' })
   @ApiQuery({ name: 'pageSize', required: false, example: 20 })
   @ApiQuery({ name: 'cursor', required: false })
