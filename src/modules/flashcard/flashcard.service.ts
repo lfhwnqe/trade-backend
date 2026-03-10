@@ -101,6 +101,10 @@ export class FlashcardService {
         dto.earlyExitTag === true
           ? dto.earlyExitReason?.trim() || undefined
           : undefined,
+      earlyExitImageUrls:
+        dto.earlyExitTag === true
+          ? (dto.earlyExitImageUrls || []).map((item) => item.trim()).filter(Boolean)
+          : undefined,
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       notes: dto.notes?.trim() || undefined,
@@ -344,6 +348,11 @@ export class FlashcardService {
         ? current.earlyExitReason
         : dto.earlyExitReason.trim() || undefined
       : undefined;
+    const earlyExitImageUrls = earlyExitTag
+      ? dto.earlyExitImageUrls === undefined
+        ? current.earlyExitImageUrls
+        : dto.earlyExitImageUrls.map((item) => item.trim()).filter(Boolean)
+      : undefined;
     const marketTimeInfo =
       dto.marketTimeInfo === undefined
         ? current.marketTimeInfo
@@ -366,6 +375,7 @@ export class FlashcardService {
       invalidationType,
       earlyExitTag,
       earlyExitReason,
+      earlyExitImageUrls,
       marketTimeInfo,
       symbolPairInfo,
       notes,

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 import {
   FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_DIRECTION_VALUES,
@@ -82,6 +82,17 @@ export class CreateFlashcardCardDto {
   @IsString()
   @MaxLength(500)
   earlyExitReason?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['https://cdn.example.com/flashcards/u1/early-exit/2026-03-04/ghi.png'],
+    description: '提前离场附图（最多 5 张）',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsUrl({}, { each: true })
+  earlyExitImageUrls?: string[];
 
   @ApiPropertyOptional({ example: '2026-03-05 09:30 UTC+8', description: '行情时间信息（选填）' })
   @IsOptional()

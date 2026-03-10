@@ -60,6 +60,7 @@ export interface FlashcardCard {
   invalidationType?: FlashcardInvalidationType;
   earlyExitTag?: boolean;
   earlyExitReason?: string;
+  earlyExitImageUrls?: string[];
   direction?: FlashcardDirection;
   marketTimeInfo?: string;
   symbolPairInfo?: string;
