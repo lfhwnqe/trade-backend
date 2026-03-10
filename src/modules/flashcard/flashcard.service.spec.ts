@@ -383,6 +383,37 @@ describe('FlashcardService', () => {
     jest.useRealTimers();
   });
 
+  it('should return real totalCount for flashcard list pagination', async () => {
+    const service = makeService();
+
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        ...Array.from({ length: 21 }, (_, index) => ({
+          userId: 'user-1',
+          cardId: `card-${index + 1}`,
+          entityType: 'CARD',
+          questionImageUrl: `q${index + 1}`,
+          answerImageUrl: `a${index + 1}`,
+          expectedAction: 'LONG',
+          createdAt: `2026-03-10T${String(index).padStart(2, '0')}:00:00.000Z`,
+          updatedAt: `2026-03-10T${String(index).padStart(2, '0')}:00:00.000Z`,
+        })),
+      ],
+    });
+
+    const result = await service.listCards('user-1', { pageSize: 20 } as any);
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        items: expect.any(Array),
+        totalCount: 21,
+        nextCursor: expect.any(String),
+      },
+    });
+    expect(result.data.items).toHaveLength(20);
+  });
+
   it('should aggregate analytics from completed sessions and labeled attempts', async () => {
     const service = makeService();
 

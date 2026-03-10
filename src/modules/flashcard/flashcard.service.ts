@@ -242,6 +242,7 @@ export class FlashcardService {
       success: true,
       data: {
         items,
+        totalCount: filtered.length,
         nextCursor:
           nextOffset < filtered.length
             ? this.encodeOffsetCursor(nextOffset)
