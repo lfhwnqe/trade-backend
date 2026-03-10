@@ -10,6 +10,8 @@ import { GetFlashcardUploadUrlDto } from './dto/get-upload-url.dto';
 import { RandomFlashcardCardsDto } from './dto/random-flashcard-cards.dto';
 import {
   FlashcardCard,
+  FlashcardCollectionDistributionItem,
+  FlashcardCollectionState,
   FlashcardDrillAnalyticsDimensionStat,
   FlashcardDrillAnalyticsTrendPoint,
   FlashcardDrillAnalyticsWindow,
@@ -128,21 +130,9 @@ export class FlashcardService {
     const resolvedTimezone = this.normalizeTimezone(timezone);
     const today = this.formatDateInTimezone(new Date(), resolvedTimezone);
     const cards = await this.listAllCards(userId);
-    const todayCards = cards.filter((card) => {
-      if (!card.createdAt) {
-        return false;
-      }
+    const todayCards = this.filterCardsByDate(cards, today, resolvedTimezone);
 
-      return (
-        this.formatDateInTimezone(new Date(card.createdAt), resolvedTimezone) ===
-        today
-      );
-    });
-
-    const latestCreatedAt = todayCards
-      .map((card) => card.createdAt)
-      .filter((value): value is string => typeof value === 'string')
-      .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+    const latestCreatedAt = this.pickBoundaryCreatedAt(todayCards, 'latest');
 
     return {
       success: true,
@@ -152,6 +142,57 @@ export class FlashcardService {
         hasNewCardsToday: todayCards.length > 0,
         newCardsCount: todayCards.length,
         latestCreatedAt: latestCreatedAt || null,
+      },
+    };
+  }
+
+  async getTodayCollectionSummary(userId: string, timezone = 'Asia/Shanghai') {
+    const resolvedTimezone = this.normalizeTimezone(timezone);
+    const now = new Date();
+    const today = this.formatDateInTimezone(now, resolvedTimezone);
+    const cards = await this.listAllCards(userId);
+    const todayCards = this.filterCardsByDate(cards, today, resolvedTimezone);
+    const firstCreatedAt = this.pickBoundaryCreatedAt(todayCards, 'first');
+    const latestCreatedAt = this.pickBoundaryCreatedAt(todayCards, 'latest');
+    const behaviorTypeDistribution = this.buildDistribution(
+      todayCards,
+      'behaviorType',
+    );
+    const symbolPairDistribution = this.buildDistribution(
+      todayCards,
+      'symbolPairInfo',
+    );
+    const marketTimeDistribution = this.buildDistribution(
+      todayCards,
+      'marketTimeInfo',
+    );
+
+    return {
+      success: true,
+      data: {
+        date: today,
+        timezone: resolvedTimezone,
+        hasNewCardsToday: todayCards.length > 0,
+        newCardsCount: todayCards.length,
+        firstCreatedAt: firstCreatedAt || null,
+        latestCreatedAt: latestCreatedAt || null,
+        minutesSinceLastCreated: latestCreatedAt
+          ? Math.max(
+              0,
+              Math.floor((now.getTime() - Date.parse(latestCreatedAt)) / 60000),
+            )
+          : null,
+        behaviorTypeDistribution,
+        symbolPairDistribution,
+        marketTimeDistribution,
+        collectionState: this.resolveCollectionState({
+          newCardsCount: todayCards.length,
+          latestCreatedAt,
+          behaviorTypeDistribution,
+          symbolPairDistribution,
+          marketTimeDistribution,
+          now,
+        }),
       },
     };
   }
@@ -1082,6 +1123,122 @@ export class FlashcardService {
       });
 
     return { stats, labeledAttemptCount, unlabeledAttemptCount };
+  }
+
+  private filterCardsByDate(
+    cards: FlashcardCard[],
+    date: string,
+    timezone: string,
+  ) {
+    return cards.filter((card) => {
+      if (!card.createdAt) {
+        return false;
+      }
+
+      return (
+        this.formatDateInTimezone(new Date(card.createdAt), timezone) === date
+      );
+    });
+  }
+
+  private pickBoundaryCreatedAt(
+    cards: FlashcardCard[],
+    mode: 'first' | 'latest',
+  ) {
+    const sorted = cards
+      .map((card) => card.createdAt)
+      .filter((value): value is string => typeof value === 'string')
+      .sort((a, b) => Date.parse(a) - Date.parse(b));
+
+    if (!sorted.length) {
+      return null;
+    }
+
+    return mode === 'first' ? sorted[0] : sorted[sorted.length - 1];
+  }
+
+  private buildDistribution(
+    cards: FlashcardCard[],
+    field: 'behaviorType' | 'symbolPairInfo' | 'marketTimeInfo',
+  ): FlashcardCollectionDistributionItem[] {
+    const grouped = new Map<string, number>();
+
+    for (const card of cards) {
+      const rawValue = card[field];
+      const value = typeof rawValue === 'string' ? rawValue.trim() : '';
+      if (!value) {
+        continue;
+      }
+      grouped.set(value, (grouped.get(value) || 0) + 1);
+    }
+
+    return Array.from(grouped.entries())
+      .map(([value, count]) => ({ value, count }))
+      .sort((a, b) => {
+        if (b.count !== a.count) {
+          return b.count - a.count;
+        }
+        return a.value.localeCompare(b.value);
+      });
+  }
+
+  private resolveCollectionState(input: {
+    newCardsCount: number;
+    latestCreatedAt: string | null;
+    behaviorTypeDistribution: FlashcardCollectionDistributionItem[];
+    symbolPairDistribution: FlashcardCollectionDistributionItem[];
+    marketTimeDistribution: FlashcardCollectionDistributionItem[];
+    now: Date;
+  }): FlashcardCollectionState {
+    const {
+      newCardsCount,
+      latestCreatedAt,
+      behaviorTypeDistribution,
+      symbolPairDistribution,
+      marketTimeDistribution,
+      now,
+    } = input;
+
+    if (newCardsCount <= 0) {
+      return 'NO_NEW_CARDS';
+    }
+
+    if (latestCreatedAt) {
+      const minutesSinceLastCreated = Math.floor(
+        (now.getTime() - Date.parse(latestCreatedAt)) / 60000,
+      );
+      if (minutesSinceLastCreated > 180) {
+        return 'COLLECTION_PAUSED';
+      }
+    }
+
+    const distributions = [
+      behaviorTypeDistribution,
+      symbolPairDistribution,
+      marketTimeDistribution,
+    ];
+    const hasFocusedDimension = distributions.some((items) => {
+      const top = items[0];
+      return !!top && top.count / newCardsCount >= 0.6;
+    });
+
+    if (hasFocusedDimension) {
+      return 'FOCUSED_COLLECTION';
+    }
+
+    if (newCardsCount >= 10) {
+      return 'HEAVY_COLLECTION';
+    }
+
+    if (newCardsCount >= 4) {
+      const richDimensions = distributions.filter((items) => items.length >= 3);
+      if (richDimensions.length >= 2) {
+        return 'SCATTERED_COLLECTION';
+      }
+      return 'ACTIVE_COLLECTION';
+    }
+
+    return 'LIGHT_COLLECTION';
   }
 
   private matchesFilters(card: FlashcardCard, dto: RandomFlashcardCardsDto) {

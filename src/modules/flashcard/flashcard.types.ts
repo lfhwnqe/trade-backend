@@ -145,3 +145,20 @@ export interface FlashcardDrillAnalyticsDimensionStat {
   accuracy: number;
   wrongRate: number;
 }
+
+export const FLASHCARD_COLLECTION_STATE_VALUES = [
+  'NO_NEW_CARDS',
+  'LIGHT_COLLECTION',
+  'ACTIVE_COLLECTION',
+  'HEAVY_COLLECTION',
+  'FOCUSED_COLLECTION',
+  'SCATTERED_COLLECTION',
+  'COLLECTION_PAUSED',
+] as const;
+export type FlashcardCollectionState =
+  (typeof FLASHCARD_COLLECTION_STATE_VALUES)[number];
+
+export interface FlashcardCollectionDistributionItem {
+  value: string;
+  count: number;
+}

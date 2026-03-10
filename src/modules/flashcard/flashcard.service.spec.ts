@@ -303,6 +303,86 @@ describe('FlashcardService', () => {
     jest.useRealTimers();
   });
 
+  it('should build today collection summary with distributions and focused state', async () => {
+    const service = makeService();
+
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'q1',
+          answerImageUrl: 'a1',
+          expectedAction: 'LONG',
+          behaviorType: 'ZONE_FAKE_BREAK',
+          marketTimeInfo: 'London Open',
+          symbolPairInfo: 'BTCUSDT',
+          createdAt: '2026-03-10T01:00:00.000Z',
+          updatedAt: '2026-03-10T01:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-2',
+          entityType: 'CARD',
+          questionImageUrl: 'q2',
+          answerImageUrl: 'a2',
+          expectedAction: 'SHORT',
+          behaviorType: 'ZONE_FAKE_BREAK',
+          marketTimeInfo: 'London Open',
+          symbolPairInfo: 'BTCUSDT',
+          createdAt: '2026-03-10T02:00:00.000Z',
+          updatedAt: '2026-03-10T02:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-3',
+          entityType: 'CARD',
+          questionImageUrl: 'q3',
+          answerImageUrl: 'a3',
+          expectedAction: 'SHORT',
+          behaviorType: 'BREAK_RETEST',
+          marketTimeInfo: 'New York Open',
+          symbolPairInfo: 'ETHUSDT',
+          createdAt: '2026-03-10T03:30:00.000Z',
+          updatedAt: '2026-03-10T03:30:00.000Z',
+        },
+      ],
+    });
+
+    jest.useFakeTimers().setSystemTime(new Date('2026-03-10T04:00:00.000Z'));
+
+    const result = await service.getTodayCollectionSummary('user-1');
+
+    expect(result).toEqual({
+      success: true,
+      data: {
+        date: '2026-03-10',
+        timezone: 'Asia/Shanghai',
+        hasNewCardsToday: true,
+        newCardsCount: 3,
+        firstCreatedAt: '2026-03-10T01:00:00.000Z',
+        latestCreatedAt: '2026-03-10T03:30:00.000Z',
+        minutesSinceLastCreated: 30,
+        behaviorTypeDistribution: [
+          { value: 'ZONE_FAKE_BREAK', count: 2 },
+          { value: 'BREAK_RETEST', count: 1 },
+        ],
+        symbolPairDistribution: [
+          { value: 'BTCUSDT', count: 2 },
+          { value: 'ETHUSDT', count: 1 },
+        ],
+        marketTimeDistribution: [
+          { value: 'London Open', count: 2 },
+          { value: 'New York Open', count: 1 },
+        ],
+        collectionState: 'FOCUSED_COLLECTION',
+      },
+    });
+
+    jest.useRealTimers();
+  });
+
   it('should aggregate analytics from completed sessions and labeled attempts', async () => {
     const service = makeService();
 

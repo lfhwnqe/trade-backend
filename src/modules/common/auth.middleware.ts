@@ -121,15 +121,21 @@ export class AuthMiddleware implements NestMiddleware {
           path.startsWith('trade') ||
           originalUrl.startsWith('/trade') ||
           originalUrl.startsWith('trade');
+        const method = String((req as any).method || '').toUpperCase();
         const isApiTokenAllowedFlashcardRoute =
-          ((path === '/flashcard/cards/today-summary' ||
-            path === 'flashcard/cards/today-summary') &&
-            String((req as any).method || '').toUpperCase() === 'GET') ||
-          ((originalUrl === '/flashcard/cards/today-summary' ||
+          method === 'GET' &&
+          (((path === '/flashcard/cards/today-summary' ||
+            path === 'flashcard/cards/today-summary' ||
+            path === '/flashcard/cards/today-collection-summary' ||
+            path === 'flashcard/cards/today-collection-summary')) ||
+            originalUrl === '/flashcard/cards/today-summary' ||
             originalUrl === 'flashcard/cards/today-summary' ||
             originalUrl.startsWith('/flashcard/cards/today-summary?') ||
-            originalUrl.startsWith('flashcard/cards/today-summary?')) &&
-            String((req as any).method || '').toUpperCase() === 'GET');
+            originalUrl.startsWith('flashcard/cards/today-summary?') ||
+            originalUrl === '/flashcard/cards/today-collection-summary' ||
+            originalUrl === 'flashcard/cards/today-collection-summary' ||
+            originalUrl.startsWith('/flashcard/cards/today-collection-summary?') ||
+            originalUrl.startsWith('flashcard/cards/today-collection-summary?'));
 
         if (!isTradeRoute && !isApiTokenAllowedFlashcardRoute) {
           console.log('[AuthMiddleware][apiToken] blocked route', {
