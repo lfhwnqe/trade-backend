@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 import {
   FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_DIRECTION_VALUES,
@@ -65,6 +65,23 @@ export class CreateFlashcardCardDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: '是否属于符合系统信号但因后续走势发展不如意而提前手动离场的题',
+  })
+  @IsOptional()
+  @IsBoolean()
+  earlyExitTag?: boolean;
+
+  @ApiPropertyOptional({
+    example: '触发后迟迟没有扩张，且关键回踩承接变弱，所以手动提前离场。',
+    description: '提前离场原因；当 earlyExitTag=true 时建议填写',
+  })
+  @ValidateIf((o) => o.earlyExitTag === true || typeof o.earlyExitReason === 'string')
+  @IsString()
+  @MaxLength(500)
+  earlyExitReason?: string;
 
   @ApiPropertyOptional({ example: '2026-03-05 09:30 UTC+8', description: '行情时间信息（选填）' })
   @IsOptional()

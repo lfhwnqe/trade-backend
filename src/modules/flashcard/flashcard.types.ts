@@ -58,6 +58,8 @@ export interface FlashcardCard {
   expectedAction?: FlashcardAction;
   behaviorType?: FlashcardBehaviorType;
   invalidationType?: FlashcardInvalidationType;
+  earlyExitTag?: boolean;
+  earlyExitReason?: string;
   direction?: FlashcardDirection;
   marketTimeInfo?: string;
   symbolPairInfo?: string;

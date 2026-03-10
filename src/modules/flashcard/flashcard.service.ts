@@ -96,6 +96,11 @@ export class FlashcardService {
       behaviorType: dto.behaviorType,
       invalidationType: dto.invalidationType,
       direction: expectedAction,
+      earlyExitTag: dto.earlyExitTag === true,
+      earlyExitReason:
+        dto.earlyExitTag === true
+          ? dto.earlyExitReason?.trim() || undefined
+          : undefined,
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       notes: dto.notes?.trim() || undefined,
@@ -332,6 +337,13 @@ export class FlashcardService {
       dto.invalidationType === undefined
         ? current.invalidationType
         : dto.invalidationType;
+    const earlyExitTag =
+      dto.earlyExitTag === undefined ? current.earlyExitTag === true : dto.earlyExitTag === true;
+    const earlyExitReason = earlyExitTag
+      ? dto.earlyExitReason === undefined
+        ? current.earlyExitReason
+        : dto.earlyExitReason.trim() || undefined
+      : undefined;
     const marketTimeInfo =
       dto.marketTimeInfo === undefined
         ? current.marketTimeInfo
@@ -352,6 +364,8 @@ export class FlashcardService {
       direction: nextAction,
       behaviorType,
       invalidationType,
+      earlyExitTag,
+      earlyExitReason,
       marketTimeInfo,
       symbolPairInfo,
       notes,

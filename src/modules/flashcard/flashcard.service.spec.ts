@@ -69,6 +69,8 @@ describe('FlashcardService', () => {
       direction: 'SHORT',
       behaviorType: 'ZONE_REJECTION',
       invalidationType: 'REJECTION_EXTREME_BROKEN',
+      earlyExitTag: true,
+      earlyExitReason: '  no expansion after trigger  ',
       marketTimeInfo: '  London Open  ',
       symbolPairInfo: '  BTCUSDT  ',
       notes: '  wait for rejection  ',
@@ -82,6 +84,8 @@ describe('FlashcardService', () => {
           cardId: 'uuid-1',
           expectedAction: 'SHORT',
           direction: 'SHORT',
+          earlyExitTag: true,
+          earlyExitReason: 'no expansion after trigger',
           marketTimeInfo: 'London Open',
           symbolPairInfo: 'BTCUSDT',
           notes: 'wait for rejection',
@@ -91,6 +95,8 @@ describe('FlashcardService', () => {
     expect(result.success).toBe(true);
     expect(result.data.expectedAction).toBe('SHORT');
     expect(result.data.direction).toBe('SHORT');
+    expect(result.data.earlyExitTag).toBe(true);
+    expect(result.data.earlyExitReason).toBe('no expansion after trigger');
   });
 
   it('should submit wrong attempt, persist wrong-book/favorite, and update running stats', async () => {
