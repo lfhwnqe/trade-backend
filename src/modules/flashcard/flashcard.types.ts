@@ -38,6 +38,13 @@ export const FLASHCARD_INVALIDATION_TYPE_VALUES = [
 export type FlashcardInvalidationType =
   (typeof FLASHCARD_INVALIDATION_TYPE_VALUES)[number];
 
+export const FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES = [
+  'SYSTEM_WIN',
+  'SYSTEM_LOSS_NORMAL',
+] as const;
+export type FlashcardSystemOutcomeType =
+  (typeof FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES)[number];
+
 export const FLASHCARD_IMAGE_SCOPE_VALUES = ['question', 'answer'] as const;
 export type FlashcardImageScope = (typeof FLASHCARD_IMAGE_SCOPE_VALUES)[number];
 
@@ -58,6 +65,7 @@ export interface FlashcardCard {
   expectedAction?: FlashcardAction;
   behaviorType?: FlashcardBehaviorType;
   invalidationType?: FlashcardInvalidationType;
+  systemOutcomeType?: FlashcardSystemOutcomeType;
   earlyExitTag?: boolean;
   earlyExitReason?: string;
   earlyExitImageUrls?: string[];

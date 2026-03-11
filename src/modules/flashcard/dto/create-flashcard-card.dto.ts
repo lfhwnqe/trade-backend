@@ -8,6 +8,8 @@ import {
   FlashcardDirection,
   FLASHCARD_INVALIDATION_TYPE_VALUES,
   FlashcardInvalidationType,
+  FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES,
+  FlashcardSystemOutcomeType,
 } from '../flashcard.types';
 
 export class CreateFlashcardCardDto {
@@ -59,6 +61,16 @@ export class CreateFlashcardCardDto {
   @IsString()
   @IsIn(FLASHCARD_DIRECTION_VALUES)
   direction?: FlashcardDirection;
+
+  @ApiPropertyOptional({
+    enum: FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES,
+    example: 'SYSTEM_WIN',
+    description: '系统结果分类；选填，未填写时保持空值',
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES)
+  systemOutcomeType?: FlashcardSystemOutcomeType;
 
   @ApiPropertyOptional({ example: 'sweep 后失败回落。' })
   @IsOptional()

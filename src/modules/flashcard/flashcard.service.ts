@@ -95,6 +95,7 @@ export class FlashcardService {
       expectedAction,
       behaviorType: dto.behaviorType,
       invalidationType: dto.invalidationType,
+      systemOutcomeType: dto.systemOutcomeType,
       direction: expectedAction,
       earlyExitTag: dto.earlyExitTag === true,
       earlyExitReason:
@@ -341,6 +342,10 @@ export class FlashcardService {
       dto.invalidationType === undefined
         ? current.invalidationType
         : dto.invalidationType;
+    const systemOutcomeType =
+      dto.systemOutcomeType === undefined
+        ? current.systemOutcomeType
+        : dto.systemOutcomeType;
     const earlyExitTag =
       dto.earlyExitTag === undefined ? current.earlyExitTag === true : dto.earlyExitTag === true;
     const earlyExitReason = earlyExitTag
@@ -373,6 +378,7 @@ export class FlashcardService {
       direction: nextAction,
       behaviorType,
       invalidationType,
+      systemOutcomeType,
       earlyExitTag,
       earlyExitReason,
       earlyExitImageUrls,
