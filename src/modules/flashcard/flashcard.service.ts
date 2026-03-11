@@ -211,39 +211,37 @@ export class FlashcardService {
     const pageSize = dto.pageSize || 20;
     const offset = this.decodeOffsetCursor(dto.cursor);
 
-    const cards = await this.listAllCards(userId);
-    const filtered = cards
-      .filter((card) => {
-        if (dto.behaviorType && card.behaviorType !== dto.behaviorType) {
-          return false;
-        }
+    const cards = await this.listAllCardsByCreatedAtDesc(userId);
+    const filtered = cards.filter((card) => {
+      if (dto.behaviorType && card.behaviorType !== dto.behaviorType) {
+        return false;
+      }
+      if (
+        dto.invalidationType &&
+        card.invalidationType !== dto.invalidationType
+      ) {
+        return false;
+      }
+      if (dto.symbolPairInfo) {
+        const keyword = dto.symbolPairInfo.trim().toLowerCase();
         if (
-          dto.invalidationType &&
-          card.invalidationType !== dto.invalidationType
+          keyword &&
+          !(card.symbolPairInfo || '').toLowerCase().includes(keyword)
         ) {
           return false;
         }
-        if (dto.symbolPairInfo) {
-          const keyword = dto.symbolPairInfo.trim().toLowerCase();
-          if (
-            keyword &&
-            !(card.symbolPairInfo || '').toLowerCase().includes(keyword)
-          ) {
-            return false;
-          }
+      }
+      if (dto.marketTimeInfo) {
+        const keyword = dto.marketTimeInfo.trim().toLowerCase();
+        if (
+          keyword &&
+          !(card.marketTimeInfo || '').toLowerCase().includes(keyword)
+        ) {
+          return false;
         }
-        if (dto.marketTimeInfo) {
-          const keyword = dto.marketTimeInfo.trim().toLowerCase();
-          if (
-            keyword &&
-            !(card.marketTimeInfo || '').toLowerCase().includes(keyword)
-          ) {
-            return false;
-          }
-        }
-        return true;
-      })
-      .sort((a, b) => this.cardSortTs(b) - this.cardSortTs(a));
+      }
+      return true;
+    });
 
     const items = filtered.slice(offset, offset + pageSize);
     const nextOffset = offset + items.length;
@@ -843,18 +841,39 @@ export class FlashcardService {
   }
 
   private async listAllCards(userId: string): Promise<FlashcardCard[]> {
+    return this.queryAllCards(userId);
+  }
+
+  private async listAllCardsByCreatedAtDesc(
+    userId: string,
+  ): Promise<FlashcardCard[]> {
+    return this.queryAllCards(userId, {
+      indexName: this.createdAtIndexName,
+      scanIndexForward: false,
+    });
+  }
+
+  private async queryAllCards(
+    userId: string,
+    options?: {
+      indexName?: string;
+      scanIndexForward?: boolean;
+    },
+  ): Promise<FlashcardCard[]> {
     const cards: FlashcardCard[] = [];
     let lastEvaluatedKey: Record<string, unknown> | undefined;
 
     do {
       const result = await this.db.query({
         TableName: this.tableName,
+        IndexName: options?.indexName,
         KeyConditionExpression: 'userId = :userId',
         ExpressionAttributeValues: {
           ':userId': userId,
         },
         ExclusiveStartKey: lastEvaluatedKey,
         Limit: 200,
+        ScanIndexForward: options?.scanIndexForward,
       });
 
       const pageItems = (result.Items || []) as FlashcardCard[];
@@ -1371,14 +1390,6 @@ export class FlashcardService {
     } catch {
       return undefined;
     }
-  }
-
-  private cardSortTs(card: FlashcardCard) {
-    const updated = Date.parse(card.updatedAt || '');
-    if (!Number.isNaN(updated)) return updated;
-    const created = Date.parse(card.createdAt || '');
-    if (!Number.isNaN(created)) return created;
-    return 0;
   }
 
   private sessionSortTs(session: FlashcardDrillSessionItem) {

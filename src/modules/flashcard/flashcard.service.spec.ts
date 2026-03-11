@@ -409,6 +409,13 @@ describe('FlashcardService', () => {
 
     const result = await service.listCards('user-1', { pageSize: 20 } as any);
 
+    expect(mockDb.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'flashcards-test',
+        IndexName: 'userId-createdAt-index',
+        ScanIndexForward: false,
+      }),
+    );
     expect(result).toEqual({
       success: true,
       data: {
@@ -418,6 +425,49 @@ describe('FlashcardService', () => {
       },
     });
     expect(result.data.items).toHaveLength(20);
+  });
+
+  it('should query flashcard list by createdAt desc index instead of sorting by updatedAt in memory', async () => {
+    const service = makeService();
+
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-newer',
+          entityType: 'CARD',
+          questionImageUrl: 'q2',
+          answerImageUrl: 'a2',
+          expectedAction: 'SHORT',
+          createdAt: '2026-03-10T09:00:00.000Z',
+          updatedAt: '2026-03-10T09:05:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-old-but-recently-edited',
+          entityType: 'CARD',
+          questionImageUrl: 'q1',
+          answerImageUrl: 'a1',
+          expectedAction: 'LONG',
+          createdAt: '2026-03-09T09:00:00.000Z',
+          updatedAt: '2026-03-11T12:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await service.listCards('user-1', { pageSize: 20 } as any);
+
+    expect(mockDb.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        TableName: 'flashcards-test',
+        IndexName: 'userId-createdAt-index',
+        ScanIndexForward: false,
+      }),
+    );
+    expect(result.data.items.map((item) => item.cardId)).toEqual([
+      'card-newer',
+      'card-old-but-recently-edited',
+    ]);
   });
 
   it('should aggregate analytics from completed sessions and labeled attempts', async () => {
