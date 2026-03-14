@@ -31,6 +31,10 @@ import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
+import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
+import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
+import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
+import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -136,6 +140,8 @@ export class FlashcardController {
   @ApiQuery({ name: 'invalidationType', required: false })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'marketTimeInfo', required: false })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['CREATED_AT', 'QUALITY_SCORE_AVG'] })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: '返回分页数据 items + nextCursor' })
   @Get('cards')
   async listCards(@Req() req: Request, @Query() query: ListFlashcardCardsDto) {
@@ -247,6 +253,94 @@ export class FlashcardController {
     }
 
     return this.flashcardService.getDrillAnalytics(userId, query);
+  }
+
+  @ApiOperation({ summary: '开始一次闪卡模拟盘训练并创建会话' })
+  @ApiBody({ type: StartFlashcardSimulationSessionDto })
+  @ApiResponse({ status: 200, description: '返回 simulationSessionId 与抽题结果' })
+  @Post('simulation/session/start')
+  async startSimulationSession(
+    @Req() req: Request,
+    @Body() dto: StartFlashcardSimulationSessionDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.startSimulationSession(userId, dto);
+  }
+
+  @ApiOperation({ summary: '提交单题模拟盘训练结果' })
+  @ApiBody({ type: CreateFlashcardSimulationAttemptDto })
+  @ApiResponse({ status: 200, description: '返回 attemptId、实时统计与卡片聚合指标' })
+  @Post('simulation/session/:sessionId/attempt')
+  async submitSimulationAttempt(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+    @Body() dto: CreateFlashcardSimulationAttemptDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.submitSimulationAttempt(userId, sessionId, dto);
+  }
+
+  @ApiOperation({ summary: '结束一次闪卡模拟盘训练并返回统计' })
+  @ApiResponse({ status: 200, description: '返回 success/failure 统计' })
+  @Post('simulation/session/:sessionId/finish')
+  async finishSimulationSession(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.finishSimulationSession(userId, sessionId);
+  }
+
+  @ApiOperation({ summary: '分页查询闪卡模拟盘训练历史（按时间倒序）' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['IN_PROGRESS', 'COMPLETED', 'ABANDONED'],
+  })
+  @ApiResponse({ status: 200, description: '返回 simulation 历史 items + nextCursor' })
+  @Get('simulation/sessions')
+  async listSimulationSessions(
+    @Req() req: Request,
+    @Query() query: ListFlashcardSimulationSessionsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.listSimulationSessions(userId, query);
+  }
+
+  @ApiOperation({ summary: '查询某张闪卡的模拟盘训练历史与失败备注' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiResponse({ status: 200, description: '返回该卡片的 simulation 历史与摘要' })
+  @Get('simulation/cards/:cardId/history')
+  async getSimulationCardHistory(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Query() query: ListFlashcardSimulationCardHistoryDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getSimulationCardHistory(userId, cardId, query);
   }
 
   @ApiOperation({ summary: '获取错题集' })

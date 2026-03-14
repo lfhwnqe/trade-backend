@@ -10,6 +10,8 @@ import { GetFlashcardUploadUrlDto } from './dto/get-upload-url.dto';
 import { RandomFlashcardCardsDto } from './dto/random-flashcard-cards.dto';
 import {
   FlashcardCard,
+  FlashcardCardSortOrder,
+  FlashcardCardSortBy,
   FlashcardCollectionDistributionItem,
   FlashcardCollectionState,
   FlashcardDrillAnalyticsDimensionStat,
@@ -18,6 +20,8 @@ import {
   FlashcardDrillAttemptItem,
   FlashcardDrillSessionItem,
   FlashcardFavoriteItem,
+  FlashcardSimulationAttemptItem,
+  FlashcardSimulationSessionItem,
   FlashcardSource,
   FlashcardWrongBookItem,
 } from './flashcard.types';
@@ -29,6 +33,10 @@ import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-att
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
+import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
+import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
+import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
+import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -243,8 +251,14 @@ export class FlashcardService {
       return true;
     });
 
-    const items = filtered.slice(offset, offset + pageSize);
-    const nextOffset = offset + items.length;
+    const sorted = this.sortCards(
+      filtered,
+      dto.sortBy || 'CREATED_AT',
+      dto.sortOrder || (dto.sortBy === 'QUALITY_SCORE_AVG' ? 'asc' : 'desc'),
+    );
+
+    const items = sorted.slice(offset, offset + pageSize);
+     const nextOffset = offset + items.length;
 
     return {
       success: true,
@@ -591,6 +605,274 @@ export class FlashcardService {
         sessionId,
         score: updatedSession.score,
         stats: this.toSessionStats(updatedSession),
+      },
+    };
+  }
+
+  async startSimulationSession(
+    userId: string,
+    dto: StartFlashcardSimulationSessionDto,
+  ) {
+    const cards = await this.listAllCards(userId);
+    const filtered = cards.filter((card) => this.matchesFilters(card, dto));
+    this.shuffleInPlace(filtered);
+
+    const pickedCards = filtered.slice(0, dto.count || 5);
+    const simulationSessionId = uuidv4();
+    const now = new Date().toISOString();
+
+    const sessionItem: FlashcardSimulationSessionItem = {
+      userId,
+      cardId: this.makeSimulationSessionKey(simulationSessionId),
+      entityType: 'SIMULATION_SESSION',
+      simulationSessionId,
+      source: dto.filters ? 'FILTERED' : 'ALL',
+      count: dto.count || 5,
+      totalCards: pickedCards.length,
+      successCount: 0,
+      failureCount: 0,
+      successRate: 0,
+      status: 'IN_PROGRESS',
+      cardIds: pickedCards.map((card) => card.cardId),
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: sessionItem });
+
+    return {
+      success: true,
+      data: {
+        simulationSessionId,
+        count: pickedCards.length,
+        cards: pickedCards,
+      },
+    };
+  }
+
+  async submitSimulationAttempt(
+    userId: string,
+    sessionId: string,
+    dto: CreateFlashcardSimulationAttemptDto,
+  ) {
+    const now = new Date().toISOString();
+    const session = await this.getSimulationSession(userId, sessionId);
+
+    if (!session.cardIds.includes(dto.cardId)) {
+      throw new ResourceNotFoundException(
+        `card ${dto.cardId} not in simulation session ${sessionId}`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '该题目不属于当前模拟盘训练会话',
+        { userId, sessionId, cardId: dto.cardId },
+      );
+    }
+
+    const attemptKey = this.makeSimulationAttemptKey(sessionId, dto.cardId);
+    const existingAttemptResult = await this.db.get({
+      TableName: this.tableName,
+      Key: { userId, cardId: attemptKey },
+    });
+
+    if (existingAttemptResult.Item) {
+      const existingAttempt =
+        existingAttemptResult.Item as FlashcardSimulationAttemptItem;
+      const card = await this.getCardById(userId, dto.cardId);
+      return {
+        success: true,
+        data: {
+          attemptId: existingAttempt.attemptId,
+          runningStats: this.toSimulationSessionStats(session),
+          cardMetrics: this.toCardSimulationMetrics(card),
+        },
+      };
+    }
+
+    const attemptId = uuidv4();
+    const result = dto.result;
+    const cardQualityScore = dto.cardQualityScore || 5;
+    const attemptItem: FlashcardSimulationAttemptItem = {
+      userId,
+      cardId: attemptKey,
+      entityType: 'SIMULATION_ATTEMPT',
+      attemptId,
+      simulationSessionId: sessionId,
+      targetCardId: dto.cardId,
+      entryLineYPercent: dto.entryLineYPercent,
+      stopLossLineYPercent: dto.stopLossLineYPercent,
+      takeProfitLineYPercent: dto.takeProfitLineYPercent,
+      rrValue: dto.rrValue,
+      entryDirection: dto.entryDirection,
+      entryReason: dto.entryReason.trim(),
+      rrReason: dto.rrReason.trim(),
+      result,
+      failureNote:
+        result === 'FAILURE' ? dto.failureNote?.trim() || undefined : undefined,
+      cardQualityScore,
+      revealedAt: now,
+      submittedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: attemptItem });
+
+    const sessionUpdate = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSimulationSessionKey(sessionId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeSession',
+      UpdateExpression:
+        'SET successCount = successCount + :incSuccess, failureCount = failureCount + :incFailure, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':entityTypeSession': 'SIMULATION_SESSION',
+        ':incSuccess': result === 'SUCCESS' ? 1 : 0,
+        ':incFailure': result === 'FAILURE' ? 1 : 0,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    const updatedSession =
+      sessionUpdate.Attributes as FlashcardSimulationSessionItem;
+
+    const updatedCard = await this.applySimulationMetricsToCard(
+      userId,
+      dto.cardId,
+      {
+        result,
+        cardQualityScore,
+        now,
+      },
+    );
+
+    return {
+      success: true,
+      data: {
+        attemptId,
+        runningStats: this.toSimulationSessionStats(updatedSession),
+        cardMetrics: this.toCardSimulationMetrics(updatedCard),
+      },
+    };
+  }
+
+  async finishSimulationSession(userId: string, sessionId: string) {
+    const now = new Date().toISOString();
+    const session = await this.getSimulationSession(userId, sessionId);
+    const totalCompleted = session.successCount + session.failureCount;
+    const successRate =
+      totalCompleted > 0 ? Number((session.successCount / totalCompleted).toFixed(4)) : 0;
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSimulationSessionKey(sessionId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeSession',
+      UpdateExpression:
+        'SET #status = :statusCompleted, endedAt = :endedAt, successRate = :successRate, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':entityTypeSession': 'SIMULATION_SESSION',
+        ':statusCompleted': 'COMPLETED',
+        ':endedAt': now,
+        ':successRate': successRate,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    const updatedSession = updated.Attributes as FlashcardSimulationSessionItem;
+
+    return {
+      success: true,
+      data: {
+        simulationSessionId: sessionId,
+        totalCards: updatedSession.totalCards,
+        successCount: updatedSession.successCount,
+        failureCount: updatedSession.failureCount,
+        successRate:
+          updatedSession.successRate ||
+          this.toSimulationSessionStats(updatedSession).successRate,
+        status: updatedSession.status,
+      },
+    };
+  }
+
+  async listSimulationSessions(
+    userId: string,
+    dto: ListFlashcardSimulationSessionsDto,
+  ) {
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
+    const sessions = await this.listAllSimulationSessions(userId);
+    const filtered = sessions
+      .filter((session) => (dto.status ? session.status === dto.status : true))
+      .sort((a, b) => this.simulationSessionSortTs(b) - this.simulationSessionSortTs(a));
+
+    const items = filtered.slice(offset, offset + pageSize).map((session) => ({
+      simulationSessionId: session.simulationSessionId,
+      source: session.source,
+      count: session.count,
+      totalCards: session.totalCards,
+      successCount: session.successCount,
+      failureCount: session.failureCount,
+      successRate:
+        session.successRate || this.toSimulationSessionStats(session).successRate,
+      status: session.status,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      updatedAt: session.updatedAt,
+    }));
+    const nextOffset = offset + items.length;
+
+    return {
+      success: true,
+      data: {
+        items,
+        nextCursor:
+          nextOffset < filtered.length
+            ? this.encodeOffsetCursor(nextOffset)
+            : null,
+      },
+    };
+  }
+
+  async getSimulationCardHistory(
+    userId: string,
+    targetCardId: string,
+    dto: ListFlashcardSimulationCardHistoryDto,
+  ) {
+    await this.getCardById(userId, targetCardId);
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
+    const attempts = await this.listSimulationAttemptsByCardId(userId, targetCardId);
+    const sorted = attempts.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const items = sorted.slice(offset, offset + pageSize).map((attempt) => ({
+      attemptId: attempt.attemptId,
+      simulationSessionId: attempt.simulationSessionId,
+      result: attempt.result,
+      failureNote: attempt.failureNote,
+      entryReason: attempt.entryReason,
+      rrReason: attempt.rrReason,
+      cardQualityScore: attempt.cardQualityScore,
+      rrValue: attempt.rrValue,
+      createdAt: attempt.createdAt,
+    }));
+    const nextOffset = offset + items.length;
+    const summary = this.buildSimulationCardSummary(attempts);
+
+    return {
+      success: true,
+      data: {
+        cardId: targetCardId,
+        summary,
+        items,
+        nextCursor:
+          nextOffset < sorted.length
+            ? this.encodeOffsetCursor(nextOffset)
+            : null,
       },
     };
   }
@@ -1175,6 +1457,202 @@ export class FlashcardService {
     return { stats, labeledAttemptCount, unlabeledAttemptCount };
   }
 
+  private async listAllSimulationSessions(
+    userId: string,
+  ): Promise<FlashcardSimulationSessionItem[]> {
+    const sessions: FlashcardSimulationSessionItem[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression:
+          'userId = :userId AND begins_with(cardId, :prefix)',
+        ExpressionAttributeValues: {
+          ':userId': userId,
+          ':prefix': 'simulation-session#',
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+
+      sessions.push(...((result.Items || []) as FlashcardSimulationSessionItem[]));
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return sessions.filter((item) => item.entityType === 'SIMULATION_SESSION');
+  }
+
+  private async listSimulationAttemptsByCardId(
+    userId: string,
+    targetCardId: string,
+  ): Promise<FlashcardSimulationAttemptItem[]> {
+    const attempts = await this.queryByPrefix<FlashcardSimulationAttemptItem>(
+      userId,
+      'simulation-attempt#',
+    );
+
+    return attempts.filter(
+      (item) =>
+        item.entityType === 'SIMULATION_ATTEMPT' &&
+        item.targetCardId === targetCardId,
+    );
+  }
+
+  private async getSimulationSession(userId: string, sessionId: string) {
+    const result = await this.db.get({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSimulationSessionKey(sessionId) },
+    });
+
+    const session = result.Item as FlashcardSimulationSessionItem | undefined;
+
+    if (!session || session.entityType !== 'SIMULATION_SESSION') {
+      throw new ResourceNotFoundException(
+        `simulation session ${sessionId} not found`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '模拟盘训练会话不存在',
+        { userId, sessionId },
+      );
+    }
+
+    return session;
+  }
+
+  private async applySimulationMetricsToCard(
+    userId: string,
+    cardId: string,
+    input: {
+      result: 'SUCCESS' | 'FAILURE';
+      cardQualityScore: number;
+      now: string;
+    },
+  ) {
+    const card = await this.getCardById(userId, cardId);
+    const attemptCount = (card.simulationAttemptCount || 0) + 1;
+    const successCount =
+      (card.simulationSuccessCount || 0) + (input.result === 'SUCCESS' ? 1 : 0);
+    const failureCount =
+      (card.simulationFailureCount || 0) + (input.result === 'FAILURE' ? 1 : 0);
+    const qualityScoreCount = (card.qualityScoreCount || 0) + 1;
+    const previousScoreTotal =
+      (card.qualityScoreAvg || 0) * (card.qualityScoreCount || 0);
+    const qualityScoreAvg = Number(
+      ((previousScoreTotal + input.cardQualityScore) / qualityScoreCount).toFixed(2),
+    );
+    const simulationSuccessRate = Number(
+      (successCount / Math.max(attemptCount, 1)).toFixed(4),
+    );
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId },
+      ConditionExpression: 'attribute_exists(cardId)',
+      UpdateExpression:
+        'SET simulationAttemptCount = :attemptCount, simulationSuccessCount = :successCount, simulationFailureCount = :failureCount, simulationSuccessRate = :simulationSuccessRate, qualityScoreAvg = :qualityScoreAvg, qualityScoreCount = :qualityScoreCount, lastSimulationAt = :lastSimulationAt, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':attemptCount': attemptCount,
+        ':successCount': successCount,
+        ':failureCount': failureCount,
+        ':simulationSuccessRate': simulationSuccessRate,
+        ':qualityScoreAvg': qualityScoreAvg,
+        ':qualityScoreCount': qualityScoreCount,
+        ':lastSimulationAt': input.now,
+        ':updatedAt': input.now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    return this.normalizeCard(updated.Attributes as FlashcardCard);
+  }
+
+  private toSimulationSessionStats(session: FlashcardSimulationSessionItem) {
+    const totalCompleted = session.successCount + session.failureCount;
+    return {
+      completedCount: totalCompleted,
+      successCount: session.successCount,
+      failureCount: session.failureCount,
+      successRate:
+        totalCompleted > 0 ? session.successCount / totalCompleted : 0,
+    };
+  }
+
+  private toCardSimulationMetrics(card: FlashcardCard) {
+    return {
+      simulationAttemptCount: card.simulationAttemptCount || 0,
+      simulationSuccessCount: card.simulationSuccessCount || 0,
+      simulationFailureCount: card.simulationFailureCount || 0,
+      simulationSuccessRate: card.simulationSuccessRate || 0,
+      qualityScoreAvg: card.qualityScoreAvg || 0,
+      qualityScoreCount: card.qualityScoreCount || 0,
+      lastSimulationAt: card.lastSimulationAt || null,
+    };
+  }
+
+  private buildSimulationCardSummary(attempts: FlashcardSimulationAttemptItem[]) {
+    if (!attempts.length) {
+      return {
+        simulationAttemptCount: 0,
+        simulationSuccessCount: 0,
+        simulationFailureCount: 0,
+        simulationSuccessRate: 0,
+        qualityScoreAvg: 0,
+      };
+    }
+
+    const simulationAttemptCount = attempts.length;
+    const simulationSuccessCount = attempts.filter(
+      (attempt) => attempt.result === 'SUCCESS',
+    ).length;
+    const simulationFailureCount = simulationAttemptCount - simulationSuccessCount;
+    const qualityScoreAvg = Number(
+      (
+        attempts.reduce((sum, attempt) => sum + attempt.cardQualityScore, 0) /
+        simulationAttemptCount
+      ).toFixed(2),
+    );
+
+    return {
+      simulationAttemptCount,
+      simulationSuccessCount,
+      simulationFailureCount,
+      simulationSuccessRate: Number(
+        (simulationSuccessCount / simulationAttemptCount).toFixed(4),
+      ),
+      qualityScoreAvg,
+    };
+  }
+
+  private sortCards(
+    cards: FlashcardCard[],
+    sortBy: FlashcardCardSortBy,
+    sortOrder: FlashcardCardSortOrder,
+  ) {
+    const direction = sortOrder === 'asc' ? 1 : -1;
+    return [...cards].sort((a, b) => {
+      if (sortBy === 'QUALITY_SCORE_AVG') {
+        const aValue = typeof a.qualityScoreAvg === 'number' ? a.qualityScoreAvg : 5;
+        const bValue = typeof b.qualityScoreAvg === 'number' ? b.qualityScoreAvg : 5;
+        if (aValue !== bValue) {
+          return (aValue - bValue) * direction;
+        }
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      }
+
+      return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * direction;
+    });
+  }
+
+  private simulationSessionSortTs(session: FlashcardSimulationSessionItem) {
+    const updated = Date.parse(session.updatedAt || '');
+    if (!Number.isNaN(updated)) return updated;
+    const ended = Date.parse(session.endedAt || '');
+    if (!Number.isNaN(ended)) return ended;
+    const started = Date.parse(session.startedAt || '');
+    if (!Number.isNaN(started)) return started;
+    return 0;
+  }
+
   private filterCardsByDate(
     cards: FlashcardCard[],
     date: string,
@@ -1347,6 +1825,14 @@ export class FlashcardService {
 
   private makeFavoriteKey(cardId: string) {
     return `favorite#${cardId}`;
+  }
+
+  private makeSimulationSessionKey(sessionId: string) {
+    return `simulation-session#${sessionId}`;
+  }
+
+  private makeSimulationAttemptKey(sessionId: string, cardId: string) {
+    return `simulation-attempt#${sessionId}#${cardId}`;
   }
 
   private resolveFileExtension(fileName: string, contentType: string) {

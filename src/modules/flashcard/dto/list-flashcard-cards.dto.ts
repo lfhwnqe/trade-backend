@@ -3,8 +3,12 @@ import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   FLASHCARD_BEHAVIOR_TYPE_VALUES,
+  FLASHCARD_CARD_SORT_BY_VALUES,
+  FLASHCARD_CARD_SORT_ORDER_VALUES,
   FLASHCARD_INVALIDATION_TYPE_VALUES,
   FlashcardBehaviorType,
+  FlashcardCardSortBy,
+  FlashcardCardSortOrder,
   FlashcardInvalidationType,
 } from '../flashcard.types';
 
@@ -46,4 +50,14 @@ export class ListFlashcardCardsDto {
   @IsOptional()
   @IsString()
   marketTimeInfo?: string;
+
+  @ApiPropertyOptional({ enum: FLASHCARD_CARD_SORT_BY_VALUES, default: 'CREATED_AT' })
+  @IsOptional()
+  @IsIn(FLASHCARD_CARD_SORT_BY_VALUES)
+  sortBy?: FlashcardCardSortBy;
+
+  @ApiPropertyOptional({ enum: FLASHCARD_CARD_SORT_ORDER_VALUES, default: 'desc' })
+  @IsOptional()
+  @IsIn(FLASHCARD_CARD_SORT_ORDER_VALUES)
+  sortOrder?: FlashcardCardSortOrder;
 }

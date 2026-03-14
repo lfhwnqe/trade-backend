@@ -55,6 +55,16 @@ export const FLASHCARD_SOURCE_VALUES = [
 ] as const;
 export type FlashcardSource = (typeof FLASHCARD_SOURCE_VALUES)[number];
 
+export const FLASHCARD_CARD_SORT_BY_VALUES = [
+  'CREATED_AT',
+  'QUALITY_SCORE_AVG',
+] as const;
+export type FlashcardCardSortBy = (typeof FLASHCARD_CARD_SORT_BY_VALUES)[number];
+
+export const FLASHCARD_CARD_SORT_ORDER_VALUES = ['asc', 'desc'] as const;
+export type FlashcardCardSortOrder =
+  (typeof FLASHCARD_CARD_SORT_ORDER_VALUES)[number];
+
 export interface FlashcardCard {
   id: string;
   userId: string;
@@ -73,6 +83,13 @@ export interface FlashcardCard {
   marketTimeInfo?: string;
   symbolPairInfo?: string;
   notes?: string;
+  simulationAttemptCount?: number;
+  simulationSuccessCount?: number;
+  simulationFailureCount?: number;
+  simulationSuccessRate?: number;
+  qualityScoreAvg?: number;
+  qualityScoreCount?: number;
+  lastSimulationAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,6 +125,48 @@ export interface FlashcardDrillAttemptItem {
   isFavorite: boolean;
   noteSnapshot?: string;
   answeredAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlashcardSimulationSessionItem {
+  userId: string;
+  cardId: string; // simulation-session#{sessionId}
+  entityType: 'SIMULATION_SESSION';
+  simulationSessionId: string;
+  source: 'ALL' | 'FILTERED';
+  count: number;
+  totalCards: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+  status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
+  cardIds: string[];
+  startedAt: string;
+  endedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlashcardSimulationAttemptItem {
+  userId: string;
+  cardId: string; // simulation-attempt#{sessionId}#{cardId}
+  entityType: 'SIMULATION_ATTEMPT';
+  attemptId: string;
+  simulationSessionId: string;
+  targetCardId: string;
+  entryLineYPercent: number;
+  stopLossLineYPercent: number;
+  takeProfitLineYPercent: number;
+  rrValue: number;
+  entryDirection: 'LONG' | 'SHORT';
+  entryReason: string;
+  rrReason: string;
+  result: 'SUCCESS' | 'FAILURE';
+  failureNote?: string;
+  cardQualityScore: 1 | 2 | 3 | 4 | 5;
+  revealedAt?: string;
+  submittedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

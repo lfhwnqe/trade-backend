@@ -22,6 +22,11 @@ describe('FlashcardController', () => {
       finishSession: jest.fn(),
       listDrillSessions: jest.fn(),
       getDrillAnalytics: jest.fn(),
+      startSimulationSession: jest.fn(),
+      submitSimulationAttempt: jest.fn(),
+      finishSimulationSession: jest.fn(),
+      listSimulationSessions: jest.fn(),
+      getSimulationCardHistory: jest.fn(),
       listWrongBook: jest.fn(),
       listFavorites: jest.fn(),
       updateCardNote: jest.fn(),
@@ -141,5 +146,29 @@ describe('FlashcardController', () => {
       success: true,
       data: { summary: { totalCompletedSessions: 0 } },
     });
+  });
+
+  it('should forward simulation attempt with current user id', async () => {
+    const { controller, flashcardService } = makeController();
+    flashcardService.submitSimulationAttempt.mockResolvedValue({ success: true });
+
+    const dto = {
+      cardId: 'card-1',
+      entryLineYPercent: 0.4,
+      stopLossLineYPercent: 0.5,
+      takeProfitLineYPercent: 0.2,
+      rrValue: 2,
+      entryDirection: 'LONG',
+      entryReason: 'reason',
+      rrReason: 'rr',
+      result: 'FAILURE',
+      failureNote: 'note',
+      cardQualityScore: 4,
+    } as any;
+
+    const result = await controller.submitSimulationAttempt(makeReq(), 'sim-1', dto);
+
+    expect(flashcardService.submitSimulationAttempt).toHaveBeenCalledWith('user-1', 'sim-1', dto);
+    expect(result).toEqual({ success: true });
   });
 });
