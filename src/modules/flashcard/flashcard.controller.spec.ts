@@ -23,7 +23,8 @@ describe('FlashcardController', () => {
       listDrillSessions: jest.fn(),
       getDrillAnalytics: jest.fn(),
       startSimulationSession: jest.fn(),
-      submitSimulationAttempt: jest.fn(),
+      createSimulationAttempt: jest.fn(),
+      resolveSimulationAttempt: jest.fn(),
       finishSimulationSession: jest.fn(),
       listSimulationSessions: jest.fn(),
       getSimulationCardHistory: jest.fn(),
@@ -148,27 +149,40 @@ describe('FlashcardController', () => {
     });
   });
 
-  it('should forward simulation attempt with current user id', async () => {
+  it('should forward create simulation attempt with current user id', async () => {
     const { controller, flashcardService } = makeController();
-    flashcardService.submitSimulationAttempt.mockResolvedValue({ success: true });
+    flashcardService.createSimulationAttempt.mockResolvedValue({ success: true });
 
     const dto = {
       cardId: 'card-1',
+      revealProgress: 0.43,
       entryLineYPercent: 0.4,
       stopLossLineYPercent: 0.5,
       takeProfitLineYPercent: 0.2,
       rrValue: 2,
       entryDirection: 'LONG',
       entryReason: 'reason',
-      rrReason: 'rr',
+    } as any;
+
+    const result = await controller.createSimulationAttempt(makeReq(), 'sim-1', dto);
+
+    expect(flashcardService.createSimulationAttempt).toHaveBeenCalledWith('user-1', 'sim-1', dto);
+    expect(result).toEqual({ success: true });
+  });
+
+  it('should forward resolve simulation attempt with current user id', async () => {
+    const { controller, flashcardService } = makeController();
+    flashcardService.resolveSimulationAttempt.mockResolvedValue({ success: true });
+
+    const dto = {
       result: 'FAILURE',
-      failureNote: 'note',
+      failureReason: 'note',
       cardQualityScore: 4,
     } as any;
 
-    const result = await controller.submitSimulationAttempt(makeReq(), 'sim-1', dto);
+    const result = await controller.resolveSimulationAttempt(makeReq(), 'attempt-1', dto);
 
-    expect(flashcardService.submitSimulationAttempt).toHaveBeenCalledWith('user-1', 'sim-1', dto);
+    expect(flashcardService.resolveSimulationAttempt).toHaveBeenCalledWith('user-1', 'attempt-1', dto);
     expect(result).toEqual({ success: true });
   });
 });

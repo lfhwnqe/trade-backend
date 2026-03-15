@@ -35,6 +35,7 @@ import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
 import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
 import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
+import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 
@@ -626,9 +627,11 @@ export class FlashcardService {
       cardId: this.makeSimulationSessionKey(simulationSessionId),
       entityType: 'SIMULATION_SESSION',
       simulationSessionId,
+      mode: 'STANDARD',
       source: dto.filters ? 'FILTERED' : 'ALL',
       count: dto.count || 5,
       totalCards: pickedCards.length,
+      completedAttemptCount: 0,
       successCount: 0,
       failureCount: 0,
       successRate: 0,
@@ -645,13 +648,14 @@ export class FlashcardService {
       success: true,
       data: {
         simulationSessionId,
+        mode: 'STANDARD',
         count: pickedCards.length,
         cards: pickedCards,
       },
     };
   }
 
-  async submitSimulationAttempt(
+  async createSimulationAttempt(
     userId: string,
     sessionId: string,
     dto: CreateFlashcardSimulationAttemptDto,
@@ -668,64 +672,109 @@ export class FlashcardService {
       );
     }
 
-    const attemptKey = this.makeSimulationAttemptKey(sessionId, dto.cardId);
-    const existingAttemptResult = await this.db.get({
-      TableName: this.tableName,
-      Key: { userId, cardId: attemptKey },
-    });
-
-    if (existingAttemptResult.Item) {
-      const existingAttempt =
-        existingAttemptResult.Item as FlashcardSimulationAttemptItem;
-      const card = await this.getCardById(userId, dto.cardId);
-      return {
-        success: true,
-        data: {
-          attemptId: existingAttempt.attemptId,
-          runningStats: this.toSimulationSessionStats(session),
-          cardMetrics: this.toCardSimulationMetrics(card),
-        },
-      };
-    }
-
+    const card = await this.getCardById(userId, dto.cardId);
     const attemptId = uuidv4();
-    const result = dto.result;
-    const cardQualityScore = dto.cardQualityScore || 5;
     const attemptItem: FlashcardSimulationAttemptItem = {
       userId,
-      cardId: attemptKey,
+      cardId: this.makeSimulationAttemptKey(sessionId, attemptId),
       entityType: 'SIMULATION_ATTEMPT',
       attemptId,
       simulationSessionId: sessionId,
       targetCardId: dto.cardId,
+      status: 'ENTRY_SAVED',
+      questionImageUrlSnapshot: card.questionImageUrl,
+      answerImageUrlSnapshot: card.answerImageUrl,
+      revealProgress: dto.revealProgress,
+      replaySourceAttemptId: dto.replaySourceAttemptId,
       entryLineYPercent: dto.entryLineYPercent,
       stopLossLineYPercent: dto.stopLossLineYPercent,
       takeProfitLineYPercent: dto.takeProfitLineYPercent,
       rrValue: dto.rrValue,
       entryDirection: dto.entryDirection,
       entryReason: dto.entryReason.trim(),
-      rrReason: dto.rrReason.trim(),
-      result,
-      failureNote:
-        result === 'FAILURE' ? dto.failureNote?.trim() || undefined : undefined,
-      cardQualityScore,
-      revealedAt: now,
-      submittedAt: now,
+      entrySavedAt: now,
       createdAt: now,
       updatedAt: now,
     };
 
     await this.db.put({ TableName: this.tableName, Item: attemptItem });
 
+    const updatedCard = await this.applySimulationEntryMetricsToCard(userId, dto.cardId, {
+      rrValue: dto.rrValue,
+      now,
+    });
+
+    return {
+      success: true,
+      data: {
+        attemptId,
+        status: attemptItem.status,
+        attempt: this.toSimulationAttemptDetail(attemptItem),
+        cardMetrics: this.toCardSimulationMetrics(updatedCard),
+      },
+    };
+  }
+
+  async resolveSimulationAttempt(
+    userId: string,
+    attemptId: string,
+    dto: ResolveFlashcardSimulationAttemptDto,
+  ) {
+    const now = new Date().toISOString();
+    const attempt = await this.getSimulationAttempt(userId, attemptId);
+
+    if (attempt.status === 'RESOLVED') {
+      const session = await this.getSimulationSession(userId, attempt.simulationSessionId);
+      const card = await this.getCardById(userId, attempt.targetCardId);
+      return {
+        success: true,
+        data: {
+          attemptId: attempt.attemptId,
+          status: attempt.status,
+          result: attempt.result,
+          runningStats: this.toSimulationSessionStats(session),
+          cardMetrics: this.toCardSimulationMetrics(card),
+        },
+      };
+    }
+
+    const result = dto.result;
+    const cardQualityScore = dto.cardQualityScore || 5;
+
+    const resolvedAttemptUpdate = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSimulationAttemptKey(attempt.simulationSessionId, attemptId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeAttempt',
+      UpdateExpression:
+        'SET #status = :statusResolved, #result = :result, failureReason = :failureReason, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+        '#result': 'result',
+      },
+      ExpressionAttributeValues: {
+        ':entityTypeAttempt': 'SIMULATION_ATTEMPT',
+        ':statusResolved': 'RESOLVED',
+        ':result': result,
+        ':failureReason': result === 'FAILURE' ? dto.failureReason?.trim() || undefined : undefined,
+        ':cardQualityScore': cardQualityScore,
+        ':resolvedAt': now,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
     const sessionUpdate = await this.db.update({
       TableName: this.tableName,
-      Key: { userId, cardId: this.makeSimulationSessionKey(sessionId) },
+      Key: { userId, cardId: this.makeSimulationSessionKey(attempt.simulationSessionId) },
       ConditionExpression:
         'attribute_exists(cardId) AND entityType = :entityTypeSession',
       UpdateExpression:
-        'SET successCount = successCount + :incSuccess, failureCount = failureCount + :incFailure, updatedAt = :updatedAt',
+        'SET completedAttemptCount = if_not_exists(completedAttemptCount, :zero) + :incCompleted, successCount = if_not_exists(successCount, :zero) + :incSuccess, failureCount = if_not_exists(failureCount, :zero) + :incFailure, updatedAt = :updatedAt',
       ExpressionAttributeValues: {
         ':entityTypeSession': 'SIMULATION_SESSION',
+        ':zero': 0,
+        ':incCompleted': 1,
         ':incSuccess': result === 'SUCCESS' ? 1 : 0,
         ':incFailure': result === 'FAILURE' ? 1 : 0,
         ':updatedAt': now,
@@ -733,23 +782,21 @@ export class FlashcardService {
       ReturnValues: 'ALL_NEW',
     });
 
-    const updatedSession =
-      sessionUpdate.Attributes as FlashcardSimulationSessionItem;
+    const updatedSession = sessionUpdate.Attributes as FlashcardSimulationSessionItem;
+    const updatedCard = await this.applySimulationResolveMetricsToCard(userId, attempt.targetCardId, {
+      result,
+      cardQualityScore,
+      now,
+    });
 
-    const updatedCard = await this.applySimulationMetricsToCard(
-      userId,
-      dto.cardId,
-      {
-        result,
-        cardQualityScore,
-        now,
-      },
-    );
+    const resolvedAttempt = resolvedAttemptUpdate.Attributes as FlashcardSimulationAttemptItem;
 
     return {
       success: true,
       data: {
-        attemptId,
+        attemptId: resolvedAttempt.attemptId,
+        status: resolvedAttempt.status,
+        result: resolvedAttempt.result,
         runningStats: this.toSimulationSessionStats(updatedSession),
         cardMetrics: this.toCardSimulationMetrics(updatedCard),
       },
@@ -759,9 +806,7 @@ export class FlashcardService {
   async finishSimulationSession(userId: string, sessionId: string) {
     const now = new Date().toISOString();
     const session = await this.getSimulationSession(userId, sessionId);
-    const totalCompleted = session.successCount + session.failureCount;
-    const successRate =
-      totalCompleted > 0 ? Number((session.successCount / totalCompleted).toFixed(4)) : 0;
+    const stats = this.toSimulationSessionStats(session);
 
     const updated = await this.db.update({
       TableName: this.tableName,
@@ -769,7 +814,7 @@ export class FlashcardService {
       ConditionExpression:
         'attribute_exists(cardId) AND entityType = :entityTypeSession',
       UpdateExpression:
-        'SET #status = :statusCompleted, endedAt = :endedAt, successRate = :successRate, updatedAt = :updatedAt',
+        'SET #status = :statusCompleted, endedAt = :endedAt, completedAttemptCount = :completedAttemptCount, successRate = :successRate, updatedAt = :updatedAt',
       ExpressionAttributeNames: {
         '#status': 'status',
       },
@@ -777,24 +822,25 @@ export class FlashcardService {
         ':entityTypeSession': 'SIMULATION_SESSION',
         ':statusCompleted': 'COMPLETED',
         ':endedAt': now,
-        ':successRate': successRate,
+        ':completedAttemptCount': stats.completedCount,
+        ':successRate': Number(stats.successRate.toFixed(4)),
         ':updatedAt': now,
       },
       ReturnValues: 'ALL_NEW',
     });
 
     const updatedSession = updated.Attributes as FlashcardSimulationSessionItem;
+    const updatedStats = this.toSimulationSessionStats(updatedSession);
 
     return {
       success: true,
       data: {
         simulationSessionId: sessionId,
         totalCards: updatedSession.totalCards,
-        successCount: updatedSession.successCount,
-        failureCount: updatedSession.failureCount,
-        successRate:
-          updatedSession.successRate ||
-          this.toSimulationSessionStats(updatedSession).successRate,
+        completedAttemptCount: updatedStats.completedCount,
+        successCount: updatedStats.successCount,
+        failureCount: updatedStats.failureCount,
+        successRate: Number(updatedStats.successRate.toFixed(4)),
         status: updatedSession.status,
       },
     };
@@ -813,9 +859,11 @@ export class FlashcardService {
 
     const items = filtered.slice(offset, offset + pageSize).map((session) => ({
       simulationSessionId: session.simulationSessionId,
+      mode: session.mode || 'STANDARD',
       source: session.source,
       count: session.count,
       totalCards: session.totalCards,
+      completedAttemptCount: this.toSimulationSessionStats(session).completedCount,
       successCount: session.successCount,
       failureCount: session.failureCount,
       successRate:
@@ -852,13 +900,15 @@ export class FlashcardService {
     const items = sorted.slice(offset, offset + pageSize).map((attempt) => ({
       attemptId: attempt.attemptId,
       simulationSessionId: attempt.simulationSessionId,
+      status: attempt.status,
+      revealProgress: attempt.revealProgress,
       result: attempt.result,
-      failureNote: attempt.failureNote,
+      failureReason: attempt.failureReason,
       entryReason: attempt.entryReason,
-      rrReason: attempt.rrReason,
       cardQualityScore: attempt.cardQualityScore,
       rrValue: attempt.rrValue,
       createdAt: attempt.createdAt,
+      resolvedAt: attempt.resolvedAt,
     }));
     const nextOffset = offset + items.length;
     const summary = this.buildSimulationCardSummary(attempts);
@@ -1519,7 +1569,61 @@ export class FlashcardService {
     return session;
   }
 
-  private async applySimulationMetricsToCard(
+  private async getSimulationAttempt(userId: string, attemptId: string) {
+    const attempts = await this.queryByPrefix<FlashcardSimulationAttemptItem>(
+      userId,
+      'simulation-attempt#',
+    );
+    const attempt = attempts.find(
+      (item) => item.entityType === 'SIMULATION_ATTEMPT' && item.attemptId === attemptId,
+    );
+
+    if (!attempt) {
+      throw new ResourceNotFoundException(
+        `simulation attempt ${attemptId} not found`,
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '模拟盘训练记录不存在',
+        { userId, attemptId },
+      );
+    }
+
+    return attempt;
+  }
+
+  private async applySimulationEntryMetricsToCard(
+    userId: string,
+    cardId: string,
+    input: {
+      rrValue: number;
+      now: string;
+    },
+  ) {
+    const card = await this.getCardById(userId, cardId);
+    const attemptCount = (card.simulationAttemptCount || 0) + 1;
+    const previousRrTotal = (card.simulationAvgRr || 0) * (card.simulationAttemptCount || 0);
+    const simulationAvgRr = Number(
+      ((previousRrTotal + input.rrValue) / Math.max(attemptCount, 1)).toFixed(2),
+    );
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId },
+      ConditionExpression: 'attribute_exists(cardId)',
+      UpdateExpression:
+        'SET simulationAttemptCount = :attemptCount, simulationAvgRr = :simulationAvgRr, lastSimulationAt = :lastSimulationAt, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':attemptCount': attemptCount,
+        ':simulationAvgRr': simulationAvgRr,
+        ':lastSimulationAt': input.now,
+        ':updatedAt': input.now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    return this.normalizeCard(updated.Attributes as FlashcardCard);
+  }
+
+  private async applySimulationResolveMetricsToCard(
     userId: string,
     cardId: string,
     input: {
@@ -1529,7 +1633,7 @@ export class FlashcardService {
     },
   ) {
     const card = await this.getCardById(userId, cardId);
-    const attemptCount = (card.simulationAttemptCount || 0) + 1;
+    const resolvedCount = (card.simulationResolvedCount || 0) + 1;
     const successCount =
       (card.simulationSuccessCount || 0) + (input.result === 'SUCCESS' ? 1 : 0);
     const failureCount =
@@ -1541,7 +1645,7 @@ export class FlashcardService {
       ((previousScoreTotal + input.cardQualityScore) / qualityScoreCount).toFixed(2),
     );
     const simulationSuccessRate = Number(
-      (successCount / Math.max(attemptCount, 1)).toFixed(4),
+      (successCount / Math.max(resolvedCount, 1)).toFixed(4),
     );
 
     const updated = await this.db.update({
@@ -1549,9 +1653,9 @@ export class FlashcardService {
       Key: { userId, cardId },
       ConditionExpression: 'attribute_exists(cardId)',
       UpdateExpression:
-        'SET simulationAttemptCount = :attemptCount, simulationSuccessCount = :successCount, simulationFailureCount = :failureCount, simulationSuccessRate = :simulationSuccessRate, qualityScoreAvg = :qualityScoreAvg, qualityScoreCount = :qualityScoreCount, lastSimulationAt = :lastSimulationAt, updatedAt = :updatedAt',
+        'SET simulationResolvedCount = :resolvedCount, simulationSuccessCount = :successCount, simulationFailureCount = :failureCount, simulationSuccessRate = :simulationSuccessRate, qualityScoreAvg = :qualityScoreAvg, qualityScoreCount = :qualityScoreCount, lastSimulationAt = :lastSimulationAt, updatedAt = :updatedAt',
       ExpressionAttributeValues: {
-        ':attemptCount': attemptCount,
+        ':resolvedCount': resolvedCount,
         ':successCount': successCount,
         ':failureCount': failureCount,
         ':simulationSuccessRate': simulationSuccessRate,
@@ -1567,7 +1671,10 @@ export class FlashcardService {
   }
 
   private toSimulationSessionStats(session: FlashcardSimulationSessionItem) {
-    const totalCompleted = session.successCount + session.failureCount;
+    const totalCompleted =
+      typeof session.completedAttemptCount === 'number'
+        ? session.completedAttemptCount
+        : session.successCount + session.failureCount;
     return {
       completedCount: totalCompleted,
       successCount: session.successCount,
@@ -1580,12 +1687,39 @@ export class FlashcardService {
   private toCardSimulationMetrics(card: FlashcardCard) {
     return {
       simulationAttemptCount: card.simulationAttemptCount || 0,
+      simulationResolvedCount: card.simulationResolvedCount || 0,
       simulationSuccessCount: card.simulationSuccessCount || 0,
       simulationFailureCount: card.simulationFailureCount || 0,
       simulationSuccessRate: card.simulationSuccessRate || 0,
+      simulationAvgRr: card.simulationAvgRr || 0,
       qualityScoreAvg: card.qualityScoreAvg || 0,
       qualityScoreCount: card.qualityScoreCount || 0,
       lastSimulationAt: card.lastSimulationAt || null,
+    };
+  }
+
+  private toSimulationAttemptDetail(attempt: FlashcardSimulationAttemptItem) {
+    return {
+      attemptId: attempt.attemptId,
+      simulationSessionId: attempt.simulationSessionId,
+      cardId: attempt.targetCardId,
+      status: attempt.status,
+      revealProgress: attempt.revealProgress,
+      entryLineYPercent: attempt.entryLineYPercent,
+      stopLossLineYPercent: attempt.stopLossLineYPercent,
+      takeProfitLineYPercent: attempt.takeProfitLineYPercent,
+      rrValue: attempt.rrValue,
+      entryDirection: attempt.entryDirection,
+      entryReason: attempt.entryReason,
+      result: attempt.result,
+      failureReason: attempt.failureReason,
+      cardQualityScore: attempt.cardQualityScore,
+      questionImageUrlSnapshot: attempt.questionImageUrlSnapshot,
+      answerImageUrlSnapshot: attempt.answerImageUrlSnapshot,
+      entrySavedAt: attempt.entrySavedAt,
+      resolvedAt: attempt.resolvedAt,
+      createdAt: attempt.createdAt,
+      updatedAt: attempt.updatedAt,
     };
   }
 
@@ -1593,32 +1727,55 @@ export class FlashcardService {
     if (!attempts.length) {
       return {
         simulationAttemptCount: 0,
+        simulationResolvedCount: 0,
         simulationSuccessCount: 0,
         simulationFailureCount: 0,
         simulationSuccessRate: 0,
+        simulationAvgRr: 0,
         qualityScoreAvg: 0,
       };
     }
 
     const simulationAttemptCount = attempts.length;
-    const simulationSuccessCount = attempts.filter(
+    const resolvedAttempts = attempts.filter((attempt) => attempt.status === 'RESOLVED');
+    const simulationResolvedCount = resolvedAttempts.length;
+    const simulationSuccessCount = resolvedAttempts.filter(
       (attempt) => attempt.result === 'SUCCESS',
     ).length;
-    const simulationFailureCount = simulationAttemptCount - simulationSuccessCount;
-    const qualityScoreAvg = Number(
+    const simulationFailureCount = resolvedAttempts.filter(
+      (attempt) => attempt.result === 'FAILURE',
+    ).length;
+    const simulationAvgRr = Number(
       (
-        attempts.reduce((sum, attempt) => sum + attempt.cardQualityScore, 0) /
+        attempts.reduce((sum, attempt) => sum + (attempt.rrValue || 0), 0) /
         simulationAttemptCount
       ).toFixed(2),
     );
+    const qualityAttempts = resolvedAttempts.filter(
+      (attempt) => typeof attempt.cardQualityScore === 'number',
+    );
+    const qualityScoreAvg = qualityAttempts.length
+      ? Number(
+          (
+            qualityAttempts.reduce(
+              (sum, attempt) => sum + (attempt.cardQualityScore || 0),
+              0,
+            ) / qualityAttempts.length
+          ).toFixed(2),
+        )
+      : 0;
 
     return {
       simulationAttemptCount,
+      simulationResolvedCount,
       simulationSuccessCount,
       simulationFailureCount,
       simulationSuccessRate: Number(
-        (simulationSuccessCount / simulationAttemptCount).toFixed(4),
+        (
+          simulationSuccessCount / Math.max(simulationResolvedCount, 1)
+        ).toFixed(4),
       ),
+      simulationAvgRr,
       qualityScoreAvg,
     };
   }
@@ -1831,8 +1988,8 @@ export class FlashcardService {
     return `simulation-session#${sessionId}`;
   }
 
-  private makeSimulationAttemptKey(sessionId: string, cardId: string) {
-    return `simulation-attempt#${sessionId}#${cardId}`;
+  private makeSimulationAttemptKey(sessionId: string, attemptId: string) {
+    return `simulation-attempt#${sessionId}#${attemptId}`;
   }
 
   private resolveFileExtension(fileName: string, contentType: string) {

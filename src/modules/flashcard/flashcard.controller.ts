@@ -33,6 +33,7 @@ import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
 import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
 import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
 import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
+import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 
@@ -271,11 +272,11 @@ export class FlashcardController {
     return this.flashcardService.startSimulationSession(userId, dto);
   }
 
-  @ApiOperation({ summary: '提交单题模拟盘训练结果' })
+  @ApiOperation({ summary: '保存一次模拟盘入场尝试' })
   @ApiBody({ type: CreateFlashcardSimulationAttemptDto })
-  @ApiResponse({ status: 200, description: '返回 attemptId、实时统计与卡片聚合指标' })
-  @Post('simulation/session/:sessionId/attempt')
-  async submitSimulationAttempt(
+  @ApiResponse({ status: 200, description: '返回 attemptId、尝试快照与卡片聚合指标' })
+  @Post('simulation/session/:sessionId/attempts')
+  async createSimulationAttempt(
     @Req() req: Request,
     @Param('sessionId') sessionId: string,
     @Body() dto: CreateFlashcardSimulationAttemptDto,
@@ -285,7 +286,24 @@ export class FlashcardController {
       throw new NotFoundException('用户信息异常');
     }
 
-    return this.flashcardService.submitSimulationAttempt(userId, sessionId, dto);
+    return this.flashcardService.createSimulationAttempt(userId, sessionId, dto);
+  }
+
+  @ApiOperation({ summary: '保存一次模拟盘尝试的最终结果' })
+  @ApiBody({ type: ResolveFlashcardSimulationAttemptDto })
+  @ApiResponse({ status: 200, description: '返回实时统计与卡片聚合指标' })
+  @Post('simulation/attempts/:attemptId/resolve')
+  async resolveSimulationAttempt(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+    @Body() dto: ResolveFlashcardSimulationAttemptDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.resolveSimulationAttempt(userId, attemptId, dto);
   }
 
   @ApiOperation({ summary: '结束一次闪卡模拟盘训练并返回统计' })

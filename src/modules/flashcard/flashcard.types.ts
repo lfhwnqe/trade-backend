@@ -84,9 +84,11 @@ export interface FlashcardCard {
   symbolPairInfo?: string;
   notes?: string;
   simulationAttemptCount?: number;
+  simulationResolvedCount?: number;
   simulationSuccessCount?: number;
   simulationFailureCount?: number;
   simulationSuccessRate?: number;
+  simulationAvgRr?: number;
   qualityScoreAvg?: number;
   qualityScoreCount?: number;
   lastSimulationAt?: string;
@@ -134,9 +136,11 @@ export interface FlashcardSimulationSessionItem {
   cardId: string; // simulation-session#{sessionId}
   entityType: 'SIMULATION_SESSION';
   simulationSessionId: string;
-  source: 'ALL' | 'FILTERED';
+  mode?: 'STANDARD' | 'ATTEMPT_REPLAY';
+  source: 'ALL' | 'FILTERED' | 'ATTEMPT_REPLAY';
   count: number;
   totalCards: number;
+  completedAttemptCount?: number;
   successCount: number;
   failureCount: number;
   successRate: number;
@@ -150,23 +154,27 @@ export interface FlashcardSimulationSessionItem {
 
 export interface FlashcardSimulationAttemptItem {
   userId: string;
-  cardId: string; // simulation-attempt#{sessionId}#{cardId}
+  cardId: string; // simulation-attempt#{sessionId}#{attemptId}
   entityType: 'SIMULATION_ATTEMPT';
   attemptId: string;
   simulationSessionId: string;
   targetCardId: string;
+  status: 'ENTRY_SAVED' | 'RESOLVED';
+  questionImageUrlSnapshot?: string;
+  answerImageUrlSnapshot?: string;
+  revealProgress: number;
+  replaySourceAttemptId?: string;
   entryLineYPercent: number;
   stopLossLineYPercent: number;
   takeProfitLineYPercent: number;
   rrValue: number;
   entryDirection: 'LONG' | 'SHORT';
   entryReason: string;
-  rrReason: string;
-  result: 'SUCCESS' | 'FAILURE';
-  failureNote?: string;
-  cardQualityScore: 1 | 2 | 3 | 4 | 5;
-  revealedAt?: string;
-  submittedAt?: string;
+  result?: 'SUCCESS' | 'FAILURE';
+  failureReason?: string;
+  cardQualityScore?: 1 | 2 | 3 | 4 | 5;
+  entrySavedAt: string;
+  resolvedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -213,7 +213,6 @@ describe('FlashcardService', () => {
           updatedAt: '2026-03-09T10:00:00.000Z',
         },
       })
-      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({
         Item: {
           userId: 'user-1',
@@ -227,32 +226,28 @@ describe('FlashcardService', () => {
           qualityScoreAvg: 5,
           qualityScoreCount: 1,
           simulationAttemptCount: 1,
+          simulationAvgRr: 2,
           simulationSuccessCount: 1,
           simulationFailureCount: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url',
+          answerImageUrl: 'answer-url',
+          expectedAction: 'LONG',
+          createdAt: '2026-03-09T09:00:00.000Z',
+          updatedAt: '2026-03-09T09:00:00.000Z',
+          simulationAttemptCount: 1,
+          simulationAvgRr: 2,
         },
       });
 
     mockDb.put.mockResolvedValue({});
     mockDb.update
-      .mockResolvedValueOnce({
-        Attributes: {
-          userId: 'user-1',
-          cardId: 'simulation-session#sim-1',
-          entityType: 'SIMULATION_SESSION',
-          simulationSessionId: 'sim-1',
-          source: 'ALL',
-          count: 5,
-          totalCards: 5,
-          successCount: 0,
-          failureCount: 1,
-          successRate: 0,
-          status: 'IN_PROGRESS',
-          cardIds: ['card-1'],
-          startedAt: '2026-03-09T10:00:00.000Z',
-          createdAt: '2026-03-09T10:00:00.000Z',
-          updatedAt: '2026-03-09T10:10:00.000Z',
-        },
-      })
       .mockResolvedValueOnce({
         Attributes: {
           userId: 'user-1',
@@ -264,37 +259,31 @@ describe('FlashcardService', () => {
           createdAt: '2026-03-09T09:00:00.000Z',
           updatedAt: '2026-03-09T10:10:00.000Z',
           simulationAttemptCount: 2,
-          simulationSuccessCount: 1,
-          simulationFailureCount: 1,
-          simulationSuccessRate: 0.5,
-          qualityScoreAvg: 4.5,
-          qualityScoreCount: 2,
+          simulationAvgRr: 2,
           lastSimulationAt: '2026-03-09T10:10:00.000Z',
         },
       });
 
-    const result = await service.submitSimulationAttempt('user-1', 'sim-1', {
+    const result = await service.createSimulationAttempt('user-1', 'sim-1', {
       cardId: 'card-1',
+      revealProgress: 0.43,
       entryLineYPercent: 0.4,
       stopLossLineYPercent: 0.5,
       takeProfitLineYPercent: 0.2,
       rrValue: 2,
       entryDirection: 'LONG',
       entryReason: 'entry',
-      rrReason: 'rr',
-      result: 'FAILURE',
-      failureNote: 'too early',
-      cardQualityScore: 4,
     } as any);
 
     expect(result.success).toBe(true);
-    expect(result.data.cardMetrics.qualityScoreAvg).toBe(4.5);
+    expect(result.data.cardMetrics.simulationAttemptCount).toBe(2);
     expect(mockDb.put).toHaveBeenCalledWith(
       expect.objectContaining({
         Item: expect.objectContaining({
-          cardId: 'simulation-attempt#sim-1#card-1',
+          cardId: expect.stringContaining('simulation-attempt#sim-1#'),
           entityType: 'SIMULATION_ATTEMPT',
-          failureNote: 'too early',
+          revealProgress: 0.43,
+          status: 'ENTRY_SAVED',
         }),
       }),
     );
