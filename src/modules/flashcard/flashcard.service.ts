@@ -741,13 +741,16 @@ export class FlashcardService {
     const result = dto.result;
     const cardQualityScore = dto.cardQualityScore || 5;
 
+    const failureReason = dto.failureReason?.trim();
     const resolvedAttemptUpdate = await this.db.update({
       TableName: this.tableName,
       Key: { userId, cardId: this.makeSimulationAttemptKey(attempt.simulationSessionId, attemptId) },
       ConditionExpression:
         'attribute_exists(cardId) AND entityType = :entityTypeAttempt',
       UpdateExpression:
-        'SET #status = :statusResolved, #result = :result, failureReason = :failureReason, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt',
+        result === 'FAILURE'
+          ? 'SET #status = :statusResolved, #result = :result, failureReason = :failureReason, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt'
+          : 'SET #status = :statusResolved, #result = :result, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt REMOVE failureReason',
       ExpressionAttributeNames: {
         '#status': 'status',
         '#result': 'result',
@@ -756,7 +759,7 @@ export class FlashcardService {
         ':entityTypeAttempt': 'SIMULATION_ATTEMPT',
         ':statusResolved': 'RESOLVED',
         ':result': result,
-        ':failureReason': result === 'FAILURE' ? dto.failureReason?.trim() || undefined : undefined,
+        ...(result === 'FAILURE' ? { ':failureReason': failureReason || '' } : {}),
         ':cardQualityScore': cardQualityScore,
         ':resolvedAt': now,
         ':updatedAt': now,

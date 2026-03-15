@@ -289,6 +289,97 @@ describe('FlashcardService', () => {
     );
   });
 
+  it('should resolve simulation attempt without failureReason when result is success', async () => {
+    const service = makeService();
+    (service as any).getSimulationAttempt = jest.fn().mockResolvedValue({
+      userId: 'user-1',
+      cardId: 'simulation-attempt#sim-1#attempt-1',
+      entityType: 'SIMULATION_ATTEMPT',
+      attemptId: 'attempt-1',
+      simulationSessionId: 'sim-1',
+      targetCardId: 'card-1',
+      status: 'ENTRY_SAVED',
+      revealProgress: 0.4,
+      entryLineYPercent: 0.4,
+      stopLossLineYPercent: 0.5,
+      takeProfitLineYPercent: 0.2,
+      rrValue: 2,
+      entryDirection: 'LONG',
+      entryReason: 'entry',
+      entrySavedAt: '2026-03-09T10:00:00.000Z',
+      createdAt: '2026-03-09T10:00:00.000Z',
+      updatedAt: '2026-03-09T10:00:00.000Z',
+    });
+
+    mockDb.get.mockResolvedValueOnce({
+      Item: {
+        userId: 'user-1',
+        cardId: 'card-1',
+        entityType: 'CARD',
+        questionImageUrl: 'question-url',
+        answerImageUrl: 'answer-url',
+        expectedAction: 'LONG',
+        createdAt: '2026-03-09T09:00:00.000Z',
+        updatedAt: '2026-03-09T10:10:00.000Z',
+        simulationResolvedCount: 0,
+        simulationSuccessCount: 0,
+        simulationFailureCount: 0,
+        qualityScoreAvg: 0,
+        qualityScoreCount: 0,
+      },
+    });
+
+    mockDb.update
+      .mockResolvedValueOnce({
+        Attributes: {
+          attemptId: 'attempt-1',
+          status: 'RESOLVED',
+          result: 'SUCCESS',
+        },
+      })
+      .mockResolvedValueOnce({
+        Attributes: {
+          userId: 'user-1',
+          cardId: 'simulation-session#sim-1',
+          entityType: 'SIMULATION_SESSION',
+          simulationSessionId: 'sim-1',
+          successCount: 1,
+          failureCount: 0,
+          completedAttemptCount: 1,
+        },
+      })
+      .mockResolvedValueOnce({
+        Attributes: {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url',
+          answerImageUrl: 'answer-url',
+          expectedAction: 'LONG',
+          createdAt: '2026-03-09T09:00:00.000Z',
+          updatedAt: '2026-03-09T10:10:00.000Z',
+          simulationResolvedCount: 1,
+          simulationSuccessCount: 1,
+          simulationFailureCount: 0,
+          simulationSuccessRate: 1,
+          qualityScoreAvg: 5,
+          qualityScoreCount: 1,
+        },
+      });
+
+    const result = await service.resolveSimulationAttempt('user-1', 'attempt-1', {
+      result: 'SUCCESS',
+      cardQualityScore: 5,
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(mockDb.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        UpdateExpression: expect.stringContaining('REMOVE failureReason'),
+      }),
+    );
+  });
+
   it('should reject attempt when card is not part of session', async () => {
     const service = makeService();
     mockDb.get.mockResolvedValue({
