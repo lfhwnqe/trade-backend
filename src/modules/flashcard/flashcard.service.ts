@@ -38,6 +38,7 @@ import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simu
 import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
+import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -928,6 +929,50 @@ export class FlashcardService {
     };
   }
 
+  async listSimulationAttempts(
+    userId: string,
+    dto: ListFlashcardSimulationAttemptsDto,
+  ) {
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
+    const attempts = await this.listAllSimulationAttempts(userId);
+    const resultFilter = dto.result || 'ALL';
+
+    const filtered = attempts
+      .filter((attempt) => {
+        if (resultFilter === 'SUCCESS') {
+          return attempt.status === 'RESOLVED' && attempt.result === 'SUCCESS';
+        }
+        if (resultFilter === 'FAILURE') {
+          return attempt.status === 'RESOLVED' && attempt.result === 'FAILURE';
+        }
+        return true;
+      })
+      .sort((a, b) => {
+        const right = Date.parse(b.resolvedAt || b.updatedAt || b.createdAt);
+        const left = Date.parse(a.resolvedAt || a.updatedAt || a.createdAt);
+        return right - left;
+      });
+
+    const items = filtered
+      .slice(offset, offset + pageSize)
+      .map((attempt) => this.toSimulationAttemptDetail(attempt));
+    const nextOffset = offset + items.length;
+
+    return {
+      success: true,
+      data: {
+        resultFilter,
+        totalCount: filtered.length,
+        items,
+        nextCursor:
+          nextOffset < filtered.length
+            ? this.encodeOffsetCursor(nextOffset)
+            : null,
+      },
+    };
+  }
+
   async getSimulationCardHistory(
     userId: string,
     targetCardId: string,
@@ -1578,16 +1623,20 @@ export class FlashcardService {
     userId: string,
     targetCardId: string,
   ): Promise<FlashcardSimulationAttemptItem[]> {
+    const attempts = await this.listAllSimulationAttempts(userId);
+
+    return attempts.filter((item) => item.targetCardId === targetCardId);
+  }
+
+  private async listAllSimulationAttempts(
+    userId: string,
+  ): Promise<FlashcardSimulationAttemptItem[]> {
     const attempts = await this.queryByPrefix<FlashcardSimulationAttemptItem>(
       userId,
       'simulation-attempt#',
     );
 
-    return attempts.filter(
-      (item) =>
-        item.entityType === 'SIMULATION_ATTEMPT' &&
-        item.targetCardId === targetCardId,
-    );
+    return attempts.filter((item) => item.entityType === 'SIMULATION_ATTEMPT');
   }
 
   private async getSimulationSession(userId: string, sessionId: string) {
@@ -1746,6 +1795,7 @@ export class FlashcardService {
       cardId: attempt.targetCardId,
       status: attempt.status,
       revealProgress: attempt.revealProgress,
+      replaySourceAttemptId: attempt.replaySourceAttemptId,
       entryLineYPercent: attempt.entryLineYPercent,
       stopLossLineYPercent: attempt.stopLossLineYPercent,
       takeProfitLineYPercent: attempt.takeProfitLineYPercent,

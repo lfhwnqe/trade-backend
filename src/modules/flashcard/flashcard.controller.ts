@@ -36,6 +36,7 @@ import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simu
 import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
+import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -341,6 +342,24 @@ export class FlashcardController {
     }
 
     return this.flashcardService.listSimulationSessions(userId, query);
+  }
+
+  @ApiOperation({ summary: '分页查询当前用户的模拟盘训练记录（按时间倒序）' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'result', required: false, enum: ['ALL', 'SUCCESS', 'FAILURE'] })
+  @ApiResponse({ status: 200, description: '返回 simulation attempts 列表 + nextCursor' })
+  @Get('simulation/attempts')
+  async listSimulationAttempts(
+    @Req() req: Request,
+    @Query() query: ListFlashcardSimulationAttemptsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.listSimulationAttempts(userId, query);
   }
 
   @ApiOperation({ summary: '查询某张闪卡的模拟盘训练历史与失败备注' })

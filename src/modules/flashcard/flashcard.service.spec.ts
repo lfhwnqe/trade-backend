@@ -409,4 +409,85 @@ describe('FlashcardService', () => {
       } as any),
     ).rejects.toBeInstanceOf(ResourceNotFoundException);
   });
+
+  it('should list simulation attempts with result filter and review fields', async () => {
+    const service = makeService();
+    (service as any).listAllSimulationAttempts = jest.fn().mockResolvedValue([
+      {
+        userId: 'user-1',
+        cardId: 'simulation-attempt#sim-2#attempt-2',
+        entityType: 'SIMULATION_ATTEMPT',
+        attemptId: 'attempt-2',
+        simulationSessionId: 'sim-2',
+        targetCardId: 'card-2',
+        status: 'ENTRY_SAVED',
+        revealProgress: 0.3,
+        entryLineYPercent: 0.42,
+        stopLossLineYPercent: 0.55,
+        takeProfitLineYPercent: 0.22,
+        rrValue: 1.8,
+        entryDirection: 'SHORT',
+        entryReason: 'pending attempt',
+        questionImageUrlSnapshot: 'question-2',
+        answerImageUrlSnapshot: 'answer-2',
+        entrySavedAt: '2026-03-15T10:00:00.000Z',
+        createdAt: '2026-03-15T10:00:00.000Z',
+        updatedAt: '2026-03-15T10:00:00.000Z',
+      },
+      {
+        userId: 'user-1',
+        cardId: 'simulation-attempt#sim-1#attempt-1',
+        entityType: 'SIMULATION_ATTEMPT',
+        attemptId: 'attempt-1',
+        simulationSessionId: 'sim-1',
+        targetCardId: 'card-1',
+        status: 'RESOLVED',
+        revealProgress: 0.43,
+        replaySourceAttemptId: 'attempt-source-1',
+        entryLineYPercent: 0.4,
+        stopLossLineYPercent: 0.5,
+        takeProfitLineYPercent: 0.2,
+        rrValue: 2.4,
+        entryDirection: 'LONG',
+        entryReason: 'entry reason',
+        result: 'FAILURE',
+        failureReason: 'stopped out',
+        cardQualityScore: 3,
+        questionImageUrlSnapshot: 'question-1',
+        answerImageUrlSnapshot: 'answer-1',
+        entrySavedAt: '2026-03-14T10:00:00.000Z',
+        resolvedAt: '2026-03-14T10:10:00.000Z',
+        createdAt: '2026-03-14T10:00:00.000Z',
+        updatedAt: '2026-03-14T10:10:00.000Z',
+      },
+    ]);
+
+    const result = await service.listSimulationAttempts('user-1', {
+      pageSize: 20,
+      result: 'FAILURE',
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.totalCount).toBe(1);
+    expect(result.data.resultFilter).toBe('FAILURE');
+    expect(result.data.items).toEqual([
+      expect.objectContaining({
+        attemptId: 'attempt-1',
+        simulationSessionId: 'sim-1',
+        cardId: 'card-1',
+        replaySourceAttemptId: 'attempt-source-1',
+        questionImageUrlSnapshot: 'question-1',
+        answerImageUrlSnapshot: 'answer-1',
+        revealProgress: 0.43,
+        entryLineYPercent: 0.4,
+        stopLossLineYPercent: 0.5,
+        takeProfitLineYPercent: 0.2,
+        rrValue: 2.4,
+        entryReason: 'entry reason',
+        result: 'FAILURE',
+        failureReason: 'stopped out',
+        cardQualityScore: 3,
+      }),
+    ]);
+  });
 });
