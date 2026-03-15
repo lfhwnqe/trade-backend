@@ -142,7 +142,7 @@ export class FlashcardController {
   @ApiQuery({ name: 'invalidationType', required: false })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'marketTimeInfo', required: false })
-  @ApiQuery({ name: 'sortBy', required: false, enum: ['CREATED_AT', 'QUALITY_SCORE_AVG'] })
+  @ApiQuery({ name: 'sortBy', required: false, enum: ['CREATED_AT', 'QUALITY_SCORE_AVG', 'SIMULATION_RESOLVED_COUNT', 'SIMULATION_AVG_RR'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: '返回分页数据 items + nextCursor' })
   @Get('cards')

@@ -1887,6 +1887,24 @@ export class FlashcardService {
         return Date.parse(b.createdAt) - Date.parse(a.createdAt);
       }
 
+      if (sortBy === 'SIMULATION_RESOLVED_COUNT') {
+        const aValue = typeof a.simulationResolvedCount === 'number' ? a.simulationResolvedCount : 0;
+        const bValue = typeof b.simulationResolvedCount === 'number' ? b.simulationResolvedCount : 0;
+        if (aValue !== bValue) {
+          return (aValue - bValue) * direction;
+        }
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      }
+
+      if (sortBy === 'SIMULATION_AVG_RR') {
+        const aValue = typeof a.simulationAvgRr === 'number' ? a.simulationAvgRr : 0;
+        const bValue = typeof b.simulationAvgRr === 'number' ? b.simulationAvgRr : 0;
+        if (aValue !== bValue) {
+          return (aValue - bValue) * direction;
+        }
+        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      }
+
       return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * direction;
     });
   }

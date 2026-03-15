@@ -58,6 +58,8 @@ export type FlashcardSource = (typeof FLASHCARD_SOURCE_VALUES)[number];
 export const FLASHCARD_CARD_SORT_BY_VALUES = [
   'CREATED_AT',
   'QUALITY_SCORE_AVG',
+  'SIMULATION_RESOLVED_COUNT',
+  'SIMULATION_AVG_RR',
 ] as const;
 export type FlashcardCardSortBy = (typeof FLASHCARD_CARD_SORT_BY_VALUES)[number];
 
