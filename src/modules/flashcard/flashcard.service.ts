@@ -614,21 +614,59 @@ export class FlashcardService {
     userId: string,
     dto: StartFlashcardSimulationSessionDto,
   ) {
-    const cards = await this.listAllCards(userId);
-    const filtered = cards.filter((card) => this.matchesFilters(card, dto));
-    this.shuffleInPlace(filtered);
-
-    const pickedCards = filtered.slice(0, dto.count || 5);
+    const mode = dto.mode || 'STANDARD';
     const simulationSessionId = uuidv4();
     const now = new Date().toISOString();
+
+    let pickedCards: FlashcardCard[] = [];
+    let source: FlashcardSimulationSessionItem['source'] = dto.filters ? 'FILTERED' : 'ALL';
+
+    if (mode === 'ATTEMPT_REPLAY') {
+      const attempts = await this.queryByPrefix<FlashcardSimulationAttemptItem>(
+        userId,
+        'simulation-attempt#',
+      );
+      const resolvedAttempts = attempts.filter(
+        (item) =>
+          item.entityType === 'SIMULATION_ATTEMPT' &&
+          item.status === 'RESOLVED' &&
+          Boolean(item.result) &&
+          (!dto.filters?.result?.length || dto.filters.result.includes(item.result!)),
+      );
+
+      this.shuffleInPlace(resolvedAttempts);
+
+      const selectedAttempts = resolvedAttempts.slice(0, dto.count || 5);
+      pickedCards = await Promise.all(
+        selectedAttempts.map(async (attempt) => {
+          const card = await this.getCardById(userId, attempt.targetCardId);
+          return {
+            ...card,
+            prefilledRevealProgress: attempt.revealProgress,
+            replaySourceAttemptId: attempt.attemptId,
+            previousAttemptResult: attempt.result,
+            previousEntryDirection: attempt.entryDirection,
+            previousEntryReason: attempt.entryReason,
+            previousRrValue: attempt.rrValue,
+            previousFailureReason: attempt.failureReason,
+          } as FlashcardCard;
+        }),
+      );
+      source = 'ATTEMPT_REPLAY';
+    } else {
+      const cards = await this.listAllCards(userId);
+      const filtered = cards.filter((card) => this.matchesFilters(card, dto));
+      this.shuffleInPlace(filtered);
+      pickedCards = filtered.slice(0, dto.count || 5);
+    }
 
     const sessionItem: FlashcardSimulationSessionItem = {
       userId,
       cardId: this.makeSimulationSessionKey(simulationSessionId),
       entityType: 'SIMULATION_SESSION',
       simulationSessionId,
-      mode: 'STANDARD',
-      source: dto.filters ? 'FILTERED' : 'ALL',
+      mode,
+      source,
       count: dto.count || 5,
       totalCards: pickedCards.length,
       completedAttemptCount: 0,
@@ -648,7 +686,7 @@ export class FlashcardService {
       success: true,
       data: {
         simulationSessionId,
-        mode: 'STANDARD',
+        mode,
         count: pickedCards.length,
         cards: pickedCards,
       },

@@ -20,9 +20,19 @@ class FlashcardSimulationFiltersDto {
   @IsArray()
   @IsIn(FLASHCARD_INVALIDATION_TYPE_VALUES, { each: true })
   invalidationType?: FlashcardInvalidationType[];
+
+  @ApiPropertyOptional({ enum: ['SUCCESS', 'FAILURE'], isArray: true })
+  @IsOptional()
+  @IsArray()
+  @IsIn(['SUCCESS', 'FAILURE'], { each: true })
+  result?: Array<'SUCCESS' | 'FAILURE'>;
 }
 
 export class StartFlashcardSimulationSessionDto {
+  @ApiPropertyOptional({ enum: ['STANDARD', 'ATTEMPT_REPLAY'], default: 'STANDARD' })
+  @IsOptional()
+  @IsIn(['STANDARD', 'ATTEMPT_REPLAY'])
+  mode?: 'STANDARD' | 'ATTEMPT_REPLAY';
   @ApiPropertyOptional({ example: 5, default: 5, minimum: 1, maximum: 20 })
   @IsOptional()
   @Type(() => Number)
