@@ -157,6 +157,56 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // DynamoDB Tables for dictionary
+    const dictionaryCategoriesTable = new dynamodb.Table(
+      this,
+      `${appName}DictionaryCategoriesTable${envName}`,
+      {
+        tableName: `${appName}-dictionary-categories-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'categoryId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    dictionaryCategoriesTable.addGlobalSecondaryIndex({
+      indexName: 'userId-code-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'code', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    const dictionaryItemsTable = new dynamodb.Table(
+      this,
+      `${appName}DictionaryItemsTable${envName}`,
+      {
+        tableName: `${appName}-dictionary-items-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'itemId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    dictionaryItemsTable.addGlobalSecondaryIndex({
+      indexName: 'categoryLookupKey-code-index',
+      partitionKey: {
+        name: 'categoryLookupKey',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'code', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    dictionaryItemsTable.addGlobalSecondaryIndex({
+      indexName: 'categoryLookupKey-sortOrder-index',
+      partitionKey: {
+        name: 'categoryLookupKey',
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: { name: 'sortOrder', type: dynamodb.AttributeType.NUMBER },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // DynamoDB Table for common config
     const configTable = new dynamodb.Table(
       this,
@@ -346,6 +396,8 @@ export class TradingStack extends cdk.Stack {
           CLOUDFRONT_DOMAIN_NAME: distribution.distributionDomainName,
           TRANSACTIONS_TABLE_NAME: transactionsTable.tableName,
           FLASHCARDS_TABLE_NAME: flashcardsTable.tableName,
+          DICTIONARY_CATEGORIES_TABLE_NAME: dictionaryCategoriesTable.tableName,
+          DICTIONARY_ITEMS_TABLE_NAME: dictionaryItemsTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
@@ -406,6 +458,8 @@ export class TradingStack extends cdk.Stack {
     imageBucket.grantReadWrite(fn);
     transactionsTable.grantReadWriteData(fn);
     flashcardsTable.grantReadWriteData(fn);
+    dictionaryCategoriesTable.grantReadWriteData(fn);
+    dictionaryItemsTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
@@ -474,6 +528,16 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'FLASHCARDS_TABLE_NAME', {
       value: flashcardsTable.tableName,
       description: `Name of the DynamoDB table for flashcards in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'DICTIONARY_CATEGORIES_TABLE_NAME', {
+      value: dictionaryCategoriesTable.tableName,
+      description: `Name of the DynamoDB table for dictionary categories in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'DICTIONARY_ITEMS_TABLE_NAME', {
+      value: dictionaryItemsTable.tableName,
+      description: `Name of the DynamoDB table for dictionary items in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'CONFIG_TABLE_NAME', {
