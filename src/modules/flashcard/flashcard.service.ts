@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '../common/config.service';
+import { DictionaryService } from '../dictionary/dictionary.service';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
 import { v4 as uuidv4 } from 'uuid';
@@ -50,7 +51,10 @@ export class FlashcardService {
   private readonly cloudfrontDomain?: string;
   private readonly createdAtIndexName = 'userId-createdAt-index';
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly dictionaryService: DictionaryService,
+  ) {
     this.region = this.configService.getOrThrow('AWS_REGION');
     this.tableName = this.configService.getOrThrow('FLASHCARDS_TABLE_NAME');
     this.bucketName = this.configService.getOrThrow('IMAGE_BUCKET_NAME');
@@ -94,6 +98,11 @@ export class FlashcardService {
     const cardId = uuidv4();
 
     const expectedAction = dto.expectedAction || dto.direction;
+    const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'flashcard_tag',
+      dto.tagCodes,
+    );
 
     const item: FlashcardCard = {
       id: cardId,
@@ -119,6 +128,7 @@ export class FlashcardService {
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       notes: dto.notes?.trim() || undefined,
+      tagCodes: normalizedTagCodes,
       createdAt: now,
       updatedAt: now,
     };
@@ -130,7 +140,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: this.normalizeCard(item),
+      data: await this.attachDictionaryTags(this.normalizeCard(item)),
     };
   }
 
@@ -260,12 +270,15 @@ export class FlashcardService {
     );
 
     const items = sorted.slice(offset, offset + pageSize);
-     const nextOffset = offset + items.length;
+    const normalizedItems = await Promise.all(
+      items.map((item) => this.attachDictionaryTags(this.normalizeCard(item))),
+    );
+    const nextOffset = offset + items.length;
 
     return {
       success: true,
       data: {
-        items,
+        items: normalizedItems,
         totalCount: filtered.length,
         nextCursor:
           nextOffset < filtered.length
@@ -333,7 +346,9 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: this.normalizeCard(result.Attributes as FlashcardCard),
+      data: await this.attachDictionaryTags(
+        this.normalizeCard(result.Attributes as FlashcardCard),
+      ),
     };
   }
 
@@ -382,6 +397,14 @@ export class FlashcardService {
         : dto.symbolPairInfo.trim() || undefined;
     const notes =
       dto.notes === undefined ? current.notes : dto.notes.trim() || undefined;
+    const normalizedTagCodes =
+      dto.tagCodes === undefined
+        ? current.tagCodes
+        : await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'flashcard_tag',
+            dto.tagCodes,
+          );
 
     const updated: FlashcardCard = {
       ...current,
@@ -399,6 +422,7 @@ export class FlashcardService {
       marketTimeInfo,
       symbolPairInfo,
       notes,
+      tagCodes: normalizedTagCodes,
       updatedAt: now,
     };
 
@@ -409,7 +433,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: this.normalizeCard(updated),
+      data: await this.attachDictionaryTags(this.normalizeCard(updated)),
     };
   }
 
@@ -1255,7 +1279,7 @@ export class FlashcardService {
       );
     }
 
-    return this.normalizeCard(card);
+    return this.attachDictionaryTags(this.normalizeCard(card));
   }
 
   private async listAllCards(userId: string): Promise<FlashcardCard[]> {
@@ -1303,7 +1327,10 @@ export class FlashcardService {
             !!item.answerImageUrl),
       );
 
-      cards.push(...pageCards.map((item) => this.normalizeCard(item)));
+      const normalizedCards = await Promise.all(
+        pageCards.map((item) => this.attachDictionaryTags(this.normalizeCard(item))),
+      );
+      cards.push(...normalizedCards);
       lastEvaluatedKey = result.LastEvaluatedKey;
     } while (lastEvaluatedKey);
 
@@ -1388,7 +1415,10 @@ export class FlashcardService {
             !!item.answerImageUrl),
       );
 
-      cards.push(...items.map((item) => this.normalizeCard(item)));
+      const normalizedCards = await Promise.all(
+        items.map((item) => this.attachDictionaryTags(this.normalizeCard(item))),
+      );
+      cards.push(...normalizedCards);
     }
 
     return cards;
@@ -2063,6 +2093,18 @@ export class FlashcardService {
       ...card,
       expectedAction,
       direction: expectedAction,
+    };
+  }
+
+  private async attachDictionaryTags(card: FlashcardCard): Promise<FlashcardCard> {
+    const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      card.userId,
+      'flashcard_tag',
+      card.tagCodes,
+    );
+    return {
+      ...card,
+      tagItems,
     };
   }
 

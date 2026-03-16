@@ -130,4 +130,15 @@ export class UpdateFlashcardCardDto {
   @IsString()
   @MaxLength(100)
   symbolPairInfo?: string;
+
+  @ApiPropertyOptional({
+    description: '字典标签编码（来自 flashcard_tag 分类）',
+    type: [String],
+    example: ['breakout', 'retest'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  tagCodes?: string[];
 }

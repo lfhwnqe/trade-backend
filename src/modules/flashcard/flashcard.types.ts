@@ -85,6 +85,8 @@ export interface FlashcardCard {
   marketTimeInfo?: string;
   symbolPairInfo?: string;
   notes?: string;
+  tagCodes?: string[];
+  tagItems?: Array<{ code: string; label: string; color?: string; status?: string }>;
   simulationAttemptCount?: number;
   simulationResolvedCount?: number;
   simulationSuccessCount?: number;
