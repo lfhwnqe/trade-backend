@@ -446,6 +446,66 @@ export class DictionaryService {
     return this.listCategories(userId, {});
   }
 
+  async resolveCategoryItemsByCodes(
+    userId: string,
+    categoryCode: string,
+    codes?: string[],
+  ) {
+    const normalizedCodes = Array.from(
+      new Set((codes || []).map((item) => `${item}`.trim()).filter(Boolean)),
+    );
+    if (normalizedCodes.length === 0) {
+      return [] as Array<{
+        code: string;
+        label: string;
+        color?: string;
+        status: string;
+      }>;
+    }
+
+    await this.getCategoryByCodeOrThrow(userId, categoryCode);
+    const items = await this.listItemsByCategoryCode(userId, categoryCode);
+    const itemMap = new Map(items.map((item) => [item.code, item]));
+
+    return normalizedCodes
+      .map((code) => itemMap.get(code))
+      .filter((item): item is DictionaryEntryItem => !!item)
+      .map((item) => ({
+        code: item.code,
+        label: item.label,
+        color: item.color,
+        status: item.status,
+      }));
+  }
+
+  async assertCategoryCodesExist(
+    userId: string,
+    categoryCode: string,
+    codes?: string[],
+  ) {
+    const normalizedCodes = Array.from(
+      new Set((codes || []).map((item) => `${item}`.trim()).filter(Boolean)),
+    );
+    if (normalizedCodes.length === 0) {
+      return [] as string[];
+    }
+
+    await this.getCategoryByCodeOrThrow(userId, categoryCode);
+    const items = await this.listItemsByCategoryCode(userId, categoryCode);
+    const itemMap = new Map(items.map((item) => [item.code, item]));
+    const missingCodes = normalizedCodes.filter((code) => !itemMap.has(code));
+    if (missingCodes.length > 0) {
+      throw new ValidationException(
+        'Dictionary option code not found',
+        ERROR_CODES.VALIDATION_INVALID_VALUE,
+        `存在无效的字典编码：${missingCodes.join(', ')}`,
+        { categoryCode, missingCodes },
+      );
+    }
+
+    return normalizedCodes;
+  }
+
   private async getCategoryOrThrow(userId: string, categoryId: string) {
     const result = await this.db.get({
       TableName: this.categoriesTableName,

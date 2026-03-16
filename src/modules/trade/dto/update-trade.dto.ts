@@ -484,6 +484,18 @@ export class UpdateTradeDto {
   tradeTags?: string[];
 
   @ApiProperty({
+    description: '字典标签编码（来自 trade_tag 分类）',
+    type: [String],
+    example: ['false_breakout', 'second_entry'],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  tagCodes?: string[];
+
+  @ApiProperty({
     description: '备注',
     example: '这次交易整体执行较好，但离场时机可以更优化',
     required: false,

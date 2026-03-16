@@ -4,10 +4,11 @@ import { TradeService } from './trade.service';
 import { CommonModule } from '../common/common.module';
 import { ImageService } from '../image/image.service';
 import { WebhookModule } from '../webhook/webhook.module';
+import { DictionaryModule } from '../dictionary/dictionary.module';
 // import { RAGModule } from '../rag/rag.module';
 
 @Module({
-  imports: [CommonModule, WebhookModule],
+  imports: [CommonModule, WebhookModule, DictionaryModule],
   // imports: [CommonModule, RAGModule],
   controllers: [TradeController],
   providers: [TradeService, ImageService],

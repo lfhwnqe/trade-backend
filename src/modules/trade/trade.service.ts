@@ -15,6 +15,7 @@ import {
   ValidationException,
 } from '../../base/exceptions/custom.exceptions';
 import { ERROR_CODES } from '../../base/constants/error-codes';
+import { DictionaryService } from '../dictionary/dictionary.service';
 
 @Injectable()
 export class TradeService {
@@ -156,7 +157,10 @@ export class TradeService {
   }
 
 
-  constructor(private readonly configService: ConfigService) {
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly dictionaryService: DictionaryService,
+  ) {
     const tableName = this.configService.getOrThrow('TRANSACTIONS_TABLE_NAME');
     const region = this.configService.getOrThrow('AWS_REGION');
     console.log('[TradeService] 使用 DynamoDB 表:', tableName); // 打印环境变量的值
@@ -339,6 +343,12 @@ export class TradeService {
       );
     }
 
+    const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'trade_tag',
+      dto.tagCodes,
+    );
+
     const normalizedExitQualityTag = this.ensureExitQualityTagForExited({
       status: dto.status,
       exitQualityTag: dto.exitQualityTag,
@@ -418,6 +428,7 @@ export class TradeService {
       actualPathImagesDetailed: dto.actualPathImagesDetailed,
       actualPathAnalysis: dto.actualPathAnalysis,
       tradeTags: dto.tradeTags,
+      tagCodes: normalizedTagCodes,
       remarks: dto.remarks,
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
@@ -454,7 +465,7 @@ export class TradeService {
       return {
         success: true,
         message: '创建成功',
-        data: newTrade,
+        data: await this.attachDictionaryTags(newTrade),
       };
     } catch (error) {
       console.error('[TradeService] createTrade error:', error);
@@ -560,7 +571,7 @@ export class TradeService {
       return {
         success: true,
         data: {
-          items: pagedItems,
+          items: await this.attachDictionaryTagsForTrades(pagedItems),
           total,
           page: safePage,
           pageSize: safePageSize,
@@ -1569,6 +1580,22 @@ export class TradeService {
     }
   }
 
+  private async attachDictionaryTags(trade: Trade) {
+    const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      trade.userId,
+      'trade_tag',
+      trade.tagCodes,
+    );
+    return {
+      ...trade,
+      tagItems,
+    };
+  }
+
+  private async attachDictionaryTagsForTrades(trades: Trade[]) {
+    return Promise.all(trades.map((trade) => this.attachDictionaryTags(trade)));
+  }
+
   async getTrade(userId: string, transactionId: string) {
     try {
       const result = await this.db.get({
@@ -1592,7 +1619,7 @@ export class TradeService {
       }
       return {
         success: true,
-        data: result.Item as Trade,
+        data: await this.attachDictionaryTags(result.Item as Trade),
       };
     } catch (error) {
       console.error('[TradeService] getTrade error:', error);
@@ -1710,7 +1737,7 @@ export class TradeService {
 
       return {
         success: true,
-        data: item,
+        data: await this.attachDictionaryTags(item),
       };
     } catch (error) {
       console.error('[TradeService] getSharedTradeByShareId error:', error);
@@ -1765,9 +1792,16 @@ export class TradeService {
         );
       }
 
+      const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+        userId,
+        'trade_tag',
+        dto.tagCodes,
+      );
+
       const updatedTradeData: Partial<Trade> = {
         ...dto,
         analysisTime: dto.analysisTime, // 行情分析时间
+        ...(dto.tagCodes !== undefined ? { tagCodes: normalizedTagCodes } : {}),
         ...(normalizedProfitLossPercentage !== undefined
           ? { profitLossPercentage: normalizedProfitLossPercentage }
           : {}),
@@ -1797,7 +1831,7 @@ export class TradeService {
       return {
         success: true,
         message: '更新成功',
-        data: updated,
+        data: await this.attachDictionaryTags(updated),
       };
     } catch (error) {
       console.error('[TradeService] updateTrade error:', error);

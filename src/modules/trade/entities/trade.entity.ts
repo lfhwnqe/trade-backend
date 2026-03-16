@@ -85,7 +85,8 @@ export interface Trade {
   actualPathImages?: ImageResource[]; // 实际行情路径图片（旧字段）
   actualPathImagesDetailed?: MarketStructureAnalysisImage[]; // 实际行情路径图片（新字段）
   actualPathAnalysis?: string; // 实际行情路径分析
-  tradeTags?: string[]; // 交易标签（用户自定义，用于回测/统计）
+  tradeTags?: string[]; // 交易标签（旧自定义标签，兼容保留）
+  tagCodes?: string[]; // 字典标签编码（来自 trade_tag）
   remarks?: string; // 备注
   lessonsLearned?: string; // 需要总结的经验
   lessonsLearnedImportance?: number; // 交易完成后总结重要性评分
