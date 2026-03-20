@@ -52,11 +52,92 @@ describe('FlashcardService', () => {
     }),
   } as any;
 
-  const makeService = () => new FlashcardService(configService);
+  const dictionaryService = {
+    assertCategoryCodesExist: jest.fn(async (_category: string, codes?: string[]) => codes || []),
+    resolveCategoryItemsByCodes: jest.fn(async (_userId: string, _category: string, codes?: string[]) =>
+      (Array.isArray(codes) ? codes : []).map((code) => ({ code, label: code })),
+    ),
+  } as any;
+
+  const makeService = () => new FlashcardService(configService, dictionaryService);
 
   beforeEach(() => {
     jest.clearAllMocks();
     (uuidv4 as jest.Mock).mockReturnValue('uuid-1');
+  });
+
+  it('should sort flashcard cards by createdAt when sortBy=CREATED_AT', async () => {
+    const service = makeService();
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url-1',
+          answerImageUrl: 'answer-url-1',
+          createdAt: '2026-03-10T10:00:00.000Z',
+          updatedAt: '2026-03-10T10:01:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-2',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url-2',
+          answerImageUrl: 'answer-url-2',
+          createdAt: '2026-03-09T10:00:00.000Z',
+          updatedAt: '2026-03-12T10:01:00.000Z',
+        },
+      ],
+    });
+
+    const result = await service.listCards('user-1', {
+      pageSize: 20,
+      sortBy: 'CREATED_AT',
+      sortOrder: 'desc',
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.items.map((item: any) => item.cardId)).toEqual(['card-1', 'card-2']);
+  });
+
+  it('should sort flashcard cards by updatedAt when sortBy=UPDATED_AT', async () => {
+    const service = makeService();
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url-1',
+          answerImageUrl: 'answer-url-1',
+          createdAt: '2026-03-10T10:00:00.000Z',
+          updatedAt: '2026-03-10T10:01:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-2',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url-2',
+          answerImageUrl: 'answer-url-2',
+          createdAt: '2026-03-09T10:00:00.000Z',
+          updatedAt: '2026-03-12T10:01:00.000Z',
+        },
+      ],
+    });
+
+    const result = await service.listCards('user-1', {
+      pageSize: 20,
+      sortBy: 'UPDATED_AT',
+      sortOrder: 'desc',
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.items.map((item: any) => item.cardId)).toEqual(['card-2', 'card-1']);
+    expect(result.data.items.map((item: any) => item.createdAt)).toEqual([
+      '2026-03-09T10:00:00.000Z',
+      '2026-03-10T10:00:00.000Z',
+    ]);
   });
 
   it('should create card with trimmed optional fields and normalized action', async () => {

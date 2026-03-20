@@ -1908,13 +1908,22 @@ export class FlashcardService {
   ) {
     const direction = sortOrder === 'asc' ? 1 : -1;
     return [...cards].sort((a, b) => {
+      if (sortBy === 'UPDATED_AT') {
+        const diff =
+          (this.safeParseTimestamp(a.updatedAt) -
+            this.safeParseTimestamp(b.updatedAt)) *
+          direction;
+        if (diff !== 0) return diff;
+        return this.compareCreatedAtDesc(a, b);
+      }
+
       if (sortBy === 'QUALITY_SCORE_AVG') {
         const aValue = typeof a.qualityScoreAvg === 'number' ? a.qualityScoreAvg : 5;
         const bValue = typeof b.qualityScoreAvg === 'number' ? b.qualityScoreAvg : 5;
         if (aValue !== bValue) {
           return (aValue - bValue) * direction;
         }
-        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        return this.compareCreatedAtDesc(a, b);
       }
 
       if (sortBy === 'SIMULATION_RESOLVED_COUNT') {
@@ -1923,7 +1932,7 @@ export class FlashcardService {
         if (aValue !== bValue) {
           return (aValue - bValue) * direction;
         }
-        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        return this.compareCreatedAtDesc(a, b);
       }
 
       if (sortBy === 'SIMULATION_AVG_RR') {
@@ -1932,11 +1941,35 @@ export class FlashcardService {
         if (aValue !== bValue) {
           return (aValue - bValue) * direction;
         }
-        return Date.parse(b.createdAt) - Date.parse(a.createdAt);
+        return this.compareCreatedAtDesc(a, b);
       }
 
-      return (Date.parse(a.createdAt) - Date.parse(b.createdAt)) * direction;
+      const diff =
+        (this.safeParseTimestamp(a.createdAt) -
+          this.safeParseTimestamp(b.createdAt)) *
+        direction;
+      if (diff !== 0) return diff;
+      return this.compareUpdatedAtDesc(a, b);
     });
+  }
+
+  private compareCreatedAtDesc(a: FlashcardCard, b: FlashcardCard) {
+    return (
+      this.safeParseTimestamp(b.createdAt) -
+      this.safeParseTimestamp(a.createdAt)
+    );
+  }
+
+  private compareUpdatedAtDesc(a: FlashcardCard, b: FlashcardCard) {
+    return (
+      this.safeParseTimestamp(b.updatedAt) -
+      this.safeParseTimestamp(a.updatedAt)
+    );
+  }
+
+  private safeParseTimestamp(value?: string) {
+    const parsed = Date.parse(value || '');
+    return Number.isNaN(parsed) ? 0 : parsed;
   }
 
   private simulationSessionSortTs(session: FlashcardSimulationSessionItem) {
