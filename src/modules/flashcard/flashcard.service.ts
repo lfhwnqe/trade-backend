@@ -103,6 +103,13 @@ export class FlashcardService {
       'flashcard_tag',
       dto.tagCodes,
     );
+    const normalizedPlaybookType = (
+      await this.dictionaryService.assertCategoryCodesExist(
+        userId,
+        'playbook_type',
+        dto.playbookType ? [dto.playbookType] : undefined,
+      )
+    )[0];
 
     const item: FlashcardCard = {
       id: cardId,
@@ -127,6 +134,7 @@ export class FlashcardService {
           : undefined,
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
+      playbookType: normalizedPlaybookType,
       notes: dto.notes?.trim() || undefined,
       tagCodes: normalizedTagCodes,
       createdAt: now,
@@ -250,6 +258,9 @@ export class FlashcardService {
         ) {
           return false;
         }
+      }
+      if (dto.playbookType && card.playbookType !== dto.playbookType) {
+        return false;
       }
       if (dto.marketTimeInfo) {
         const keyword = dto.marketTimeInfo.trim().toLowerCase();
@@ -395,6 +406,16 @@ export class FlashcardService {
       dto.symbolPairInfo === undefined
         ? current.symbolPairInfo
         : dto.symbolPairInfo.trim() || undefined;
+    const playbookType =
+      dto.playbookType === undefined
+        ? current.playbookType
+        : (
+            await this.dictionaryService.assertCategoryCodesExist(
+              userId,
+              'playbook_type',
+              dto.playbookType ? [dto.playbookType] : undefined,
+            )
+          )[0];
     const notes =
       dto.notes === undefined ? current.notes : dto.notes.trim() || undefined;
     const normalizedTagCodes =
@@ -421,6 +442,7 @@ export class FlashcardService {
       earlyExitImageUrls,
       marketTimeInfo,
       symbolPairInfo,
+      playbookType,
       notes,
       tagCodes: normalizedTagCodes,
       updatedAt: now,

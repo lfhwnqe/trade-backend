@@ -132,6 +132,15 @@ export class UpdateFlashcardCardDto {
   symbolPairInfo?: string;
 
   @ApiPropertyOptional({
+    example: 'pullback_continuation',
+    description: '剧本类型（单选，来自字典模块 playbook_type 分类）',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  playbookType?: string;
+
+  @ApiPropertyOptional({
     description: '字典标签编码（来自 flashcard_tag 分类）',
     type: [String],
     example: ['breakout', 'retest'],

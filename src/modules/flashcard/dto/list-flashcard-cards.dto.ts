@@ -44,6 +44,14 @@ export class ListFlashcardCardsDto {
   symbolPairInfo?: string;
 
   @ApiPropertyOptional({
+    description: '剧本类型编码（精确匹配，来自 playbook_type）',
+    example: 'pullback_continuation',
+  })
+  @IsOptional()
+  @IsString()
+  playbookType?: string;
+
+  @ApiPropertyOptional({
     description: '行情时间信息（模糊匹配）',
     example: '2026-03-05',
   })

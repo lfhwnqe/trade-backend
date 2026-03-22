@@ -85,6 +85,7 @@ export interface FlashcardCard {
   direction?: FlashcardDirection;
   marketTimeInfo?: string;
   symbolPairInfo?: string;
+  playbookType?: string;
   notes?: string;
   tagCodes?: string[];
   tagItems?: Array<{ code: string; label: string; color?: string; status?: string }>;
