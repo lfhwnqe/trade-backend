@@ -151,6 +151,12 @@ export class DictionaryController {
     return this.dictionaryService.reorderCategories(this.getUserId(req), dto);
   }
 
+  @ApiOperation({ summary: '一键刷入默认 flashcard_tag 字典项' })
+  @Post('seeds/flashcard-tags')
+  async seedFlashcardTags(@Req() req: Request) {
+    return this.dictionaryService.seedFlashcardTags(this.getUserId(req));
+  }
+
   private getUserId(req: Request) {
     const userId = (req as any).user?.sub;
     if (!userId) {

@@ -24,6 +24,37 @@ import {
   DictionaryEntryItem,
 } from './dictionary.types';
 
+const FLASHCARD_TAG_CATEGORY_SEED = {
+  code: 'flashcard_tag',
+  name: '闪卡标签',
+  description: '用于标记 Flashcard 的执行特征、价格行为、结构环境与交易时段',
+  bizType: 'FLASHCARD' as const,
+  selectionMode: 'MULTIPLE' as const,
+  sortOrder: 200,
+};
+
+const FLASHCARD_TAG_ITEMS_SEED = [
+  { code: 'pending_order_entry', label: '提前挂单入场', description: '不追当前价格，提前在关键区域附近挂限价单等待成交', color: '#00c2b2', sortOrder: 100 },
+  { code: 'retest_entry', label: '回踩入场', description: '等待突破后的回踩确认，再按原方向入场', color: '#00c2b2', sortOrder: 110 },
+  { code: 'market_entry', label: '市价直接入场', description: '不等待挂单或深回踩，信号出现后直接跟随入场', color: '#00c2b2', sortOrder: 120 },
+  { code: 'do_not_chase', label: '禁止追单', description: '当前动量或价格距离已经过大，直接追单会导致盈亏比失真', color: '#f59e0b', sortOrder: 130 },
+  { code: 'time_stop_required', label: '需要时间止损', description: '若若干根K线内未走出预期方向扩张，需要按时间止损离场', color: '#f59e0b', sortOrder: 140 },
+  { code: 'big_body_up', label: '强势大阳突破', description: '以明显大实体阳线完成向上突破或强势收盘', color: '#22c55e', sortOrder: 200 },
+  { code: 'big_body_down', label: '强势下跌突破', description: '以明显大实体阴线完成向下突破或强势收盘', color: '#ef4444', sortOrder: 210 },
+  { code: 'long_wick_rejection', label: '长影线拒绝', description: '价格刺穿关键区域后出现明显长影线，体现拒绝与反向承接', color: '#8b5cf6', sortOrder: 220 },
+  { code: 'slow_compression', label: '缓慢挤压逼近', description: '价格持续以更接近关键区域的高低点推进，暗示区间即将被突破', color: '#8b5cf6', sortOrder: 230 },
+  { code: 'engulfing_reversal', label: '吞没反转', description: '关键区域出现反向吞没K线，作为反转或承接确认', color: '#8b5cf6', sortOrder: 240 },
+  { code: 'flip_zone', label: '支撑阻力互换', description: '原支撑跌破后转为阻力，或原阻力突破后转为支撑', color: '#3b82f6', sortOrder: 300 },
+  { code: 'range_boundary', label: '区间边界', description: '信号发生在区间上沿或下沿附近，属于区间交易核心位置', color: '#3b82f6', sortOrder: 310 },
+  { code: 'near_4h_resistance', label: '接近4H阻力', description: '当前行为发生在4小时背景阻力区域附近', color: '#3b82f6', sortOrder: 320 },
+  { code: 'near_4h_support', label: '接近4H支撑', description: '当前行为发生在4小时背景支撑区域附近', color: '#3b82f6', sortOrder: 330 },
+  { code: 'at_1h_bos_zone', label: '位于1H结构位', description: '信号发生在1小时 BOS / 结构确认区域附近', color: '#3b82f6', sortOrder: 340 },
+  { code: 'chaotic_context', label: '混乱环境', description: '市场结构不清晰、原剧本被破坏或边界失效，需高度谨慎', color: '#6b7280', sortOrder: 350 },
+  { code: 'asia_session', label: '亚盘', description: '题目主要发生在亚洲交易时段', color: '#14b8a6', sortOrder: 400 },
+  { code: 'london_session', label: '欧盘', description: '题目主要发生在伦敦交易时段', color: '#14b8a6', sortOrder: 410 },
+  { code: 'new_york_session', label: '美盘', description: '题目主要发生在纽约交易时段', color: '#14b8a6', sortOrder: 420 },
+];
+
 @Injectable()
 export class DictionaryService {
   private readonly db: DynamoDBDocument;
@@ -446,6 +477,109 @@ export class DictionaryService {
     return this.listCategories(userId, {});
   }
 
+  async seedFlashcardTags(userId: string) {
+    const now = new Date().toISOString();
+    let category = await this.findCategoryByCode(userId, FLASHCARD_TAG_CATEGORY_SEED.code);
+
+    if (!category) {
+      category = {
+        userId,
+        categoryId: uuidv4(),
+        code: FLASHCARD_TAG_CATEGORY_SEED.code,
+        name: FLASHCARD_TAG_CATEGORY_SEED.name,
+        description: FLASHCARD_TAG_CATEGORY_SEED.description,
+        bizType: FLASHCARD_TAG_CATEGORY_SEED.bizType,
+        selectionMode: FLASHCARD_TAG_CATEGORY_SEED.selectionMode,
+        status: 'ACTIVE',
+        sortOrder: FLASHCARD_TAG_CATEGORY_SEED.sortOrder,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await this.db.put({
+        TableName: this.categoriesTableName,
+        Item: category,
+      });
+    } else {
+      category = {
+        ...category,
+        name: FLASHCARD_TAG_CATEGORY_SEED.name,
+        description: FLASHCARD_TAG_CATEGORY_SEED.description,
+        bizType: FLASHCARD_TAG_CATEGORY_SEED.bizType,
+        selectionMode: FLASHCARD_TAG_CATEGORY_SEED.selectionMode,
+        status: 'ACTIVE',
+        sortOrder: FLASHCARD_TAG_CATEGORY_SEED.sortOrder,
+        updatedAt: now,
+      };
+
+      await this.db.put({
+        TableName: this.categoriesTableName,
+        Item: category,
+        ConditionExpression: 'attribute_exists(categoryId)',
+      });
+    }
+
+    const existingItems = await this.listItemsByCategoryCode(userId, FLASHCARD_TAG_CATEGORY_SEED.code);
+    const existingItemMap = new Map(existingItems.map((item) => [item.code, item]));
+
+    let created = 0;
+    let updated = 0;
+
+    for (const seed of FLASHCARD_TAG_ITEMS_SEED) {
+      const existing = existingItemMap.get(seed.code);
+      if (!existing) {
+        const item: DictionaryEntryItem = {
+          userId,
+          itemId: uuidv4(),
+          categoryCode: FLASHCARD_TAG_CATEGORY_SEED.code,
+          categoryLookupKey: this.buildCategoryLookupKey(userId, FLASHCARD_TAG_CATEGORY_SEED.code),
+          code: seed.code,
+          label: seed.label,
+          description: seed.description,
+          color: seed.color,
+          sortOrder: seed.sortOrder,
+          status: 'ACTIVE',
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        await this.db.put({
+          TableName: this.itemsTableName,
+          Item: item,
+        });
+        created += 1;
+      } else {
+        await this.db.put({
+          TableName: this.itemsTableName,
+          Item: {
+            ...existing,
+            label: seed.label,
+            description: seed.description,
+            color: seed.color,
+            sortOrder: seed.sortOrder,
+            status: 'ACTIVE',
+            updatedAt: now,
+          },
+          ConditionExpression: 'attribute_exists(itemId)',
+        });
+        updated += 1;
+      }
+    }
+
+    const options = await this.getCategoryOptions(userId, FLASHCARD_TAG_CATEGORY_SEED.code);
+
+    return {
+      success: true,
+      data: {
+        category: this.toCategoryResponse(category, options.data.items.length),
+        created,
+        updated,
+        total: FLASHCARD_TAG_ITEMS_SEED.length,
+        items: options.data.items,
+      },
+    };
+  }
+
   async resolveCategoryItemsByCodes(
     userId: string,
     categoryCode: string,
@@ -539,6 +673,18 @@ export class DictionaryService {
   }
 
   private async getCategoryByCodeOrThrow(userId: string, categoryCode: string) {
+    const item = await this.findCategoryByCode(userId, categoryCode);
+    if (!item) {
+      throw new ResourceNotFoundException(
+        'Dictionary category not found by code',
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '字典分类不存在',
+      );
+    }
+    return item;
+  }
+
+  private async findCategoryByCode(userId: string, categoryCode: string) {
     const code = categoryCode.trim();
     const result = await this.db.query({
       TableName: this.categoriesTableName,
@@ -551,15 +697,7 @@ export class DictionaryService {
       Limit: 1,
     });
 
-    const item = (result.Items?.[0] || undefined) as DictionaryCategoryItem | undefined;
-    if (!item) {
-      throw new ResourceNotFoundException(
-        'Dictionary category not found by code',
-        ERROR_CODES.RESOURCE_NOT_FOUND,
-        '字典分类不存在',
-      );
-    }
-    return item;
+    return (result.Items?.[0] || undefined) as DictionaryCategoryItem | undefined;
   }
 
   private async ensureCategoryCodeAvailable(userId: string, categoryCode: string) {

@@ -22,7 +22,8 @@
     "deploy:dev": "yarn build:lambda && cd cdk && yarn deploy:dev",
     "deploy:prod": "yarn build:lambda && cd cdk && yarn deploy:prod",
     "destroy:dev": "cd cdk && yarn destroy:dev",
-    "destroy:prod": "cd cdk && yarn destroy:prod"
+    "destroy:prod": "cd cdk && yarn destroy:prod",
+    "seed:flashcard-tags": "node scripts/seed-flashcard-tag-dictionary.mjs"
   },
   "dependencies": {
     "simple-mind-map": "^0.10.2",
