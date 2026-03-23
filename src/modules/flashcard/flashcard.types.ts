@@ -230,6 +230,27 @@ export interface FlashcardDrillAnalyticsDimensionStat {
   wrongRate: number;
 }
 
+export interface FlashcardSimulationPlaybookFailureReasonStat {
+  reason: string;
+  count: number;
+  share: number;
+}
+
+export interface FlashcardSimulationPlaybookAnalyticsItem {
+  playbookType: string;
+  label: string;
+  attemptCount: number;
+  resolvedCount: number;
+  successCount: number;
+  failureCount: number;
+  successRate: number;
+  avgRr: number;
+  qualityScoreAvg: number;
+  topFailureReasons: FlashcardSimulationPlaybookFailureReasonStat[];
+  weaknessScore: number;
+  flags: string[];
+}
+
 export const FLASHCARD_COLLECTION_STATE_VALUES = [
   'NO_NEW_CARDS',
   'LIGHT_COLLECTION',

@@ -37,6 +37,7 @@ import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-si
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
+import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -360,6 +361,23 @@ export class FlashcardController {
     }
 
     return this.flashcardService.listSimulationAttempts(userId, query);
+  }
+
+  @ApiOperation({ summary: '获取基于主剧本的模拟盘薄弱项统计' })
+  @ApiQuery({ name: 'recentWindow', required: false, example: 30 })
+  @ApiQuery({ name: 'minResolved', required: false, example: 5 })
+  @ApiResponse({ status: 200, description: '返回 weakest 排行、全量 playbook 聚合与低样本标记' })
+  @Get('simulation/analytics/playbooks')
+  async getSimulationPlaybookAnalytics(
+    @Req() req: Request,
+    @Query() query: GetFlashcardSimulationPlaybookAnalyticsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getSimulationPlaybookAnalytics(userId, query);
   }
 
   @ApiOperation({ summary: '查询某张闪卡的模拟盘训练历史与失败备注' })

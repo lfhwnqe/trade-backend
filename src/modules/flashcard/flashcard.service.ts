@@ -22,6 +22,7 @@ import {
   FlashcardDrillSessionItem,
   FlashcardFavoriteItem,
   FlashcardSimulationAttemptItem,
+  FlashcardSimulationPlaybookAnalyticsItem,
   FlashcardSimulationSessionItem,
   FlashcardSource,
   FlashcardWrongBookItem,
@@ -40,6 +41,7 @@ import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-si
 import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulation-sessions.dto';
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
+import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -239,7 +241,7 @@ export class FlashcardService {
     const pageSize = dto.pageSize || 20;
     const offset = this.decodeOffsetCursor(dto.cursor);
 
-    const cards = await this.listAllCardsByCreatedAtDesc(userId);
+    const cards = await this.listAllCards(userId);
     const filtered = cards.filter((card) => {
       if (dto.behaviorType && card.behaviorType !== dto.behaviorType) {
         return false;
@@ -1055,6 +1057,98 @@ export class FlashcardService {
           nextOffset < sorted.length
             ? this.encodeOffsetCursor(nextOffset)
             : null,
+      },
+    };
+  }
+
+  async getSimulationPlaybookAnalytics(
+    userId: string,
+    dto: GetFlashcardSimulationPlaybookAnalyticsDto,
+  ) {
+    const recentWindow = dto.recentWindow || 30;
+    const minResolved = dto.minResolved || 5;
+    const attempts = await this.listAllSimulationAttempts(userId);
+    const resolvedAttempts = attempts
+      .filter((attempt) => attempt.status === 'RESOLVED' && Boolean(attempt.result))
+      .sort((a, b) => {
+        const right = Date.parse(b.resolvedAt || b.updatedAt || b.createdAt);
+        const left = Date.parse(a.resolvedAt || a.updatedAt || a.createdAt);
+        return right - left;
+      })
+      .slice(0, recentWindow);
+
+    const cards = await this.batchGetCardsByIds(
+      userId,
+      resolvedAttempts.map((attempt) => attempt.targetCardId),
+    );
+    const cardsById = new Map(cards.map((card) => [card.cardId, card] as const));
+    const playbookCodes = Array.from(
+      new Set(
+        resolvedAttempts
+          .map((attempt) => cardsById.get(attempt.targetCardId)?.playbookType)
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+    const playbookItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      userId,
+      'playbook_type',
+      playbookCodes,
+    );
+    const playbookLabelByCode = new Map(
+      (playbookItems || []).map((item: any) => [item.code, item.label] as const),
+    );
+
+    const grouped = new Map<string, { cardIds: Set<string>; attempts: FlashcardSimulationAttemptItem[] }>();
+
+    for (const attempt of resolvedAttempts) {
+      const card = cardsById.get(attempt.targetCardId);
+      const playbookType = card?.playbookType;
+      if (!playbookType) {
+        continue;
+      }
+      const current = grouped.get(playbookType) || {
+        cardIds: new Set<string>(),
+        attempts: [],
+      };
+      current.cardIds.add(attempt.targetCardId);
+      current.attempts.push(attempt);
+      grouped.set(playbookType, current);
+    }
+
+    const items = Array.from(grouped.entries())
+      .map(([playbookType, group]) =>
+        this.buildSimulationPlaybookAnalyticsItem({
+          playbookType,
+          label: playbookLabelByCode.get(playbookType) || playbookType,
+          attempts: group.attempts,
+          cards: Array.from(group.cardIds)
+            .map((cardId) => cardsById.get(cardId))
+            .filter((card): card is FlashcardCard => Boolean(card)),
+          minResolved,
+        }),
+      )
+      .sort((a, b) => {
+        if (b.weaknessScore !== a.weaknessScore) {
+          return b.weaknessScore - a.weaknessScore;
+        }
+        if (a.successRate !== b.successRate) {
+          return a.successRate - b.successRate;
+        }
+        return b.resolvedCount - a.resolvedCount;
+      });
+
+    return {
+      success: true,
+      data: {
+        summary: {
+          totalPlaybooks: grouped.size,
+          rankedPlaybooks: items.filter((item) => !item.flags.includes('LOW_SAMPLE')).length,
+          minResolved,
+          recentWindow,
+          totalResolvedAttempts: resolvedAttempts.length,
+        },
+        weakest: items.filter((item) => !item.flags.includes('LOW_SAMPLE')).slice(0, 3),
+        items,
       },
     };
   }
@@ -1920,6 +2014,107 @@ export class FlashcardService {
       ),
       simulationAvgRr,
       qualityScoreAvg,
+    };
+  }
+
+  private buildSimulationPlaybookAnalyticsItem(input: {
+    playbookType: string;
+    label: string;
+    attempts: FlashcardSimulationAttemptItem[];
+    cards: FlashcardCard[];
+    minResolved: number;
+  }): FlashcardSimulationPlaybookAnalyticsItem {
+    const resolvedCount = input.attempts.length;
+    const successCount = input.attempts.filter((attempt) => attempt.result === 'SUCCESS').length;
+    const failureAttempts = input.attempts.filter((attempt) => attempt.result === 'FAILURE');
+    const failureCount = failureAttempts.length;
+    const successRate = resolvedCount > 0 ? successCount / resolvedCount : 0;
+    const avgRr = Number(
+      (
+        input.attempts.reduce((sum, attempt) => sum + (attempt.rrValue || 0), 0) /
+        Math.max(resolvedCount, 1)
+      ).toFixed(2),
+    );
+    const qualityAttempts = input.attempts.filter(
+      (attempt) => typeof attempt.cardQualityScore === 'number',
+    );
+    const qualityScoreAvg = qualityAttempts.length
+      ? Number(
+          (
+            qualityAttempts.reduce(
+              (sum, attempt) => sum + (attempt.cardQualityScore || 0),
+              0,
+            ) / qualityAttempts.length
+          ).toFixed(2),
+        )
+      : 0;
+
+    const failureReasonMap = new Map<string, number>();
+    for (const attempt of failureAttempts) {
+      const reason = attempt.failureReason?.trim();
+      if (!reason) continue;
+      failureReasonMap.set(reason, (failureReasonMap.get(reason) || 0) + 1);
+    }
+    const topFailureReasons = Array.from(failureReasonMap.entries())
+      .map(([reason, count]) => ({
+        reason,
+        count,
+        share: Number((count / Math.max(failureCount, 1)).toFixed(4)),
+      }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.reason.localeCompare(b.reason);
+      })
+      .slice(0, 3);
+
+    const topFailureShare = topFailureReasons[0]?.share || 0;
+    const successPenalty = (1 - successRate) * 100;
+    const lowRRPenalty = avgRr >= 2 ? 0 : avgRr >= 1.5 ? 5 : avgRr >= 1 ? 10 : 15;
+    const repeatedFailurePenalty =
+      topFailureShare >= 0.6 ? 15 : topFailureShare >= 0.4 ? 8 : 0;
+    const weaknessScore = Number(
+      (successPenalty + lowRRPenalty + repeatedFailurePenalty).toFixed(2),
+    );
+
+    const avgCardQuality = input.cards.length
+      ? Number(
+          (
+            input.cards.reduce((sum, card) => sum + (card.qualityScoreAvg || 0), 0) /
+            input.cards.length
+          ).toFixed(2),
+        )
+      : 0;
+
+    const flags: string[] = [];
+    if (resolvedCount < input.minResolved) {
+      flags.push('LOW_SAMPLE');
+    }
+    if (weaknessScore >= 60) {
+      flags.push('WEAK');
+    }
+    if (topFailureShare >= 0.4) {
+      flags.push('REPEATED_FAILURE');
+    }
+    if (resolvedCount >= input.minResolved && successRate < 0.5 && avgRr < 1.5) {
+      flags.push('HIGH_FREQUENCY_LOW_EFFICIENCY');
+    }
+    if (avgCardQuality > 0 && avgCardQuality < 4) {
+      flags.push('LOW_CARD_QUALITY_SIGNAL');
+    }
+
+    return {
+      playbookType: input.playbookType,
+      label: input.label,
+      attemptCount: resolvedCount,
+      resolvedCount,
+      successCount,
+      failureCount,
+      successRate: Number(successRate.toFixed(4)),
+      avgRr,
+      qualityScoreAvg,
+      topFailureReasons,
+      weaknessScore,
+      flags,
     };
   }
 

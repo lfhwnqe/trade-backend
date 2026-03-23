@@ -28,6 +28,7 @@ describe('FlashcardController', () => {
       finishSimulationSession: jest.fn(),
       listSimulationSessions: jest.fn(),
       listSimulationAttempts: jest.fn(),
+      getSimulationPlaybookAnalytics: jest.fn(),
       getSimulationCardHistory: jest.fn(),
       listWrongBook: jest.fn(),
       listFavorites: jest.fn(),
@@ -195,6 +196,20 @@ describe('FlashcardController', () => {
     const result = await controller.listSimulationAttempts(makeReq(), query);
 
     expect(flashcardService.listSimulationAttempts).toHaveBeenCalledWith(
+      'user-1',
+      query,
+    );
+    expect(result).toEqual({ success: true });
+  });
+
+  it('should forward playbook analytics query with current user id', async () => {
+    const { controller, flashcardService } = makeController();
+    flashcardService.getSimulationPlaybookAnalytics.mockResolvedValue({ success: true });
+
+    const query = { recentWindow: 30, minResolved: 5 } as any;
+    const result = await controller.getSimulationPlaybookAnalytics(makeReq(), query);
+
+    expect(flashcardService.getSimulationPlaybookAnalytics).toHaveBeenCalledWith(
       'user-1',
       query,
     );

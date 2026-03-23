@@ -571,4 +571,53 @@ describe('FlashcardService', () => {
       }),
     ]);
   });
+
+  it('should build playbook analytics with low-sample protection and failure clustering', async () => {
+    const service = makeService();
+    (service as any).listAllSimulationAttempts = jest.fn().mockResolvedValue([
+      {
+        userId: 'user-1', cardId: 'simulation-attempt#sim-1#a1', entityType: 'SIMULATION_ATTEMPT', attemptId: 'a1', simulationSessionId: 'sim-1', targetCardId: 'card-1', status: 'RESOLVED', rrValue: 0.9, entryDirection: 'LONG', entryReason: 'r1', result: 'FAILURE', failureReason: '入场过早', cardQualityScore: 4, revealProgress: 0.4, entryLineYPercent: 0.4, stopLossLineYPercent: 0.5, takeProfitLineYPercent: 0.2, entrySavedAt: '2026-03-14T10:00:00.000Z', resolvedAt: '2026-03-14T10:10:00.000Z', createdAt: '2026-03-14T10:00:00.000Z', updatedAt: '2026-03-14T10:10:00.000Z'
+      },
+      {
+        userId: 'user-1', cardId: 'simulation-attempt#sim-1#a2', entityType: 'SIMULATION_ATTEMPT', attemptId: 'a2', simulationSessionId: 'sim-1', targetCardId: 'card-1', status: 'RESOLVED', rrValue: 1.1, entryDirection: 'LONG', entryReason: 'r2', result: 'FAILURE', failureReason: '入场过早', cardQualityScore: 4, revealProgress: 0.41, entryLineYPercent: 0.4, stopLossLineYPercent: 0.5, takeProfitLineYPercent: 0.2, entrySavedAt: '2026-03-14T11:00:00.000Z', resolvedAt: '2026-03-14T11:10:00.000Z', createdAt: '2026-03-14T11:00:00.000Z', updatedAt: '2026-03-14T11:10:00.000Z'
+      },
+      {
+        userId: 'user-1', cardId: 'simulation-attempt#sim-1#a3', entityType: 'SIMULATION_ATTEMPT', attemptId: 'a3', simulationSessionId: 'sim-1', targetCardId: 'card-1', status: 'RESOLVED', rrValue: 1.2, entryDirection: 'LONG', entryReason: 'r3', result: 'SUCCESS', cardQualityScore: 5, revealProgress: 0.42, entryLineYPercent: 0.4, stopLossLineYPercent: 0.5, takeProfitLineYPercent: 0.2, entrySavedAt: '2026-03-14T12:00:00.000Z', resolvedAt: '2026-03-14T12:10:00.000Z', createdAt: '2026-03-14T12:00:00.000Z', updatedAt: '2026-03-14T12:10:00.000Z'
+      },
+      {
+        userId: 'user-1', cardId: 'simulation-attempt#sim-2#b1', entityType: 'SIMULATION_ATTEMPT', attemptId: 'b1', simulationSessionId: 'sim-2', targetCardId: 'card-2', status: 'RESOLVED', rrValue: 2.5, entryDirection: 'SHORT', entryReason: 'r4', result: 'SUCCESS', cardQualityScore: 5, revealProgress: 0.5, entryLineYPercent: 0.4, stopLossLineYPercent: 0.5, takeProfitLineYPercent: 0.2, entrySavedAt: '2026-03-15T10:00:00.000Z', resolvedAt: '2026-03-15T10:10:00.000Z', createdAt: '2026-03-15T10:00:00.000Z', updatedAt: '2026-03-15T10:10:00.000Z'
+      },
+    ]);
+    (service as any).batchGetCardsByIds = jest.fn().mockResolvedValue([
+      { userId: 'user-1', cardId: 'card-1', questionImageUrl: 'q1', answerImageUrl: 'a1', playbookType: 'range_edge_reversal', qualityScoreAvg: 4.2, createdAt: '2026-03-10T00:00:00.000Z', updatedAt: '2026-03-10T00:00:00.000Z' },
+      { userId: 'user-1', cardId: 'card-2', questionImageUrl: 'q2', answerImageUrl: 'a2', playbookType: 'trend_pullback', qualityScoreAvg: 4.8, createdAt: '2026-03-10T00:00:00.000Z', updatedAt: '2026-03-10T00:00:00.000Z' },
+    ]);
+
+    const result = await service.getSimulationPlaybookAnalytics('user-1', {
+      recentWindow: 10,
+      minResolved: 2,
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.summary.totalPlaybooks).toBe(2);
+    expect(result.data.weakest[0]).toEqual(
+      expect.objectContaining({
+        playbookType: 'range_edge_reversal',
+        label: 'range_edge_reversal',
+        resolvedCount: 3,
+        successCount: 1,
+        failureCount: 2,
+        flags: expect.arrayContaining(['WEAK', 'REPEATED_FAILURE', 'HIGH_FREQUENCY_LOW_EFFICIENCY']),
+      }),
+    );
+    expect(result.data.weakest[0].topFailureReasons[0]).toEqual(
+      expect.objectContaining({ reason: '入场过早', count: 2 }),
+    );
+    expect(result.data.items.find((item: any) => item.playbookType === 'trend_pullback')).toEqual(
+      expect.objectContaining({
+        resolvedCount: 1,
+        flags: expect.arrayContaining(['LOW_SAMPLE']),
+      }),
+    );
+  });
 });
