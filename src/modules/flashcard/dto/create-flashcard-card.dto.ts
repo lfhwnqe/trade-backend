@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 import {
   FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_DIRECTION_VALUES,
@@ -62,15 +62,14 @@ export class CreateFlashcardCardDto {
   @IsIn(FLASHCARD_DIRECTION_VALUES)
   direction?: FlashcardDirection;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     enum: FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES,
     example: 'SYSTEM_WIN',
-    description: '系统结果分类；选填，未填写时保持空值',
+    description: '系统结果分类（必填）',
   })
-  @IsOptional()
   @IsString()
   @IsIn(FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES)
-  systemOutcomeType?: FlashcardSystemOutcomeType;
+  systemOutcomeType: FlashcardSystemOutcomeType;
 
   @ApiPropertyOptional({ example: 'sweep 后失败回落。' })
   @IsOptional()
@@ -106,26 +105,26 @@ export class CreateFlashcardCardDto {
   @IsUrl({}, { each: true })
   earlyExitImageUrls?: string[];
 
-  @ApiPropertyOptional({ example: '2026-03-05 09:30 UTC+8', description: '行情时间信息（选填）' })
-  @IsOptional()
+  @ApiProperty({ example: '2026-03-05 09:30 UTC+8', description: '行情时间信息（必填）' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  marketTimeInfo?: string;
+  marketTimeInfo: string;
 
-  @ApiPropertyOptional({ example: 'BTC/USDT', description: '币对信息（选填）' })
-  @IsOptional()
+  @ApiProperty({ example: 'BTC/USDT', description: '币对信息（必填）' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  symbolPairInfo?: string;
+  symbolPairInfo: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'pullback_continuation',
-    description: '剧本类型（单选，来自字典模块 playbook_type 分类）',
+    description: '剧本类型（必填，单选，来自字典模块 playbook_type 分类）',
   })
-  @IsOptional()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(100)
-  playbookType?: string;
+  playbookType: string;
 
   @ApiPropertyOptional({
     description: '字典标签编码（来自 flashcard_tag 分类）',

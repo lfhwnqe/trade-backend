@@ -53,7 +53,7 @@ describe('FlashcardService', () => {
   } as any;
 
   const dictionaryService = {
-    assertCategoryCodesExist: jest.fn(async (_category: string, codes?: string[]) => codes || []),
+    assertCategoryCodesExist: jest.fn(async (_userId: string, _category: string, codes?: string[]) => codes || []),
     resolveCategoryItemsByCodes: jest.fn(async (_userId: string, _category: string, codes?: string[]) =>
       (Array.isArray(codes) ? codes : []).map((code) => ({ code, label: code })),
     ),
@@ -150,10 +150,12 @@ describe('FlashcardService', () => {
       direction: 'SHORT',
       behaviorType: 'ZONE_REJECTION',
       invalidationType: 'REJECTION_EXTREME_BROKEN',
+      systemOutcomeType: 'SYSTEM_WIN',
       earlyExitTag: true,
       earlyExitReason: '  no expansion after trigger  ',
       marketTimeInfo: '  London Open  ',
       symbolPairInfo: '  BTCUSDT  ',
+      playbookType: 'trend_pullback',
       notes: '  wait for rejection  ',
     } as any);
 
@@ -165,10 +167,12 @@ describe('FlashcardService', () => {
           cardId: 'uuid-1',
           expectedAction: 'SHORT',
           direction: 'SHORT',
+          systemOutcomeType: 'SYSTEM_WIN',
           earlyExitTag: true,
           earlyExitReason: 'no expansion after trigger',
           marketTimeInfo: 'London Open',
           symbolPairInfo: 'BTCUSDT',
+          playbookType: 'trend_pullback',
           notes: 'wait for rejection',
         }),
       }),

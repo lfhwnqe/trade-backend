@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '../common/config.service';
 import { DictionaryService } from '../dictionary/dictionary.service';
 import { DynamoDB } from '@aws-sdk/client-dynamodb';
@@ -112,6 +112,19 @@ export class FlashcardService {
         dto.playbookType ? [dto.playbookType] : undefined,
       )
     )[0];
+
+    if (!dto.systemOutcomeType) {
+      throw new BadRequestException('systemOutcomeType is required');
+    }
+    if (!dto.marketTimeInfo?.trim()) {
+      throw new BadRequestException('marketTimeInfo is required');
+    }
+    if (!dto.symbolPairInfo?.trim()) {
+      throw new BadRequestException('symbolPairInfo is required');
+    }
+    if (!normalizedPlaybookType) {
+      throw new BadRequestException('playbookType is required');
+    }
 
     const item: FlashcardCard = {
       id: cardId,
@@ -428,6 +441,19 @@ export class FlashcardService {
             'flashcard_tag',
             dto.tagCodes,
           );
+
+    if (!systemOutcomeType) {
+      throw new BadRequestException('systemOutcomeType is required');
+    }
+    if (!marketTimeInfo?.trim()) {
+      throw new BadRequestException('marketTimeInfo is required');
+    }
+    if (!symbolPairInfo?.trim()) {
+      throw new BadRequestException('symbolPairInfo is required');
+    }
+    if (!playbookType) {
+      throw new BadRequestException('playbookType is required');
+    }
 
     const updated: FlashcardCard = {
       ...current,
