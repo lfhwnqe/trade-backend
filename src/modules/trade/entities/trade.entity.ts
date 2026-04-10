@@ -52,6 +52,7 @@ export interface Trade {
   marketStructure: MarketStructure; // 市场结构判断: 平衡/失衡/未见过
   marketStructureAnalysis: string; // 市场结构详细分析
   preEntrySummary?: string; // 入场前分析总结
+  possiblePlaybookTypes?: string[]; // 可能剧本类型编码（多选，来自 FLASHCARD 域 playbook_type）
   expectedPathImages?: ImageResource[]; // 预计路径图片（旧字段）
   expectedPathImagesDetailed?: MarketStructureAnalysisImage[]; // 预计路径图片（新字段）
   expectedPathAnalysis?: string; // 预计路径分析
@@ -70,6 +71,7 @@ export interface Trade {
   stopLoss?: number; // 止损点
   takeProfit?: number; // 止盈点
   entryReason?: string; // 入场理由
+  entryPlaybookType?: string; // 入场剧本类型（单选，来自 FLASHCARD 域 playbook_type）
   exitReason?: string; // 离场理由
   earlyExitReason?: string; // 提前离场原因
   mentalityNotes?: string; // 交易过程中心态记录
@@ -86,7 +88,8 @@ export interface Trade {
   actualPathImagesDetailed?: MarketStructureAnalysisImage[]; // 实际行情路径图片（新字段）
   actualPathAnalysis?: string; // 实际行情路径分析
   tradeTags?: string[]; // 交易标签（旧自定义标签，兼容保留）
-  tagCodes?: string[]; // 字典标签编码（来自 trade_tag）
+  entryTagCodes?: string[]; // 入场字典标签编码（来自 FLASHCARD 域 flashcard_tag）
+  entryTagItems?: { code: string; label: string; color?: string; status?: string }[]; // 入场字典标签展示聚合
   remarks?: string; // 备注
   lessonsLearned?: string; // 需要总结的经验
   lessonsLearnedImportance?: number; // 交易完成后总结重要性评分

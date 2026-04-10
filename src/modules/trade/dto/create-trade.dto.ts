@@ -121,12 +121,21 @@ export class MarketStructureAnalysisImage {
 // 入场计划接口
 export class EntryPlan {
   @ApiProperty({
+    description: '计划对应剧本类型（单选，来自 FLASHCARD 域 playbook_type）',
+    example: 'range_breakout',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  playbookType?: string;
+
+  @ApiProperty({
     description: '入场理由',
     example: '价格回调至支撑位，成交量减少，预计反弹',
   })
   @IsString()
   @IsOptional()
-  entryReason: string;
+  entryReason?: string;
 
   @ApiProperty({
     description: '入场信号',
@@ -134,7 +143,7 @@ export class EntryPlan {
   })
   @IsString()
   @IsOptional()
-  entrySignal: string;
+  entrySignal?: string;
 
   @ApiProperty({
     description: '退出信号',
@@ -142,7 +151,7 @@ export class EntryPlan {
   })
   @IsString()
   @IsOptional()
-  exitSignal: string;
+  exitSignal?: string;
 }
 
 export class ChecklistState {
@@ -342,6 +351,16 @@ export class CreateTradeDto {
   @IsString()
   @IsOptional()
   preEntrySummary: string;
+
+  @ApiProperty({
+    description: '可能剧本类型编码（多选，来自 FLASHCARD 域 playbook_type）',
+    type: [String],
+    example: ['range_breakout', 'trend_pullback'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  possiblePlaybookTypes: string[];
 
   @ApiProperty({
     description: '预计路径图片，最多5张图',
@@ -562,6 +581,35 @@ export class CreateTradeDto {
   @ArrayMaxSize(10)
   entryAnalysisImagesDetailed?: MarketStructureAnalysisImage[];
 
+  @ApiProperty({
+    description: '入场字典标签编码（来自 FLASHCARD 域 flashcard_tag）',
+    type: [String],
+    example: ['pending_order_entry', 'big_body_down'],
+  })
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(20)
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
+  entryTagCodes: string[];
+
+  @ApiProperty({
+    description: '入场剧本类型（单选，来自 FLASHCARD 域 playbook_type）',
+    example: 'range_breakout',
+  })
+  @IsString()
+  @ValidateIf(
+    (o) =>
+      o.status === TradeStatus.ENTERED ||
+      o.status === TradeStatus.EXITED ||
+      o.status === TradeStatus.EARLY_EXITED,
+  )
+  entryPlaybookType: string;
+
   // ===== 离场后分析 =====
   @ApiProperty({ description: '离场价格', example: 148.7 })
   @IsNumber()
@@ -664,17 +712,6 @@ export class CreateTradeDto {
   @IsArray()
   @IsString({ each: true })
   tradeTags?: string[];
-
-  @ApiPropertyOptional({
-    description: '字典标签编码（来自 trade_tag 分类）',
-    type: [String],
-    example: ['false_breakout', 'second_entry'],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  @ArrayMaxSize(20)
-  tagCodes?: string[];
 
   @ApiProperty({
     description: '备注',

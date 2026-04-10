@@ -343,11 +343,72 @@ export class TradeService {
       );
     }
 
-    const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+    const normalizedPossiblePlaybookTypes = await this.dictionaryService.assertCategoryCodesExist(
       userId,
-      'trade_tag',
-      dto.tagCodes,
+      'playbook_type',
+      dto.possiblePlaybookTypes,
     );
+    if (normalizedPossiblePlaybookTypes.length === 0) {
+      throw new ValidationException(
+        'possiblePlaybookTypes is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '可能剧本类型为必填项',
+      );
+    }
+    const normalizedEntryTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'flashcard_tag',
+      dto.entryTagCodes,
+    );
+    const normalizedEntryPlaybookType = (dto.entryPlaybookType || '').trim();
+    const validatedEntryPlaybookType = normalizedEntryPlaybookType
+      ? (
+          await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'playbook_type',
+            [normalizedEntryPlaybookType],
+          )
+        )[0]
+      : undefined;
+    if (
+      (dto.status === '已入场' || dto.status === '已离场' || dto.status === '提前离场') &&
+      normalizedEntryTagCodes.length === 0
+    ) {
+      throw new ValidationException(
+        'entryTagCodes is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '入场字典标签为必填项',
+      );
+    }
+    if (
+      (dto.status === '已入场' || dto.status === '已离场' || dto.status === '提前离场') &&
+      !validatedEntryPlaybookType
+    ) {
+      throw new ValidationException(
+        'entryPlaybookType is required',
+        ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+        '入场剧本类型为必填项',
+      );
+    }
+
+    const normalizePlanPlaybookType = async (plan?: { playbookType?: string }) => {
+      if (!plan) return plan;
+      if (plan.playbookType === undefined) return plan;
+      const trimmed = plan.playbookType.trim();
+      if (!trimmed) {
+        return { ...plan, playbookType: undefined };
+      }
+      const [validated] = await this.dictionaryService.assertCategoryCodesExist(
+        userId,
+        'playbook_type',
+        [trimmed],
+      );
+      return { ...plan, playbookType: validated };
+    };
+
+    const normalizedEntryPlanA = await normalizePlanPlaybookType(dto.entryPlanA);
+    const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
+    const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
     const normalizedExitQualityTag = this.ensureExitQualityTagForExited({
       status: dto.status,
@@ -403,12 +464,13 @@ export class TradeService {
       keyPriceLevels: dto.keyPriceLevels,
       marketStructure: dto.marketStructure,
       marketStructureAnalysis: dto.marketStructureAnalysis,
+      possiblePlaybookTypes: normalizedPossiblePlaybookTypes,
       expectedPathImages: dto.expectedPathImages,
       expectedPathImagesDetailed: dto.expectedPathImagesDetailed,
       expectedPathAnalysis: dto.expectedPathAnalysis,
-      entryPlanA: dto.entryPlanA,
-      entryPlanB: dto.entryPlanB,
-      entryPlanC: dto.entryPlanC,
+      entryPlanA: normalizedEntryPlanA,
+      entryPlanB: normalizedEntryPlanB,
+      entryPlanC: normalizedEntryPlanC,
       checklist: dto.checklist,
       // ===== 入场记录 =====
       entryPrice: dto.entryPrice,
@@ -416,6 +478,8 @@ export class TradeService {
       entryDirection: dto.entryDirection,
       stopLoss: dto.stopLoss,
       takeProfit: dto.takeProfit,
+      entryPlaybookType: validatedEntryPlaybookType,
+      entryTagCodes: normalizedEntryTagCodes,
       mentalityNotes: dto.mentalityNotes,
       entryAnalysisImages: dto.entryAnalysisImages,
       entryAnalysisImagesDetailed: dto.entryAnalysisImagesDetailed,
@@ -428,7 +492,6 @@ export class TradeService {
       actualPathImagesDetailed: dto.actualPathImagesDetailed,
       actualPathAnalysis: dto.actualPathAnalysis,
       tradeTags: dto.tradeTags,
-      tagCodes: normalizedTagCodes,
       remarks: dto.remarks,
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
@@ -1581,14 +1644,26 @@ export class TradeService {
   }
 
   private async attachDictionaryTags(trade: Trade) {
-    const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+    const possiblePlaybookTypeItems = await this.dictionaryService.resolveCategoryItemsByCodes(
       trade.userId,
-      'trade_tag',
-      trade.tagCodes,
+      'playbook_type',
+      trade.possiblePlaybookTypes,
+    );
+    const entryTagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      trade.userId,
+      'flashcard_tag',
+      trade.entryTagCodes,
+    );
+    const entryPlaybookTypeItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      trade.userId,
+      'playbook_type',
+      trade.entryPlaybookType ? [trade.entryPlaybookType] : [],
     );
     return {
       ...trade,
-      tagItems,
+      possiblePlaybookTypeItems,
+      entryTagItems,
+      entryPlaybookTypeItem: entryPlaybookTypeItems[0],
     };
   }
 
@@ -1792,16 +1867,79 @@ export class TradeService {
         );
       }
 
-      const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+      const normalizedEntryTagCodes = await this.dictionaryService.assertCategoryCodesExist(
         userId,
-        'trade_tag',
-        dto.tagCodes,
+        'flashcard_tag',
+        dto.entryTagCodes,
       );
+
+      let normalizedPossiblePlaybookTypes: string[] | undefined;
+      if (dto.possiblePlaybookTypes !== undefined) {
+        normalizedPossiblePlaybookTypes = await this.dictionaryService.assertCategoryCodesExist(
+          userId,
+          'playbook_type',
+          dto.possiblePlaybookTypes,
+        );
+        if (normalizedPossiblePlaybookTypes.length === 0) {
+          throw new ValidationException(
+            'possiblePlaybookTypes is required',
+            ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+            '可能剧本类型为必填项',
+          );
+        }
+      }
+
+      let normalizedEntryPlaybookType: string | undefined;
+      if (dto.entryPlaybookType !== undefined) {
+        const trimmedEntryPlaybookType = dto.entryPlaybookType.trim();
+        if (!trimmedEntryPlaybookType) {
+          throw new ValidationException(
+            'entryPlaybookType is required',
+            ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+            '入场剧本类型为必填项',
+          );
+        }
+        [normalizedEntryPlaybookType] = await this.dictionaryService.assertCategoryCodesExist(
+          userId,
+          'playbook_type',
+          [trimmedEntryPlaybookType],
+        );
+      }
+
+      const normalizePlanPlaybookType = async (plan?: { playbookType?: string }) => {
+        if (!plan) return plan;
+        if (plan.playbookType === undefined) return plan;
+        const trimmed = plan.playbookType.trim();
+        if (!trimmed) {
+          return { ...plan, playbookType: undefined };
+        }
+        const [validated] = await this.dictionaryService.assertCategoryCodesExist(
+          userId,
+          'playbook_type',
+          [trimmed],
+        );
+        return { ...plan, playbookType: validated };
+      };
+
+      const normalizedEntryPlanA = await normalizePlanPlaybookType(dto.entryPlanA);
+      const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
+      const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
       const updatedTradeData: Partial<Trade> = {
         ...dto,
         analysisTime: dto.analysisTime, // 行情分析时间
-        ...(dto.tagCodes !== undefined ? { tagCodes: normalizedTagCodes } : {}),
+        ...(dto.possiblePlaybookTypes !== undefined
+          ? { possiblePlaybookTypes: normalizedPossiblePlaybookTypes }
+          : {}),
+        ...(dto.entryTagCodes !== undefined
+          ? { entryTagCodes: normalizedEntryTagCodes }
+          : {}),
+        ...(normalizedEntryPlaybookType !== undefined
+          ? { entryPlaybookType: normalizedEntryPlaybookType }
+          : {}),
+        ...(dto.entryPlanA !== undefined ? { entryPlanA: normalizedEntryPlanA } : {}),
+        ...(dto.entryPlanB !== undefined ? { entryPlanB: normalizedEntryPlanB } : {}),
+        ...(dto.entryPlanC !== undefined ? { entryPlanC: normalizedEntryPlanC } : {}),
         ...(normalizedProfitLossPercentage !== undefined
           ? { profitLossPercentage: normalizedProfitLossPercentage }
           : {}),
@@ -1812,6 +1950,36 @@ export class TradeService {
         ...updatedTradeData, // updatedTradeData 现在包含了正确映射的属性
         updatedAt: new Date().toISOString(),
       };
+
+      if (!Array.isArray(merged.possiblePlaybookTypes) || merged.possiblePlaybookTypes.length === 0) {
+        throw new ValidationException(
+          'possiblePlaybookTypes is required',
+          ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+          '可能剧本类型为必填项',
+        );
+      }
+
+      if (
+        (merged.status === '已入场' || merged.status === '已离场' || merged.status === '提前离场') &&
+        (!Array.isArray(merged.entryTagCodes) || merged.entryTagCodes.length === 0)
+      ) {
+        throw new ValidationException(
+          'entryTagCodes is required',
+          ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+          '入场字典标签为必填项',
+        );
+      }
+
+      if (
+        (merged.status === '已入场' || merged.status === '已离场' || merged.status === '提前离场') &&
+        !merged.entryPlaybookType?.trim()
+      ) {
+        throw new ValidationException(
+          'entryPlaybookType is required',
+          ERROR_CODES.VALIDATION_REQUIRED_FIELD,
+          '入场剧本类型为必填项',
+        );
+      }
 
       merged.exitQualityTag = this.ensureExitQualityTagForExited({
         status: merged.status,
