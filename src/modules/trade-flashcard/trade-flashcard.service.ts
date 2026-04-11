@@ -1,0 +1,335 @@
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DynamoDBDocument } from '@aws-sdk/lib-dynamodb';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { v4 as uuidv4 } from 'uuid';
+import { ResourceNotFoundException } from '../../base/exceptions/custom.exceptions';
+import { ERROR_CODES } from '../../base/constants/error-codes';
+import { ConfigService } from '../common/config.service';
+import { DictionaryService } from '../dictionary/dictionary.service';
+import { CreateTradeFlashcardCardDto } from './dto/create-trade-flashcard-card.dto';
+import { GetTradeFlashcardUploadUrlDto } from './dto/get-trade-flashcard-upload-url.dto';
+import { ListTradeFlashcardCardsDto } from './dto/list-trade-flashcard-cards.dto';
+import { UpdateTradeFlashcardCardDto } from './dto/update-trade-flashcard-card.dto';
+import {
+  TradeFlashcardCard,
+  TradeFlashcardCardSortBy,
+  TradeFlashcardCardSortOrder,
+  TradeFlashcardStatus,
+} from './trade-flashcard.types';
+
+@Injectable()
+export class TradeFlashcardService {
+  private readonly db: DynamoDBDocument;
+  private readonly s3: S3Client;
+  private readonly tableName: string;
+  private readonly bucketName: string;
+  private readonly region: string;
+  private readonly cloudfrontDomain?: string;
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly dictionaryService: DictionaryService,
+  ) {
+    this.region = this.configService.getOrThrow('AWS_REGION');
+    this.tableName = this.configService.getOrThrow('FLASHCARDS_TABLE_NAME');
+    this.bucketName = this.configService.getOrThrow('IMAGE_BUCKET_NAME');
+    this.cloudfrontDomain = this.configService.get('CLOUDFRONT_DOMAIN_NAME');
+
+    this.db = DynamoDBDocument.from(new DynamoDB({ region: this.region }), {
+      marshallOptions: { convertClassInstanceToMap: true },
+    });
+    this.s3 = new S3Client({ region: this.region });
+  }
+
+  async getUploadUrl(userId: string, dto: GetTradeFlashcardUploadUrlDto) {
+    const ext = this.resolveFileExtension(dto.fileName, dto.contentType);
+    const date = new Date().toISOString().slice(0, 10);
+    const key = `trade-flashcards/${userId}/${dto.scope}/${date}/${uuidv4()}.${ext}`;
+
+    const command = new PutObjectCommand({
+      Bucket: this.bucketName,
+      Key: key,
+      ContentType: dto.contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 600 });
+
+    return {
+      success: true,
+      data: {
+        uploadUrl,
+        fileUrl: this.buildFileUrl(key),
+        key,
+        expiresIn: 600,
+      },
+    };
+  }
+
+  async createCard(userId: string, dto: CreateTradeFlashcardCardDto) {
+    if (!dto.preEntryImageUrl?.trim()) {
+      throw new BadRequestException('preEntryImageUrl is required');
+    }
+
+    const now = new Date().toISOString();
+    const cardId = uuidv4();
+    const normalizedTagCodes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'flashcard_tag',
+      dto.tagCodes,
+    );
+    const normalizedPlaybookType = (
+      await this.dictionaryService.assertCategoryCodesExist(
+        userId,
+        'playbook_type',
+        dto.playbookType ? [dto.playbookType] : undefined,
+      )
+    )[0];
+
+    const item: TradeFlashcardCard = {
+      id: cardId,
+      userId,
+      cardId,
+      entityType: 'TRADE_FLASHCARD',
+      tradeFlashcardType: dto.tradeFlashcardType,
+      status: this.resolveStatus(dto.postEntryImageUrl, dto.progressImageUrls),
+      preEntryImageUrl: dto.preEntryImageUrl.trim(),
+      postEntryImageUrl: dto.postEntryImageUrl?.trim() || undefined,
+      progressImageUrls: (dto.progressImageUrls || []).map((item) => item.trim()).filter(Boolean),
+      marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
+      symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
+      playbookType: normalizedPlaybookType,
+      tagCodes: normalizedTagCodes,
+      notes: dto.notes?.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: item });
+
+    return {
+      success: true,
+      data: await this.attachDictionaryTags(item),
+    };
+  }
+
+  async listCards(userId: string, dto: ListTradeFlashcardCardsDto) {
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
+    const cards = await this.listAllCards(userId);
+    const filtered = cards.filter((card) => {
+      if (dto.tradeFlashcardType && card.tradeFlashcardType !== dto.tradeFlashcardType) {
+        return false;
+      }
+      if (dto.status && card.status !== dto.status) {
+        return false;
+      }
+      if (dto.symbolPairInfo) {
+        const keyword = dto.symbolPairInfo.trim().toLowerCase();
+        if (keyword && !(card.symbolPairInfo || '').toLowerCase().includes(keyword)) {
+          return false;
+        }
+      }
+      if (dto.playbookType && card.playbookType !== dto.playbookType) {
+        return false;
+      }
+      if (dto.marketTimeInfo) {
+        const keyword = dto.marketTimeInfo.trim().toLowerCase();
+        if (keyword && !(card.marketTimeInfo || '').toLowerCase().includes(keyword)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    const sorted = this.sortCards(
+      filtered,
+      dto.sortBy || 'CREATED_AT',
+      dto.sortOrder || 'desc',
+    );
+    const items = sorted.slice(offset, offset + pageSize);
+    const nextOffset = offset + items.length;
+
+    return {
+      success: true,
+      data: {
+        items,
+        totalCount: filtered.length,
+        nextCursor: nextOffset < filtered.length ? this.encodeOffsetCursor(nextOffset) : null,
+      },
+    };
+  }
+
+  async updateCard(userId: string, cardId: string, dto: UpdateTradeFlashcardCardDto) {
+    const existing = await this.getCardOrThrow(userId, cardId);
+    const normalizedTagCodes = dto.tagCodes
+      ? await this.dictionaryService.assertCategoryCodesExist(userId, 'flashcard_tag', dto.tagCodes)
+      : existing.tagCodes;
+    const normalizedPlaybookType = dto.playbookType !== undefined
+      ? (
+          await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'playbook_type',
+            dto.playbookType ? [dto.playbookType] : undefined,
+          )
+        )[0]
+      : existing.playbookType;
+
+    const updated: TradeFlashcardCard = {
+      ...existing,
+      tradeFlashcardType: dto.tradeFlashcardType || existing.tradeFlashcardType,
+      preEntryImageUrl: dto.preEntryImageUrl?.trim() || existing.preEntryImageUrl,
+      postEntryImageUrl:
+        dto.postEntryImageUrl !== undefined
+          ? dto.postEntryImageUrl.trim() || undefined
+          : existing.postEntryImageUrl,
+      progressImageUrls:
+        dto.progressImageUrls !== undefined
+          ? dto.progressImageUrls.map((item) => item.trim()).filter(Boolean)
+          : existing.progressImageUrls,
+      marketTimeInfo:
+        dto.marketTimeInfo !== undefined
+          ? dto.marketTimeInfo.trim() || undefined
+          : existing.marketTimeInfo,
+      symbolPairInfo:
+        dto.symbolPairInfo !== undefined
+          ? dto.symbolPairInfo.trim() || undefined
+          : existing.symbolPairInfo,
+      playbookType: normalizedPlaybookType,
+      tagCodes: normalizedTagCodes,
+      notes: dto.notes !== undefined ? dto.notes.trim() || undefined : existing.notes,
+      status: this.resolveStatus(
+        dto.postEntryImageUrl !== undefined ? dto.postEntryImageUrl : existing.postEntryImageUrl,
+        dto.progressImageUrls !== undefined ? dto.progressImageUrls : existing.progressImageUrls,
+      ),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: updated });
+
+    return {
+      success: true,
+      data: await this.attachDictionaryTags(updated),
+    };
+  }
+
+  async deleteCard(userId: string, cardId: string) {
+    await this.getCardOrThrow(userId, cardId);
+    await this.db.delete({ TableName: this.tableName, Key: { userId, cardId } });
+    return { success: true, data: true };
+  }
+
+  private async getCardOrThrow(userId: string, cardId: string) {
+    const result = await this.db.get({ TableName: this.tableName, Key: { userId, cardId } });
+    const item = result.Item as TradeFlashcardCard | undefined;
+    if (!item || item.entityType !== 'TRADE_FLASHCARD') {
+      throw new ResourceNotFoundException('Trade flashcard not found', ERROR_CODES.RESOURCE_NOT_FOUND, '交易闪卡不存在');
+    }
+    return this.attachDictionaryTags(item);
+  }
+
+  private async listAllCards(userId: string): Promise<TradeFlashcardCard[]> {
+    const cards: TradeFlashcardCard[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId',
+        ExpressionAttributeValues: { ':userId': userId },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+
+      const pageItems = (result.Items || []) as TradeFlashcardCard[];
+      const pageCards = pageItems.filter((item) => item.entityType === 'TRADE_FLASHCARD');
+      const normalized = await Promise.all(pageCards.map((item) => this.attachDictionaryTags(item)));
+      cards.push(...normalized);
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return cards;
+  }
+
+  private async attachDictionaryTags(card: TradeFlashcardCard): Promise<TradeFlashcardCard> {
+    const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      card.userId,
+      'flashcard_tag',
+      card.tagCodes,
+    );
+    return { ...card, tagItems };
+  }
+
+  private resolveStatus(postEntryImageUrl?: string, progressImageUrls?: string[]): TradeFlashcardStatus {
+    const hasPost = Boolean(postEntryImageUrl?.trim());
+    const progressCount = (progressImageUrls || []).map((item) => item.trim()).filter(Boolean).length;
+    if (hasPost && progressCount > 0) return 'COMPLETED';
+    if (hasPost) return 'POST_ENTRY';
+    if (progressCount > 0) return 'IN_PROGRESS';
+    return 'PRE_ENTRY';
+  }
+
+  private sortCards(
+    cards: TradeFlashcardCard[],
+    sortBy: TradeFlashcardCardSortBy,
+    sortOrder: TradeFlashcardCardSortOrder,
+  ) {
+    const direction = sortOrder === 'asc' ? 1 : -1;
+    return [...cards].sort((a, b) => {
+      const aTs = this.safeParseTimestamp(sortBy === 'UPDATED_AT' ? a.updatedAt : a.createdAt);
+      const bTs = this.safeParseTimestamp(sortBy === 'UPDATED_AT' ? b.updatedAt : b.createdAt);
+      const diff = (aTs - bTs) * direction;
+      if (diff !== 0) return diff;
+      return this.safeParseTimestamp(b.updatedAt) - this.safeParseTimestamp(a.updatedAt);
+    });
+  }
+
+  private safeParseTimestamp(value?: string) {
+    const parsed = Date.parse(value || '');
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  private resolveFileExtension(fileName: string, contentType: string) {
+    const trimmed = fileName.trim();
+    const dotIdx = trimmed.lastIndexOf('.');
+    if (dotIdx > -1 && dotIdx < trimmed.length - 1) {
+      return trimmed.slice(dotIdx + 1).toLowerCase();
+    }
+
+    const map: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/gif': 'gif',
+      'image/webp': 'webp',
+      'image/svg+xml': 'svg',
+      'image/bmp': 'bmp',
+      'image/tiff': 'tiff',
+    };
+
+    return map[contentType] || 'png';
+  }
+
+  private buildFileUrl(key: string) {
+    if (this.cloudfrontDomain) {
+      return `https://${this.cloudfrontDomain}/${key}`;
+    }
+    return `https://${this.bucketName}.s3.${this.region}.amazonaws.com/${key}`;
+  }
+
+  private encodeOffsetCursor(offset: number) {
+    return Buffer.from(JSON.stringify({ offset }), 'utf8').toString('base64url');
+  }
+
+  private decodeOffsetCursor(cursor?: string) {
+    if (!cursor) return 0;
+    try {
+      const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+      const parsed = JSON.parse(decoded) as { offset?: unknown };
+      const offset = typeof parsed.offset === 'number' ? parsed.offset : 0;
+      return Number.isFinite(offset) && offset >= 0 ? Math.floor(offset) : 0;
+    } catch {
+      return 0;
+    }
+  }
+}

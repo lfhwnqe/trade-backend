@@ -9,6 +9,7 @@ import { TelegramModule } from './modules/telegram/telegram.module';
 import { WebhookModule } from './modules/webhook/webhook.module';
 import { BinanceFuturesModule } from './modules/exchange/binance-futures/binance-futures.module';
 import { FlashcardModule } from './modules/flashcard/flashcard.module';
+import { TradeFlashcardModule } from './modules/trade-flashcard/trade-flashcard.module';
 import { DictionaryModule } from './modules/dictionary/dictionary.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
@@ -23,6 +24,7 @@ import { DictionaryModule } from './modules/dictionary/dictionary.module';
     WebhookModule,
     BinanceFuturesModule,
     FlashcardModule,
+    TradeFlashcardModule,
     DictionaryModule,
     // RAGModule,
   ],
