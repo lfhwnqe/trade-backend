@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateTradeFlashcardCardDto } from './dto/create-trade-flashcard-card.dto';
+import { ConvertTradeFlashcardToFlashcardDto } from './dto/convert-trade-flashcard-to-flashcard.dto';
 import { GetTradeFlashcardUploadUrlDto } from './dto/get-trade-flashcard-upload-url.dto';
 import { ListTradeFlashcardCardsDto } from './dto/list-trade-flashcard-cards.dto';
 import { UpdateTradeFlashcardCardDto } from './dto/update-trade-flashcard-card.dto';
@@ -56,7 +57,7 @@ export class TradeFlashcardController {
   @ApiQuery({ name: 'pageSize', required: false, example: 20 })
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({ name: 'tradeFlashcardType', required: false, enum: ['REAL_TRADE', 'SIM_TRADE'] })
-  @ApiQuery({ name: 'status', required: false, enum: ['PRE_ENTRY', 'IN_PROGRESS', 'POST_ENTRY', 'COMPLETED'] })
+  @ApiQuery({ name: 'lifecycleStatus', required: false, enum: ['IN_PROGRESS', 'COMPLETED'] })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'playbookType', required: false })
   @ApiQuery({ name: 'marketTimeInfo', required: false })
@@ -87,5 +88,19 @@ export class TradeFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.tradeFlashcardService.deleteCard(userId, cardId);
+  }
+
+  @ApiOperation({ summary: '把已完成的交易闪卡转换为常规训练闪卡' })
+  @ApiParam({ name: 'cardId', description: '交易闪卡 ID' })
+  @ApiBody({ type: ConvertTradeFlashcardToFlashcardDto })
+  @Post('cards/:cardId/convert-to-flashcard')
+  async convertToFlashcard(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: ConvertTradeFlashcardToFlashcardDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.tradeFlashcardService.convertToFlashcard(userId, cardId, dto);
   }
 }

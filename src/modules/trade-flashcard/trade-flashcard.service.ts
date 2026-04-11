@@ -8,7 +8,9 @@ import { ResourceNotFoundException } from '../../base/exceptions/custom.exceptio
 import { ERROR_CODES } from '../../base/constants/error-codes';
 import { ConfigService } from '../common/config.service';
 import { DictionaryService } from '../dictionary/dictionary.service';
+import { FlashcardService } from '../flashcard/flashcard.service';
 import { CreateTradeFlashcardCardDto } from './dto/create-trade-flashcard-card.dto';
+import { ConvertTradeFlashcardToFlashcardDto } from './dto/convert-trade-flashcard-to-flashcard.dto';
 import { GetTradeFlashcardUploadUrlDto } from './dto/get-trade-flashcard-upload-url.dto';
 import { ListTradeFlashcardCardsDto } from './dto/list-trade-flashcard-cards.dto';
 import { UpdateTradeFlashcardCardDto } from './dto/update-trade-flashcard-card.dto';
@@ -16,7 +18,6 @@ import {
   TradeFlashcardCard,
   TradeFlashcardCardSortBy,
   TradeFlashcardCardSortOrder,
-  TradeFlashcardStatus,
 } from './trade-flashcard.types';
 
 @Injectable()
@@ -31,6 +32,7 @@ export class TradeFlashcardService {
   constructor(
     private readonly configService: ConfigService,
     private readonly dictionaryService: DictionaryService,
+    private readonly flashcardService: FlashcardService,
   ) {
     this.region = this.configService.getOrThrow('AWS_REGION');
     this.tableName = this.configService.getOrThrow('FLASHCARDS_TABLE_NAME');
@@ -93,7 +95,9 @@ export class TradeFlashcardService {
       cardId,
       entityType: 'TRADE_FLASHCARD',
       tradeFlashcardType: dto.tradeFlashcardType,
-      status: this.resolveStatus(dto.postEntryImageUrl, dto.progressImageUrls),
+      lifecycleStatus: this.resolveLifecycleStatus(dto.postEntryImageUrl, dto.progressImageUrls),
+      processResult: dto.processResult,
+      isSystemAligned: dto.isSystemAligned,
       preEntryImageUrl: dto.preEntryImageUrl.trim(),
       postEntryImageUrl: dto.postEntryImageUrl?.trim() || undefined,
       progressImageUrls: (dto.progressImageUrls || []).map((item) => item.trim()).filter(Boolean),
@@ -102,6 +106,7 @@ export class TradeFlashcardService {
       playbookType: normalizedPlaybookType,
       tagCodes: normalizedTagCodes,
       notes: dto.notes?.trim() || undefined,
+      summary: dto.summary?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -122,7 +127,7 @@ export class TradeFlashcardService {
       if (dto.tradeFlashcardType && card.tradeFlashcardType !== dto.tradeFlashcardType) {
         return false;
       }
-      if (dto.status && card.status !== dto.status) {
+      if (dto.lifecycleStatus && card.lifecycleStatus !== dto.lifecycleStatus) {
         return false;
       }
       if (dto.symbolPairInfo) {
@@ -179,6 +184,14 @@ export class TradeFlashcardService {
     const updated: TradeFlashcardCard = {
       ...existing,
       tradeFlashcardType: dto.tradeFlashcardType || existing.tradeFlashcardType,
+      lifecycleStatus: this.resolveLifecycleStatus(
+        dto.postEntryImageUrl !== undefined ? dto.postEntryImageUrl : existing.postEntryImageUrl,
+        dto.progressImageUrls !== undefined ? dto.progressImageUrls : existing.progressImageUrls,
+      ),
+      processResult:
+        dto.processResult !== undefined ? dto.processResult : existing.processResult,
+      isSystemAligned:
+        dto.isSystemAligned !== undefined ? dto.isSystemAligned : existing.isSystemAligned,
       preEntryImageUrl: dto.preEntryImageUrl?.trim() || existing.preEntryImageUrl,
       postEntryImageUrl:
         dto.postEntryImageUrl !== undefined
@@ -199,10 +212,7 @@ export class TradeFlashcardService {
       playbookType: normalizedPlaybookType,
       tagCodes: normalizedTagCodes,
       notes: dto.notes !== undefined ? dto.notes.trim() || undefined : existing.notes,
-      status: this.resolveStatus(
-        dto.postEntryImageUrl !== undefined ? dto.postEntryImageUrl : existing.postEntryImageUrl,
-        dto.progressImageUrls !== undefined ? dto.progressImageUrls : existing.progressImageUrls,
-      ),
+      summary: dto.summary !== undefined ? dto.summary.trim() || undefined : existing.summary,
       updatedAt: new Date().toISOString(),
     };
 
@@ -218,6 +228,39 @@ export class TradeFlashcardService {
     await this.getCardOrThrow(userId, cardId);
     await this.db.delete({ TableName: this.tableName, Key: { userId, cardId } });
     return { success: true, data: true };
+  }
+
+  async convertToFlashcard(userId: string, cardId: string, dto: ConvertTradeFlashcardToFlashcardDto) {
+    const card = await this.getCardOrThrow(userId, cardId);
+    if (card.lifecycleStatus !== 'COMPLETED') {
+      throw new BadRequestException('Only completed trade flashcards can be converted');
+    }
+    if (!card.postEntryImageUrl?.trim()) {
+      throw new BadRequestException('postEntryImageUrl is required for conversion');
+    }
+    if (!card.marketTimeInfo?.trim() || !card.symbolPairInfo?.trim() || !card.playbookType?.trim()) {
+      throw new BadRequestException('marketTimeInfo, symbolPairInfo and playbookType are required for conversion');
+    }
+
+    const created = await this.flashcardService.createCard(userId, {
+      questionImageUrl: card.preEntryImageUrl,
+      answerImageUrl: card.postEntryImageUrl,
+      expectedAction: dto.expectedAction,
+      direction: dto.expectedAction,
+      behaviorType: dto.behaviorType,
+      invalidationType: dto.invalidationType,
+      systemOutcomeType: dto.systemOutcomeType,
+      marketTimeInfo: card.marketTimeInfo,
+      symbolPairInfo: card.symbolPairInfo,
+      playbookType: card.playbookType,
+      tagCodes: card.tagCodes,
+      notes: [card.notes, card.summary, dto.notes].filter(Boolean).join('\n\n') || undefined,
+    });
+
+    return {
+      success: true,
+      data: created.data,
+    };
   }
 
   private async getCardOrThrow(userId: string, cardId: string) {
@@ -253,21 +296,28 @@ export class TradeFlashcardService {
   }
 
   private async attachDictionaryTags(card: TradeFlashcardCard): Promise<TradeFlashcardCard> {
+    const normalizedCard = this.normalizeCard(card);
     const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
-      card.userId,
+      normalizedCard.userId,
       'flashcard_tag',
-      card.tagCodes,
+      normalizedCard.tagCodes,
     );
-    return { ...card, tagItems };
+    return { ...normalizedCard, tagItems };
   }
 
-  private resolveStatus(postEntryImageUrl?: string, progressImageUrls?: string[]): TradeFlashcardStatus {
+  private resolveLifecycleStatus(postEntryImageUrl?: string, progressImageUrls?: string[]) {
     const hasPost = Boolean(postEntryImageUrl?.trim());
     const progressCount = (progressImageUrls || []).map((item) => item.trim()).filter(Boolean).length;
     if (hasPost && progressCount > 0) return 'COMPLETED';
-    if (hasPost) return 'POST_ENTRY';
-    if (progressCount > 0) return 'IN_PROGRESS';
-    return 'PRE_ENTRY';
+    return 'IN_PROGRESS';
+  }
+
+  private normalizeCard(card: TradeFlashcardCard): TradeFlashcardCard {
+    return {
+      ...card,
+      lifecycleStatus:
+        card.lifecycleStatus || this.resolveLifecycleStatus(card.postEntryImageUrl, card.progressImageUrls),
+    };
   }
 
   private sortCards(

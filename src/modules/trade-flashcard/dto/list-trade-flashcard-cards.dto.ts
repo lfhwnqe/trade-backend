@@ -4,11 +4,11 @@ import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import {
   TRADE_FLASHCARD_CARD_SORT_BY_VALUES,
   TRADE_FLASHCARD_CARD_SORT_ORDER_VALUES,
-  TRADE_FLASHCARD_STATUS_VALUES,
+  TRADE_FLASHCARD_LIFECYCLE_STATUS_VALUES,
   TRADE_FLASHCARD_TYPE_VALUES,
   TradeFlashcardCardSortBy,
   TradeFlashcardCardSortOrder,
-  TradeFlashcardStatus,
+  TradeFlashcardLifecycleStatus,
   TradeFlashcardType,
 } from '../trade-flashcard.types';
 
@@ -31,10 +31,10 @@ export class ListTradeFlashcardCardsDto {
   @IsIn(TRADE_FLASHCARD_TYPE_VALUES)
   tradeFlashcardType?: TradeFlashcardType;
 
-  @ApiPropertyOptional({ enum: TRADE_FLASHCARD_STATUS_VALUES })
+  @ApiPropertyOptional({ enum: TRADE_FLASHCARD_LIFECYCLE_STATUS_VALUES })
   @IsOptional()
-  @IsIn(TRADE_FLASHCARD_STATUS_VALUES)
-  status?: TradeFlashcardStatus;
+  @IsIn(TRADE_FLASHCARD_LIFECYCLE_STATUS_VALUES)
+  lifecycleStatus?: TradeFlashcardLifecycleStatus;
 
   @ApiPropertyOptional({ description: '币对信息（模糊匹配）', example: 'BTC/USDT' })
   @IsOptional()

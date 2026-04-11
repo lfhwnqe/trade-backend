@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common';
 import { CommonModule } from '../common/common.module';
 import { DictionaryModule } from '../dictionary/dictionary.module';
+import { FlashcardModule } from '../flashcard/flashcard.module';
 import { TradeFlashcardController } from './trade-flashcard.controller';
 import { TradeFlashcardService } from './trade-flashcard.service';
 
 @Module({
-  imports: [CommonModule, DictionaryModule],
+  imports: [CommonModule, DictionaryModule, FlashcardModule],
   controllers: [TradeFlashcardController],
   providers: [TradeFlashcardService],
 })

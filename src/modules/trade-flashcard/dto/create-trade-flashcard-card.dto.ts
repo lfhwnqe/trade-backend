@@ -1,7 +1,9 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsIn, IsNotEmpty, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
 import {
+  TRADE_FLASHCARD_PROCESS_RESULT_VALUES,
   TRADE_FLASHCARD_TYPE_VALUES,
+  TradeFlashcardProcessResult,
   TradeFlashcardType,
 } from '../trade-flashcard.types';
 
@@ -51,6 +53,17 @@ export class CreateTradeFlashcardCardDto {
   @MaxLength(100)
   playbookType?: string;
 
+  @ApiPropertyOptional({ enum: TRADE_FLASHCARD_PROCESS_RESULT_VALUES, example: 'SUCCESS' })
+  @IsOptional()
+  @IsString()
+  @IsIn(TRADE_FLASHCARD_PROCESS_RESULT_VALUES)
+  processResult?: TradeFlashcardProcessResult;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isSystemAligned?: boolean;
+
   @ApiPropertyOptional({ description: '字典标签编码（来自 flashcard_tag 分类）', type: [String] })
   @IsOptional()
   @IsArray()
@@ -63,4 +76,10 @@ export class CreateTradeFlashcardCardDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({ example: '这次交易在等待确认后执行更稳，问题出在止盈过早。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  summary?: string;
 }

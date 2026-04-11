@@ -8,5 +8,6 @@ import { DictionaryModule } from '../dictionary/dictionary.module';
   imports: [CommonModule, DictionaryModule],
   controllers: [FlashcardController],
   providers: [FlashcardService],
+  exports: [FlashcardService],
 })
 export class FlashcardModule {}
