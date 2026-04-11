@@ -41,6 +41,7 @@ export type FlashcardInvalidationType =
 export const FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES = [
   'SYSTEM_WIN',
   'SYSTEM_LOSS_NORMAL',
+  'NO_ENTRY',
 ] as const;
 export type FlashcardSystemOutcomeType =
   (typeof FLASHCARD_SYSTEM_OUTCOME_TYPE_VALUES)[number];

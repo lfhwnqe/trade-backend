@@ -235,6 +235,9 @@ export class TradeFlashcardService {
     if (card.lifecycleStatus !== 'COMPLETED') {
       throw new BadRequestException('Only completed trade flashcards can be converted');
     }
+    if (card.convertedToFlashcardAt || card.convertedFlashcardId) {
+      throw new BadRequestException('This trade flashcard has already been converted');
+    }
     if (!card.postEntryImageUrl?.trim()) {
       throw new BadRequestException('postEntryImageUrl is required for conversion');
     }
@@ -247,14 +250,25 @@ export class TradeFlashcardService {
       answerImageUrl: card.postEntryImageUrl,
       expectedAction: dto.expectedAction,
       direction: dto.expectedAction,
-      behaviorType: dto.behaviorType,
-      invalidationType: dto.invalidationType,
       systemOutcomeType: dto.systemOutcomeType,
       marketTimeInfo: card.marketTimeInfo,
       symbolPairInfo: card.symbolPairInfo,
       playbookType: card.playbookType,
       tagCodes: card.tagCodes,
       notes: [card.notes, card.summary, dto.notes].filter(Boolean).join('\n\n') || undefined,
+    });
+
+    const convertedFlashcardId = created.data?.cardId;
+    const convertedAt = new Date().toISOString();
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: {
+        ...card,
+        convertedToFlashcardAt: convertedAt,
+        convertedFlashcardId,
+        updatedAt: convertedAt,
+      },
     });
 
     return {

@@ -37,6 +37,8 @@ export interface TradeFlashcardCard {
   playbookType?: string;
   notes?: string;
   summary?: string;
+  convertedToFlashcardAt?: string;
+  convertedFlashcardId?: string;
   tagCodes?: string[];
   tagItems?: Array<{ code: string; label: string; color?: string; status?: string }>;
   createdAt: string;
