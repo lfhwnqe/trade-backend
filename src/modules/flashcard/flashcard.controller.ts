@@ -156,6 +156,19 @@ export class FlashcardController {
     return this.flashcardService.listCards(userId, query);
   }
 
+  @ApiOperation({ summary: '获取单张闪卡详情' })
+  @ApiParam({ name: 'cardId', description: '卡片 ID' })
+  @ApiResponse({ status: 200, description: '返回卡片详情' })
+  @Get('cards/:cardId')
+  async getCard(@Req() req: Request, @Param('cardId') cardId: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getCard(userId, cardId);
+  }
+
   @ApiOperation({ summary: '删除闪卡' })
   @ApiParam({ name: 'cardId', description: '卡片 ID' })
   @ApiResponse({ status: 200, description: '删除成功' })
@@ -361,6 +374,54 @@ export class FlashcardController {
     }
 
     return this.flashcardService.listSimulationAttempts(userId, query);
+  }
+
+  @ApiOperation({ summary: '获取单条模拟盘 attempt 详情' })
+  @ApiParam({ name: 'attemptId' })
+  @ApiResponse({ status: 200, description: '返回 attempt 详情' })
+  @Get('simulation/attempts/:attemptId')
+  async getSimulationAttempt(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getSimulationAttemptDetail(userId, attemptId);
+  }
+
+  @ApiOperation({ summary: '更新单条模拟盘 attempt 的结果' })
+  @ApiParam({ name: 'attemptId' })
+  @ApiBody({ type: ResolveFlashcardSimulationAttemptDto })
+  @Patch('simulation/attempts/:attemptId')
+  async updateSimulationAttempt(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+    @Body() dto: ResolveFlashcardSimulationAttemptDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.updateSimulationAttempt(userId, attemptId, dto);
+  }
+
+  @ApiOperation({ summary: '删除单条模拟盘 attempt' })
+  @ApiParam({ name: 'attemptId' })
+  @Delete('simulation/attempts/:attemptId')
+  async deleteSimulationAttempt(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.deleteSimulationAttempt(userId, attemptId);
   }
 
   @ApiOperation({ summary: '获取基于主剧本的模拟盘薄弱项统计' })

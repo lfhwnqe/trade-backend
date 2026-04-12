@@ -137,6 +137,22 @@ export class MistakeService {
     });
   }
 
+  async deleteRecordsBySimulationAttemptId(userId: string, attemptId: string) {
+    const items = await this.listAllRecords(userId);
+    const targets = items.filter(
+      (item) => item.simulationAttemptId === attemptId || item.sourceId === attemptId,
+    );
+
+    await Promise.all(
+      targets.map((item) =>
+        this.db.delete({
+          TableName: this.tableName,
+          Key: { userId, mistakeRecordId: item.mistakeRecordId },
+        }),
+      ),
+    );
+  }
+
   inferMistakeDomain(primaryMistakeCode: string): MistakeDomain {
     const code = primaryMistakeCode.trim().toUpperCase();
     if (
