@@ -157,6 +157,12 @@ export class DictionaryController {
     return this.dictionaryService.seedFlashcardTags(this.getUserId(req));
   }
 
+  @ApiOperation({ summary: '一键刷入默认 mistake_type 字典项' })
+  @Post('seeds/mistake-types')
+  async seedMistakeTypes(@Req() req: Request) {
+    return this.dictionaryService.seedMistakeTypes(this.getUserId(req));
+  }
+
   private getUserId(req: Request) {
     const userId = (req as any).user?.sub;
     if (!userId) {

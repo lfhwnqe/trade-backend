@@ -42,6 +42,7 @@ import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulat
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
+import { MistakeService } from '../mistake/mistake.service';
 
 @Injectable()
 export class FlashcardService {
@@ -56,6 +57,7 @@ export class FlashcardService {
   constructor(
     private readonly configService: ConfigService,
     private readonly dictionaryService: DictionaryService,
+    private readonly mistakeService: MistakeService,
   ) {
     this.region = this.configService.getOrThrow('AWS_REGION');
     this.tableName = this.configService.getOrThrow('FLASHCARDS_TABLE_NAME');
@@ -853,6 +855,18 @@ export class FlashcardService {
 
     const result = dto.result;
     const cardQualityScore = dto.cardQualityScore || 5;
+    const primaryMistakeCode = dto.primaryMistakeCode?.trim();
+    const mistakeCodes = dto.mistakeCodes?.map((item) => item.trim()).filter(Boolean);
+    const correctionNote = dto.correctionNote?.trim();
+
+    if (result === 'FAILURE') {
+      if (!primaryMistakeCode) {
+        throw new BadRequestException('primaryMistakeCode is required when result=FAILURE');
+      }
+      if (!mistakeCodes?.length) {
+        throw new BadRequestException('mistakeCodes is required when result=FAILURE');
+      }
+    }
 
     const failureReason = dto.failureReason?.trim();
     const resolvedAttemptUpdate = await this.db.update({
@@ -862,8 +876,8 @@ export class FlashcardService {
         'attribute_exists(cardId) AND entityType = :entityTypeAttempt',
       UpdateExpression:
         result === 'FAILURE'
-          ? 'SET #status = :statusResolved, #result = :result, failureReason = :failureReason, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt'
-          : 'SET #status = :statusResolved, #result = :result, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt REMOVE failureReason',
+          ? 'SET #status = :statusResolved, #result = :result, failureReason = :failureReason, primaryMistakeCode = :primaryMistakeCode, mistakeCodes = :mistakeCodes, correctionNote = :correctionNote, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt'
+          : 'SET #status = :statusResolved, #result = :result, cardQualityScore = :cardQualityScore, resolvedAt = :resolvedAt, updatedAt = :updatedAt REMOVE failureReason, primaryMistakeCode, mistakeCodes, correctionNote',
       ExpressionAttributeNames: {
         '#status': 'status',
         '#result': 'result',
@@ -872,7 +886,14 @@ export class FlashcardService {
         ':entityTypeAttempt': 'SIMULATION_ATTEMPT',
         ':statusResolved': 'RESOLVED',
         ':result': result,
-        ...(result === 'FAILURE' ? { ':failureReason': failureReason || '' } : {}),
+        ...(result === 'FAILURE'
+          ? {
+              ':failureReason': failureReason || '',
+              ':primaryMistakeCode': primaryMistakeCode,
+              ':mistakeCodes': mistakeCodes,
+              ':correctionNote': correctionNote || '',
+            }
+          : {}),
         ':cardQualityScore': cardQualityScore,
         ':resolvedAt': now,
         ':updatedAt': now,
@@ -906,6 +927,19 @@ export class FlashcardService {
     });
 
     const resolvedAttempt = resolvedAttemptUpdate.Attributes as FlashcardSimulationAttemptItem;
+
+    if (result === 'FAILURE' && primaryMistakeCode && mistakeCodes?.length) {
+      await this.mistakeService.createSimulationFailureRecord({
+        userId,
+        attemptId: resolvedAttempt.attemptId,
+        cardId: attempt.targetCardId,
+        playbookType: updatedCard.playbookType,
+        tagCodes: updatedCard.tagCodes,
+        primaryMistakeCode,
+        mistakeCodes,
+        correctionNote,
+      });
+    }
 
     return {
       success: true,
@@ -1976,6 +2010,9 @@ export class FlashcardService {
       entryReason: attempt.entryReason,
       result: attempt.result,
       failureReason: attempt.failureReason,
+      primaryMistakeCode: attempt.primaryMistakeCode,
+      mistakeCodes: attempt.mistakeCodes,
+      correctionNote: attempt.correctionNote,
       cardQualityScore: attempt.cardQualityScore,
       questionImageUrlSnapshot: attempt.questionImageUrlSnapshot,
       answerImageUrlSnapshot: attempt.answerImageUrlSnapshot,

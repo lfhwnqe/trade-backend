@@ -11,6 +11,7 @@ import { BinanceFuturesModule } from './modules/exchange/binance-futures/binance
 import { FlashcardModule } from './modules/flashcard/flashcard.module';
 import { TradeFlashcardModule } from './modules/trade-flashcard/trade-flashcard.module';
 import { DictionaryModule } from './modules/dictionary/dictionary.module';
+import { MistakeModule } from './modules/mistake/mistake.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { DictionaryModule } from './modules/dictionary/dictionary.module';
     FlashcardModule,
     TradeFlashcardModule,
     DictionaryModule,
+    MistakeModule,
     // RAGModule,
   ],
 })

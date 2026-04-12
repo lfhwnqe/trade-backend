@@ -179,6 +179,9 @@ export interface FlashcardSimulationAttemptItem {
   entryReason: string;
   result?: 'SUCCESS' | 'FAILURE';
   failureReason?: string;
+  primaryMistakeCode?: string;
+  mistakeCodes?: string[];
+  correctionNote?: string;
   cardQualityScore?: 1 | 2 | 3 | 4 | 5;
   entrySavedAt: string;
   resolvedAt?: string;

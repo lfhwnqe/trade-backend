@@ -55,6 +55,48 @@ const FLASHCARD_TAG_ITEMS_SEED = [
   { code: 'new_york_session', label: '美盘', description: '题目主要发生在纽约交易时段', color: '#14b8a6', sortOrder: 420 },
 ];
 
+const MISTAKE_TYPE_CATEGORY_SEED = {
+  code: 'mistake_type',
+  name: '误判类型',
+  description: '用于统一标记训练错误与真实交易错误的 taxonomy',
+  bizType: 'COMMON' as const,
+  selectionMode: 'MULTIPLE' as const,
+  sortOrder: 300,
+};
+
+const MISTAKE_TYPE_ITEMS_SEED = [
+  { code: 'MISREAD_PLAYBOOK', label: '剧本识别错误', description: '把当前行情误判成了错误剧本', color: '#64748b', sortOrder: 100 },
+  { code: 'MISREAD_MARKET_STRUCTURE', label: '市场结构识别错误', description: '对趋势、震荡或切换结构判断错误', color: '#64748b', sortOrder: 110 },
+  { code: 'MISREAD_BREAKOUT_QUALITY', label: '突破质量误判', description: '把低质量突破看成有效突破', color: '#64748b', sortOrder: 120 },
+  { code: 'MISREAD_FAKE_BREAK', label: '假突破识别错误', description: '把假突破看成真突破，或反之', color: '#64748b', sortOrder: 130 },
+  { code: 'MISREAD_CONTEXT_ALIGNMENT', label: '背景一致性误判', description: '忽略高周期或大背景方向', color: '#64748b', sortOrder: 140 },
+  { code: 'MISREAD_REVERSAL_SIGNAL', label: '反转信号识别错误', description: '把延续误看成反转，或反之', color: '#64748b', sortOrder: 150 },
+  { code: 'ENTRY_TOO_EARLY', label: '入场过早', description: '确认尚未完成就提前入场', color: '#f59e0b', sortOrder: 200 },
+  { code: 'ENTRY_TOO_LATE', label: '入场过晚', description: '触发已完成、RR 明显恶化后才入场', color: '#f59e0b', sortOrder: 210 },
+  { code: 'NO_CONFIRMATION_WAIT', label: '未等待确认', description: '本应等待 trigger confirm 却抢跑', color: '#f59e0b', sortOrder: 220 },
+  { code: 'MISREAD_SECOND_TEST', label: '二次测试误判', description: '第二次测试尚未成立就进场', color: '#f59e0b', sortOrder: 230 },
+  { code: 'CHASING_AFTER_EXPANSION', label: '扩张后追单', description: '明显扩张后追价入场', color: '#f59e0b', sortOrder: 240 },
+  { code: 'LATE_REACTION_AFTER_SIGNAL', label: '信号滞后反应', description: '看到信号但迟疑太久才执行', color: '#f59e0b', sortOrder: 250 },
+  { code: 'INVALID_STOP_LOGIC', label: '止损逻辑错误', description: '止损位置与入场逻辑不匹配', color: '#ef4444', sortOrder: 300 },
+  { code: 'RR_NOT_ACCEPTABLE', label: 'RR 不可接受仍强做', description: '明知盈亏比不合格仍执行', color: '#ef4444', sortOrder: 310 },
+  { code: 'POSITION_NOT_ACTIONABLE', label: '图形可看不可做', description: '识别方向可能对，但位置不具备可执行性', color: '#ef4444', sortOrder: 320 },
+  { code: 'INVALID_ENTRY_STOP_RELATION', label: '入场与止损关系错误', description: '入场点与失效点距离不合理', color: '#ef4444', sortOrder: 330 },
+  { code: 'NO_CLEAR_INVALIDATION', label: '没有明确失效点', description: '无法回答哪里算逻辑失效', color: '#ef4444', sortOrder: 340 },
+  { code: 'TARGET_NOT_STRUCTURALLY_SUPPORTED', label: '止盈目标脱离结构', description: '目标设置没有结构依据', color: '#ef4444', sortOrder: 350 },
+  { code: 'SHOULD_BE_NO_TRADE', label: '本应不做', description: '最优动作本应是 pass', color: '#8b5cf6', sortOrder: 400 },
+  { code: 'RANGE_CHOP_ENVIRONMENT', label: '震荡环境误用趋势剧本', description: '在混乱环境里硬套趋势型做法', color: '#8b5cf6', sortOrder: 410 },
+  { code: 'LOW_EDGE_SESSION_TIME', label: '低质量时段强做', description: '在低 edge 时段仍强行出手', color: '#8b5cf6', sortOrder: 420 },
+  { code: 'HTF_CONFLICT', label: '高周期冲突', description: '与高周期背景明显冲突', color: '#8b5cf6', sortOrder: 430 },
+  { code: 'NEWS_OR_EVENT_RISK_IGNORED', label: '忽略事件风险', description: '忽略消息或事件驱动的高风险背景', color: '#8b5cf6', sortOrder: 440 },
+  { code: 'OVERCROWDING_SIGNALS', label: '条件过度拼凑', description: '勉强凑出理由，实际没有 clean edge', color: '#8b5cf6', sortOrder: 450 },
+  { code: 'PLAN_NOT_FOLLOWED', label: '未按计划执行', description: '盘中偏离原计划', color: '#06b6d4', sortOrder: 500 },
+  { code: 'HESITATION_MISS', label: '犹豫错失机会', description: '看对但没做，或错过最佳点', color: '#06b6d4', sortOrder: 510 },
+  { code: 'IMPULSIVE_ENTRY', label: '冲动入场', description: '非计划内、情绪化入场', color: '#06b6d4', sortOrder: 520 },
+  { code: 'MANAGEMENT_RULE_BROKEN', label: '持仓管理违规', description: '持仓中未按规则处理', color: '#06b6d4', sortOrder: 530 },
+  { code: 'EXIT_EXECUTION_ERROR', label: '离场执行错误', description: '离场点、离场方式或执行顺序错误', color: '#06b6d4', sortOrder: 540 },
+  { code: 'SIZE_NOT_ALIGNED', label: '仓位不匹配', description: '仓位配置与 setup 质量或风险不一致', color: '#06b6d4', sortOrder: 550 },
+];
+
 @Injectable()
 export class DictionaryService {
   private readonly db: DynamoDBDocument;
@@ -580,6 +622,10 @@ export class DictionaryService {
     };
   }
 
+  async seedMistakeTypes(userId: string) {
+    return this.seedCategoryItems(userId, MISTAKE_TYPE_CATEGORY_SEED, MISTAKE_TYPE_ITEMS_SEED);
+  }
+
   async resolveCategoryItemsByCodes(
     userId: string,
     categoryCode: string,
@@ -817,6 +863,117 @@ export class DictionaryService {
 
   private buildCategoryLookupKey(userId: string, categoryCode: string) {
     return `${userId}#${categoryCode}`;
+  }
+
+  private async seedCategoryItems(
+    userId: string,
+    categorySeed: {
+      code: string;
+      name: string;
+      description: string;
+      bizType: 'COMMON' | 'FLASHCARD' | 'TRADE';
+      selectionMode: 'SINGLE' | 'MULTIPLE';
+      sortOrder: number;
+    },
+    itemSeeds: Array<{
+      code: string;
+      label: string;
+      description?: string;
+      color?: string;
+      sortOrder: number;
+    }>,
+  ) {
+    const now = new Date().toISOString();
+    let category = await this.findCategoryByCode(userId, categorySeed.code);
+
+    if (!category) {
+      category = {
+        userId,
+        categoryId: uuidv4(),
+        code: categorySeed.code,
+        name: categorySeed.name,
+        description: categorySeed.description,
+        bizType: categorySeed.bizType,
+        selectionMode: categorySeed.selectionMode,
+        status: 'ACTIVE',
+        sortOrder: categorySeed.sortOrder,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      await this.db.put({ TableName: this.categoriesTableName, Item: category });
+    } else {
+      category = {
+        ...category,
+        name: categorySeed.name,
+        description: categorySeed.description,
+        bizType: categorySeed.bizType,
+        selectionMode: categorySeed.selectionMode,
+        status: 'ACTIVE',
+        sortOrder: categorySeed.sortOrder,
+        updatedAt: now,
+      };
+
+      await this.db.put({
+        TableName: this.categoriesTableName,
+        Item: category,
+        ConditionExpression: 'attribute_exists(categoryId)',
+      });
+    }
+
+    const existingItems = await this.listItemsByCategoryCode(userId, categorySeed.code);
+    const existingItemMap = new Map(existingItems.map((item) => [item.code, item]));
+    let created = 0;
+    let updated = 0;
+
+    for (const seed of itemSeeds) {
+      const existing = existingItemMap.get(seed.code);
+      if (!existing) {
+        const item: DictionaryEntryItem = {
+          userId,
+          itemId: uuidv4(),
+          categoryCode: categorySeed.code,
+          categoryLookupKey: this.buildCategoryLookupKey(userId, categorySeed.code),
+          code: seed.code,
+          label: seed.label,
+          description: seed.description,
+          color: seed.color,
+          sortOrder: seed.sortOrder,
+          status: 'ACTIVE',
+          createdAt: now,
+          updatedAt: now,
+        };
+        await this.db.put({ TableName: this.itemsTableName, Item: item });
+        created += 1;
+      } else {
+        await this.db.put({
+          TableName: this.itemsTableName,
+          Item: {
+            ...existing,
+            label: seed.label,
+            description: seed.description,
+            color: seed.color,
+            sortOrder: seed.sortOrder,
+            status: 'ACTIVE',
+            updatedAt: now,
+          },
+          ConditionExpression: 'attribute_exists(itemId)',
+        });
+        updated += 1;
+      }
+    }
+
+    const options = await this.getCategoryOptions(userId, categorySeed.code);
+    return {
+      success: true,
+      data: {
+        category: this.toCategoryResponse(category, options.data.items.length),
+        created,
+        updated,
+        total: itemSeeds.length,
+        items: options.data.items,
+      },
+    };
   }
 
   private toCategoryResponse(item: DictionaryCategoryItem, itemCount: number) {

@@ -207,6 +207,24 @@ export class TradingStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    const mistakesTable = new dynamodb.Table(
+      this,
+      `${appName}MistakesTable${envName}`,
+      {
+        tableName: `${appName}-mistakes-${envName.toLowerCase()}`,
+        partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'mistakeRecordId', type: dynamodb.AttributeType.STRING },
+        billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      },
+    );
+
+    mistakesTable.addGlobalSecondaryIndex({
+      indexName: 'userId-createdAt-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // DynamoDB Table for common config
     const configTable = new dynamodb.Table(
       this,
@@ -398,6 +416,7 @@ export class TradingStack extends cdk.Stack {
           FLASHCARDS_TABLE_NAME: flashcardsTable.tableName,
           DICTIONARY_CATEGORIES_TABLE_NAME: dictionaryCategoriesTable.tableName,
           DICTIONARY_ITEMS_TABLE_NAME: dictionaryItemsTable.tableName,
+          MISTAKES_TABLE_NAME: mistakesTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
@@ -460,6 +479,7 @@ export class TradingStack extends cdk.Stack {
     flashcardsTable.grantReadWriteData(fn);
     dictionaryCategoriesTable.grantReadWriteData(fn);
     dictionaryItemsTable.grantReadWriteData(fn);
+    mistakesTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
@@ -538,6 +558,11 @@ export class TradingStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DICTIONARY_ITEMS_TABLE_NAME', {
       value: dictionaryItemsTable.tableName,
       description: `Name of the DynamoDB table for dictionary items in ${appName} ${envName}`,
+    });
+
+    new cdk.CfnOutput(this, 'MISTAKES_TABLE_NAME', {
+      value: mistakesTable.tableName,
+      description: `Name of the DynamoDB table for mistakes in ${appName} ${envName}`,
     });
 
     new cdk.CfnOutput(this, 'CONFIG_TABLE_NAME', {
