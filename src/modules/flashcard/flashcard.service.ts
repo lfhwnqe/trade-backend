@@ -261,6 +261,12 @@ export class FlashcardService {
       if (dto.behaviorType && card.behaviorType !== dto.behaviorType) {
         return false;
       }
+      if (dto.cardId) {
+        const keyword = dto.cardId.trim().toLowerCase();
+        if (keyword && !(card.cardId || '').toLowerCase().includes(keyword)) {
+          return false;
+        }
+      }
       if (
         dto.invalidationType &&
         card.invalidationType !== dto.invalidationType
@@ -313,6 +319,38 @@ export class FlashcardService {
             ? this.encodeOffsetCursor(nextOffset)
             : null,
       },
+    };
+  }
+
+  async rateCard(userId: string, cardId: string, score: number) {
+    const now = new Date().toISOString();
+    const card = await this.getCardById(userId, cardId);
+    const qualityScoreCount = (card.qualityScoreCount || 0) + 1;
+    const previousScoreTotal =
+      (card.qualityScoreAvg || 0) * (card.qualityScoreCount || 0);
+    const qualityScoreAvg = Number(
+      ((previousScoreTotal + score) / qualityScoreCount).toFixed(2),
+    );
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId },
+      ConditionExpression: 'attribute_exists(cardId)',
+      UpdateExpression:
+        'SET qualityScoreAvg = :qualityScoreAvg, qualityScoreCount = :qualityScoreCount, updatedAt = :updatedAt',
+      ExpressionAttributeValues: {
+        ':qualityScoreAvg': qualityScoreAvg,
+        ':qualityScoreCount': qualityScoreCount,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    return {
+      success: true,
+      data: await this.attachDictionaryTags(
+        this.normalizeCard(updated.Attributes as FlashcardCard),
+      ),
     };
   }
 

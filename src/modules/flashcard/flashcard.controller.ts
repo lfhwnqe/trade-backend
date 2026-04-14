@@ -38,6 +38,7 @@ import { ListFlashcardSimulationSessionsDto } from './dto/list-flashcard-simulat
 import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simulation-card-history.dto';
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
+import { RateFlashcardCardDto } from './dto/rate-flashcard-card.dto';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -141,6 +142,7 @@ export class FlashcardController {
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({ name: 'behaviorType', required: false })
   @ApiQuery({ name: 'invalidationType', required: false })
+  @ApiQuery({ name: 'cardId', required: false })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'marketTimeInfo', required: false })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['CREATED_AT', 'UPDATED_AT', 'QUALITY_SCORE_AVG', 'SIMULATION_RESOLVED_COUNT', 'SIMULATION_AVG_RR'] })
@@ -180,6 +182,24 @@ export class FlashcardController {
     }
 
     return this.flashcardService.deleteCard(userId, cardId);
+  }
+
+  @ApiOperation({ summary: '给闪卡打分（复用管理页平均评分字段）' })
+  @ApiParam({ name: 'cardId', description: '卡片 ID' })
+  @ApiBody({ type: RateFlashcardCardDto })
+  @ApiResponse({ status: 200, description: '返回更新后的卡片评分聚合' })
+  @Post('cards/:cardId/rate')
+  async rateCard(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: RateFlashcardCardDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.rateCard(userId, cardId, dto.score);
   }
 
   @ApiOperation({ summary: '开始一次闪卡练习并创建会话' })

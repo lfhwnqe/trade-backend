@@ -43,6 +43,11 @@ export class ListFlashcardCardsDto {
   @IsString()
   symbolPairInfo?: string;
 
+  @ApiPropertyOptional({ description: '闪卡 ID（精确或模糊匹配）', example: 'fc_12345678' })
+  @IsOptional()
+  @IsString()
+  cardId?: string;
+
   @ApiPropertyOptional({
     description: '剧本类型编码（精确匹配，来自 playbook_type）',
     example: 'pullback_continuation',
