@@ -250,6 +250,21 @@ export class FlashcardController {
     return this.flashcardService.finishSession(userId, sessionId);
   }
 
+  @ApiOperation({ summary: '中断一次闪卡练习并保留当前记录' })
+  @ApiResponse({ status: 200, description: '返回中断后的会话统计' })
+  @Post('drill/session/:sessionId/abandon')
+  async abandonSession(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.abandonSession(userId, sessionId);
+  }
+
   @ApiOperation({ summary: '分页查询闪卡练习历史（按时间倒序）' })
   @ApiQuery({ name: 'pageSize', required: false, example: 20 })
   @ApiQuery({ name: 'cursor', required: false })

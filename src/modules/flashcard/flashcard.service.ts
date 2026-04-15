@@ -725,6 +725,55 @@ export class FlashcardService {
     };
   }
 
+  async abandonSession(userId: string, sessionId: string) {
+    const now = new Date().toISOString();
+    const session = await this.getSession(userId, sessionId);
+
+    if (session.status === 'COMPLETED' || session.status === 'ABANDONED') {
+      return {
+        success: true,
+        data: {
+          sessionId,
+          score: this.calcScore(session.correct, session.answered),
+          stats: this.toSessionStats(session),
+        },
+      };
+    }
+
+    const score = this.calcScore(session.correct, session.answered);
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeSessionKey(sessionId) },
+      ConditionExpression:
+        'attribute_exists(cardId) AND entityType = :entityTypeSession',
+      UpdateExpression:
+        'SET #status = :statusAbandoned, endedAt = :endedAt, score = :score, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':entityTypeSession': 'SESSION',
+        ':statusAbandoned': 'ABANDONED',
+        ':endedAt': now,
+        ':score': score,
+        ':updatedAt': now,
+      },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    const updatedSession = updated.Attributes as FlashcardDrillSessionItem;
+
+    return {
+      success: true,
+      data: {
+        sessionId,
+        score: updatedSession.score,
+        stats: this.toSessionStats(updatedSession),
+      },
+    };
+  }
+
   async startSimulationSession(
     userId: string,
     dto: StartFlashcardSimulationSessionDto,
