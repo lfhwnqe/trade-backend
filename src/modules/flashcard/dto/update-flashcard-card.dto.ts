@@ -117,6 +117,26 @@ export class UpdateFlashcardCardDto {
   earlyExitImageUrls?: string[];
 
   @ApiPropertyOptional({
+    type: [String],
+    example: ['https://cdn.example.com/flashcards/u1/order-flow/2026-03-04/jkl.png'],
+    description: '订单流附图（最多 5 张）',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsUrl({}, { each: true })
+  orderFlowImageUrls?: string[];
+
+  @ApiPropertyOptional({
+    example: '这几张订单流图主要看主动卖单吸收和二次回踩时的成交变化。',
+    description: '订单流备注',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  orderFlowRemark?: string;
+
+  @ApiPropertyOptional({
     example: '2026-03-05 09:30 UTC+8',
     description: '行情时间信息（选填）',
   })
