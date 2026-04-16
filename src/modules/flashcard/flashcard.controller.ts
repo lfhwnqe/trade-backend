@@ -287,6 +287,22 @@ export class FlashcardController {
     return this.flashcardService.listDrillSessions(userId, query);
   }
 
+  @ApiOperation({ summary: '获取单个闪卡练习会话详情（含卡片与已答记录）' })
+  @ApiParam({ name: 'sessionId', description: '练习会话 ID' })
+  @ApiResponse({ status: 200, description: '返回练习会话详情、卡片与 attempts' })
+  @Get('drill/session/:sessionId')
+  async getDrillSessionDetail(
+    @Req() req: Request,
+    @Param('sessionId') sessionId: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getDrillSessionDetail(userId, sessionId);
+  }
+
   @ApiOperation({ summary: '获取训练成绩聚合分析' })
   @ApiQuery({ name: 'recentWindow', required: false, example: 30 })
   @ApiResponse({

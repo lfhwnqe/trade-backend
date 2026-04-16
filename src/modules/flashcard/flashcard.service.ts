@@ -594,29 +594,72 @@ export class FlashcardService {
     });
 
     if (existingAttemptResult.Item) {
+      const existingAttempt = existingAttemptResult.Item as FlashcardDrillAttemptItem;
+      const nextUserAction = dto.userAction;
+      const nextIsCorrect = expectedAction === nextUserAction;
+
       if (typeof dto.isFavorite === 'boolean') {
         await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
-        await this.db.update({
-          TableName: this.tableName,
-          Key: { userId, cardId: attemptKey },
-          UpdateExpression:
-            'SET isFavorite = :isFavorite, updatedAt = :updatedAt',
-          ExpressionAttributeValues: {
-            ':isFavorite': dto.isFavorite,
-            ':updatedAt': now,
-          },
-        });
       }
 
       if (typeof dto.note === 'string') {
         await this.updateCardNote(userId, dto.cardId, dto.note);
       }
 
+      await this.db.update({
+        TableName: this.tableName,
+        Key: { userId, cardId: attemptKey },
+        UpdateExpression:
+          'SET userAction = :userAction, expectedAction = :expectedAction, isCorrect = :isCorrect, isFavorite = :isFavorite, noteSnapshot = :noteSnapshot, updatedAt = :updatedAt',
+        ExpressionAttributeValues: {
+          ':userAction': nextUserAction,
+          ':expectedAction': expectedAction,
+          ':isCorrect': nextIsCorrect,
+          ':isFavorite': dto.isFavorite === true ? true : existingAttempt.isFavorite === true,
+          ':noteSnapshot': typeof dto.note === 'string' ? dto.note.trim() || undefined : existingAttempt.noteSnapshot,
+          ':updatedAt': now,
+        },
+      });
+
+      if (
+        existingAttempt.isCorrect !== nextIsCorrect ||
+        existingAttempt.userAction !== nextUserAction
+      ) {
+        const correctDelta = (nextIsCorrect ? 1 : 0) - (existingAttempt.isCorrect ? 1 : 0);
+        const wrongDelta = (nextIsCorrect ? 0 : 1) - (existingAttempt.isCorrect ? 0 : 1);
+
+        const sessionUpdate = await this.db.update({
+          TableName: this.tableName,
+          Key: { userId, cardId: this.makeSessionKey(sessionId) },
+          ConditionExpression:
+            'attribute_exists(cardId) AND entityType = :entityTypeSession',
+          UpdateExpression:
+            'SET correct = correct + :incCorrect, wrong = wrong + :incWrong, updatedAt = :updatedAt',
+          ExpressionAttributeValues: {
+            ':entityTypeSession': 'SESSION',
+            ':incCorrect': correctDelta,
+            ':incWrong': wrongDelta,
+            ':updatedAt': now,
+          },
+          ReturnValues: 'ALL_NEW',
+        });
+
+        return {
+          success: true,
+          data: {
+            isCorrect: nextIsCorrect,
+            expectedAction,
+            runningStats: this.toSessionStats(
+              sessionUpdate.Attributes as FlashcardDrillSessionItem,
+            ),
+          },
+        };
+      }
+
       return {
         success: true,
         data: {
-          isCorrect: (existingAttemptResult.Item as FlashcardDrillAttemptItem)
-            .isCorrect,
+          isCorrect: nextIsCorrect,
           expectedAction,
           runningStats: this.toSessionStats(session),
         },
@@ -1475,6 +1518,52 @@ export class FlashcardService {
           nextOffset < filtered.length
             ? this.encodeOffsetCursor(nextOffset)
             : null,
+      },
+    };
+  }
+
+  async getDrillSessionDetail(userId: string, sessionId: string) {
+    const session = await this.getSession(userId, sessionId);
+    const cards = await this.batchGetCardsByIds(userId, session.cardIds);
+    const cardsById = new Map(cards.map((card) => [card.cardId, card] as const));
+    const orderedCards = session.cardIds
+      .map((cardId) => cardsById.get(cardId))
+      .filter((card): card is FlashcardCard => Boolean(card));
+
+    const attempts = await this.queryByPrefix<FlashcardDrillAttemptItem>(
+      userId,
+      this.makeAttemptPrefix(sessionId),
+    );
+
+    return {
+      success: true,
+      data: {
+        session: {
+          sessionId: session.sessionId,
+          source: session.source,
+          total: session.total,
+          answered: session.answered,
+          correct: session.correct,
+          wrong: session.wrong,
+          status: session.status,
+          startedAt: session.startedAt,
+          endedAt: session.endedAt,
+          updatedAt: session.updatedAt,
+          stats: this.toSessionStats(session),
+        },
+        cards: orderedCards,
+        attempts: attempts
+          .filter((item) => item.entityType === 'ATTEMPT')
+          .sort((a, b) => a.answeredAt.localeCompare(b.answeredAt))
+          .map((item) => ({
+            cardId: item.targetCardId,
+            userAction: item.userAction,
+            expectedAction: item.expectedAction,
+            isCorrect: item.isCorrect,
+            isFavorite: item.isFavorite,
+            noteSnapshot: item.noteSnapshot,
+            answeredAt: item.answeredAt,
+          })),
       },
     };
   }
@@ -2689,6 +2778,10 @@ export class FlashcardService {
 
   private makeAttemptKey(sessionId: string, cardId: string) {
     return `attempt#${sessionId}#${cardId}`;
+  }
+
+  private makeAttemptPrefix(sessionId: string) {
+    return `attempt#${sessionId}#`;
   }
 
   private makeWrongBookKey(cardId: string) {
