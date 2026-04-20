@@ -14,6 +14,14 @@ export class CreateFlashcardSimulationAttemptDto {
   @Max(1)
   revealProgress: number;
 
+  @ApiPropertyOptional({ description: '当前图片左右视口位置（0~1），0 表示最左，1 表示最右', example: 0.18 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  horizontalViewportPercent?: number;
+
   @ApiProperty({ description: '入场线在图片高度中的百分比（0~1）', example: 0.42 })
   @Type(() => Number)
   @IsNumber()

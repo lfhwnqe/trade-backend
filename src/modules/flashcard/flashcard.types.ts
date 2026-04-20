@@ -73,6 +73,14 @@ export interface FlashcardCard {
   id: string;
   userId: string;
   cardId: string;
+  prefilledRevealProgress?: number;
+  prefilledHorizontalViewportPercent?: number;
+  replaySourceAttemptId?: string;
+  previousAttemptResult?: 'SUCCESS' | 'FAILURE';
+  previousEntryDirection?: 'LONG' | 'SHORT';
+  previousEntryReason?: string;
+  previousRrValue?: number;
+  previousFailureReason?: string;
   entityType?: 'CARD';
   questionImageUrl: string;
   answerImageUrl: string;
@@ -172,6 +180,7 @@ export interface FlashcardSimulationAttemptItem {
   questionImageUrlSnapshot?: string;
   answerImageUrlSnapshot?: string;
   revealProgress: number;
+  horizontalViewportPercent?: number;
   replaySourceAttemptId?: string;
   entryLineYPercent: number;
   stopLossLineYPercent: number;

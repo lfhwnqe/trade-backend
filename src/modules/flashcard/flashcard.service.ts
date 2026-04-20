@@ -864,6 +864,7 @@ export class FlashcardService {
           return {
             ...card,
             prefilledRevealProgress: attempt.revealProgress,
+            prefilledHorizontalViewportPercent: attempt.horizontalViewportPercent ?? 0,
             replaySourceAttemptId: attempt.attemptId,
             previousAttemptResult: attempt.result,
             previousEntryDirection: attempt.entryDirection,
@@ -944,6 +945,7 @@ export class FlashcardService {
       questionImageUrlSnapshot: card.questionImageUrl,
       answerImageUrlSnapshot: card.answerImageUrl,
       revealProgress: dto.revealProgress,
+      horizontalViewportPercent: dto.horizontalViewportPercent ?? 0,
       replaySourceAttemptId: dto.replaySourceAttemptId,
       entryLineYPercent: dto.entryLineYPercent,
       stopLossLineYPercent: dto.stopLossLineYPercent,
@@ -2353,6 +2355,7 @@ export class FlashcardService {
       cardId: attempt.targetCardId,
       status: attempt.status,
       revealProgress: attempt.revealProgress,
+      horizontalViewportPercent: attempt.horizontalViewportPercent ?? 0,
       replaySourceAttemptId: attempt.replaySourceAttemptId,
       entryLineYPercent: attempt.entryLineYPercent,
       stopLossLineYPercent: attempt.stopLossLineYPercent,
