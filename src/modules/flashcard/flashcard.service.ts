@@ -429,6 +429,11 @@ export class FlashcardService {
   ) {
     const now = new Date().toISOString();
     const current = await this.getCardById(userId, cardId);
+    const {
+      qualityScoreAvg: _qualityScoreAvg,
+      qualityScoreCount: _qualityScoreCount,
+      ...currentWithoutQualityScore
+    } = current;
 
     const nextAction =
       dto.expectedAction ||
@@ -508,7 +513,7 @@ export class FlashcardService {
     }
 
     const updated: FlashcardCard = {
-      ...current,
+      ...currentWithoutQualityScore,
       entityType: 'CARD',
       questionImageUrl: dto.questionImageUrl || current.questionImageUrl,
       answerImageUrl: dto.answerImageUrl || current.answerImageUrl,

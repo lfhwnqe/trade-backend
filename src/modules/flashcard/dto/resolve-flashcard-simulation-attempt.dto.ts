@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsOptional, IsString, MaxLength, ValidateIf } from 'class-validator';
+import { IsArray, IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min, ValidateIf } from 'class-validator';
 
 export class ResolveFlashcardSimulationAttemptDto {
   @ApiProperty({ enum: ['SUCCESS', 'FAILURE'] })
@@ -30,9 +30,11 @@ export class ResolveFlashcardSimulationAttemptDto {
   @MaxLength(4000)
   correctionNote?: string;
 
-  @ApiPropertyOptional({ enum: [1, 2, 3, 4, 5], default: 5 })
+  @ApiPropertyOptional({ minimum: 1, maximum: 10, default: 5 })
   @IsOptional()
   @Type(() => Number)
-  @IsIn([1, 2, 3, 4, 5])
-  cardQualityScore?: 1 | 2 | 3 | 4 | 5;
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  cardQualityScore?: number;
 }

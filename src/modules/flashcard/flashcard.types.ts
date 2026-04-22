@@ -193,7 +193,7 @@ export interface FlashcardSimulationAttemptItem {
   primaryMistakeCode?: string;
   mistakeCodes?: string[];
   correctionNote?: string;
-  cardQualityScore?: 1 | 2 | 3 | 4 | 5;
+  cardQualityScore?: number;
   entrySavedAt: string;
   resolvedAt?: string;
   createdAt: string;
