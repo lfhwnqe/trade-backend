@@ -8,7 +8,6 @@ import {
   EntryPlan,
   TradeGrade,
   TradeType,
-  ChecklistState,
   AnalysisReviewResult,
 } from '../dto/create-trade.dto';
 
@@ -62,9 +61,6 @@ export interface Trade {
   entryPlanC?: EntryPlan; // 入场计划C
   preEntrySummaryImportance?: number; // 入场前总结重要性评分
 
-  // ===== 入场前检查 =====
-  checklist?: ChecklistState; // 入场前检查清单
-
   // ===== 入场记录 =====
   entryPrice?: number; // 入场价格
   entryTime?: string; // 入场时间
@@ -88,7 +84,7 @@ export interface Trade {
   actualPathImages?: ImageResource[]; // 实际行情路径图片（旧字段）
   actualPathImagesDetailed?: MarketStructureAnalysisImage[]; // 实际行情路径图片（新字段）
   actualPathAnalysis?: string; // 实际行情路径分析
-  tradeTags?: string[]; // 交易标签（旧自定义标签，兼容保留）
+  tradeTags?: string[]; // 内部来源标签（历史兼容 / 自动导入标记）
   entryTagCodes?: string[]; // 入场字典标签编码（来自 FLASHCARD 域 flashcard_tag）
   entryTagItems?: { code: string; label: string; color?: string; status?: string }[]; // 入场字典标签展示聚合
   remarks?: string; // 备注
@@ -121,7 +117,7 @@ export interface Trade {
 
   // ===== 离场执行质量 =====
   exitType?: 'TP' | 'SL' | 'MANUAL' | 'TIME' | 'FORCED';
-  exitQualityTag?: 'TECHNICAL' | 'EMOTIONAL' | 'SYSTEM' | 'UNKNOWN';
+  exitQualityTag?: 'TECHNICAL' | 'EMOTIONAL' | 'SYSTEM' | 'UNKNOWN'; // 历史兼容，前端不再展示
   exitReasonCode?: string;
   exitReasonNote?: string;
   rMetricsReady?: boolean; // R指标是否可用

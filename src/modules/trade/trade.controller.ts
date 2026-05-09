@@ -384,12 +384,6 @@ export class TradeController {
           example: true,
           description: '是否严格遵守交易系统',
         },
-        tradeTags: {
-          type: 'array',
-          items: { type: 'string' },
-          example: ['突破', '趋势跟随'],
-          description: '交易标签（用户自定义）',
-        },
       },
     },
   })

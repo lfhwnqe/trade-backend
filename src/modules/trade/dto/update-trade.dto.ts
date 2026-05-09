@@ -22,7 +22,6 @@ import {
   MarketStructureAnalysisImage,
   EntryPlan,
   TradeType,
-  ChecklistState,
   ExitType,
   ExitQualityTag,
   AnalysisReviewResult,
@@ -294,17 +293,6 @@ export class UpdateTradeDto {
   @Max(5)
   preEntrySummaryImportance?: number;
 
-  // ===== 入场前检查 =====
-  @ApiProperty({
-    description: '入场前检查清单（待入场状态可填写）',
-    type: ChecklistState,
-    required: false,
-  })
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => ChecklistState)
-  checklist?: ChecklistState;
-
   // ===== 入场记录 =====
   @ApiProperty({ description: '入场价格', example: 146.5, required: false })
   @IsOptional()
@@ -508,7 +496,7 @@ export class UpdateTradeDto {
   actualPathAnalysis?: string;
 
   @ApiProperty({
-    description: '交易标签（用户自定义，用于回测/统计）',
+    description: '内部来源标签（历史兼容 / 自动导入标记）',
     example: ['突破', '趋势跟随'],
     required: false,
   })
@@ -682,12 +670,12 @@ export class UpdateTradeDto {
   @IsEnum(ExitType)
   exitType?: ExitType;
 
-  @ApiProperty({ description: '离场质量标签', enum: ExitQualityTag, required: false })
+  @ApiProperty({ description: '离场质量标签（历史兼容，前端不再展示）', enum: ExitQualityTag, required: false })
   @IsOptional()
   @IsEnum(ExitQualityTag)
   exitQualityTag?: ExitQualityTag;
 
-  @ApiProperty({ description: '离场原因代码', required: false })
+  @ApiProperty({ description: '离场原因代码，来自 trade_exit_reason 字典', required: false })
   @IsOptional()
   @IsString()
   exitReasonCode?: string;

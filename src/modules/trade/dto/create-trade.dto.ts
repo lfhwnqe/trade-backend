@@ -162,44 +162,6 @@ export class EntryPlan {
   exitSignal?: string;
 }
 
-export class ChecklistState {
-  @ApiProperty({
-    description: '阶段分析：判断当前行情所处阶段（震荡/趋势）',
-    example: true,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  phaseAnalysis?: boolean;
-
-  @ApiProperty({
-    description: '震荡阶段：关键阻力点、VWAP位置、威科夫区间边缘与小溪测试行为',
-    example: true,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  rangeAnalysis?: boolean;
-
-  @ApiProperty({
-    description: '趋势阶段：最近高成交量节点（可能回调测试点/入场价格）',
-    example: true,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  trendAnalysis?: boolean;
-
-  @ApiProperty({
-    description: '盈亏比计算是否完成',
-    example: true,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  riskRewardCheck?: boolean;
-}
-
 export const ANALYSIS_PERIOD_PRESETS = [
   '15分钟',
   '30分钟',
@@ -440,17 +402,6 @@ export class CreateTradeDto {
   @Max(5)
   @IsOptional()
   preEntrySummaryImportance: number;
-
-  // ===== 入场前检查 =====
-  @ApiProperty({
-    description: '入场前检查清单（待入场状态可填写）',
-    type: ChecklistState,
-    required: false,
-  })
-  @ValidateNested()
-  @Type(() => ChecklistState)
-  @IsOptional()
-  checklist?: ChecklistState;
 
   // ===== 入场记录 =====
   @ApiProperty({ description: '入场价格', example: 146.5 })
@@ -702,7 +653,7 @@ export class CreateTradeDto {
   actualPathAnalysis?: string;
 
   @ApiProperty({
-    description: '交易标签（用户自定义，用于回测/统计）',
+    description: '内部来源标签（历史兼容 / 自动导入标记）',
     example: ['突破', '趋势跟随'],
     required: false,
   })
@@ -893,12 +844,12 @@ export class CreateTradeDto {
   @IsEnum(ExitType)
   exitType?: ExitType;
 
-  @ApiProperty({ description: '离场质量标签', enum: ExitQualityTag, required: false })
+  @ApiProperty({ description: '离场质量标签（历史兼容，前端不再展示）', enum: ExitQualityTag, required: false })
   @IsOptional()
   @IsEnum(ExitQualityTag)
   exitQualityTag?: ExitQualityTag;
 
-  @ApiProperty({ description: '离场原因代码', required: false })
+  @ApiProperty({ description: '离场原因代码，来自 trade_exit_reason 字典', required: false })
   @IsOptional()
   @IsString()
   exitReasonCode?: string;
