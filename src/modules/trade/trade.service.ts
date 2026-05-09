@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CreateTradeDto, TradeResult, TradeType } from './dto/create-trade.dto';
+import {
+  AnalysisReviewResult,
+  CreateTradeDto,
+  TradeResult,
+  TradeType,
+} from './dto/create-trade.dto';
 import { UpdateTradeDto } from './dto/update-trade.dto';
 import { Trade } from './entities/trade.entity';
 import { v4 as uuidv4 } from 'uuid';
@@ -1369,7 +1374,11 @@ export class TradeService {
         return items.slice(0, maxItems);
       };
 
-      const [recentClosedRealTrades, recentClosedSimulationTrades] =
+      const [
+        recentClosedRealTrades,
+        recentClosedSimulationTrades,
+        analysisReviewRealTrades,
+      ] =
         await Promise.all([
           fetchRecentClosedTrades('userId-exitTime-index', TradeType.REAL, 60),
           fetchRecentClosedTrades(
@@ -1377,6 +1386,7 @@ export class TradeService {
             TradeType.SIMULATION,
             60,
           ),
+          fetchRecentClosedTrades('userId-exitTime-index', TradeType.REAL, 500),
         ]);
 
       const recent30Trades = recentClosedRealTrades.slice(0, 30);
@@ -1562,6 +1572,140 @@ export class TradeService {
         };
       };
 
+      const calculateAnalysisReviewStats = async (trades: Trade[]) => {
+        const reviewFields = [
+          'marketStructureReview',
+          'priceActionReview',
+          'orderFlowReview',
+          'indicatorReview',
+        ] as const;
+
+        const isReviewed = (value: unknown) =>
+          value === AnalysisReviewResult.CORRECT ||
+          value === AnalysisReviewResult.WRONG ||
+          value === AnalysisReviewResult.PARTIAL;
+        const hasFinalResult = (trade: Trade) =>
+          trade.tradeResult === TradeResult.PROFIT ||
+          trade.tradeResult === TradeResult.LOSS ||
+          trade.tradeResult === TradeResult.BREAKEVEN;
+
+        const reviewedTrades = trades.filter(
+          (trade) =>
+            hasFinalResult(trade) &&
+            (isReviewed(trade.marketStructureReview) ||
+              isReviewed(trade.priceActionReview)),
+        );
+
+        const coreAnalysisCorrectTrades = reviewedTrades.filter(
+          (trade) =>
+            trade.marketStructureReview === AnalysisReviewResult.CORRECT &&
+            trade.priceActionReview === AnalysisReviewResult.CORRECT,
+        );
+        const coreAnalysisWinRateBase = coreAnalysisCorrectTrades.filter(hasFinalResult);
+        const coreAnalysisWinRate =
+          coreAnalysisWinRateBase.length > 0
+            ? round2(
+                (coreAnalysisWinRateBase.filter(
+                  (trade) => trade.tradeResult === TradeResult.PROFIT,
+                ).length /
+                  coreAnalysisWinRateBase.length) *
+                  100,
+              )
+            : 0;
+
+        const anyWrong = (trade: Trade) =>
+          reviewFields.some((field) => trade[field] === AnalysisReviewResult.WRONG);
+
+        const dimensionStats = reviewFields.reduce(
+          (acc, field) => {
+            const fieldTrades = trades.filter((trade) => isReviewed(trade[field]));
+            const correct = fieldTrades.filter(
+              (trade) => trade[field] === AnalysisReviewResult.CORRECT,
+            ).length;
+            const partial = fieldTrades.filter(
+              (trade) => trade[field] === AnalysisReviewResult.PARTIAL,
+            ).length;
+            const wrong = fieldTrades.filter(
+              (trade) => trade[field] === AnalysisReviewResult.WRONG,
+            ).length;
+
+            acc[field] = {
+              reviewed: fieldTrades.length,
+              correct,
+              partial,
+              wrong,
+              correctRate:
+                fieldTrades.length > 0 ? round2((correct / fieldTrades.length) * 100) : 0,
+            };
+            return acc;
+          },
+          {} as Record<
+            (typeof reviewFields)[number],
+            {
+              reviewed: number;
+              correct: number;
+              partial: number;
+              wrong: number;
+              correctRate: number;
+            }
+          >,
+        );
+
+        const mistakeCounts = new Map<string, number>();
+        reviewedTrades.forEach((trade) => {
+          const codes = Array.from(
+            new Set(
+              [
+                trade.primaryAnalysisMistakeCode,
+                ...(trade.analysisMistakeCodes || []),
+              ]
+                .map((code) => `${code || ''}`.trim())
+                .filter(Boolean),
+            ),
+          );
+          codes.forEach((code) => mistakeCounts.set(code, (mistakeCounts.get(code) || 0) + 1));
+        });
+
+        const topMistakeCodes = Array.from(mistakeCounts.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5);
+
+        let mistakeLabelMap = new Map<string, { label: string; color?: string }>();
+        try {
+          const resolved = await this.dictionaryService.resolveCategoryItemsByCodes(
+            userId,
+            'mistake_type',
+            topMistakeCodes.map(([code]) => code),
+          );
+          mistakeLabelMap = new Map(
+            resolved.map((item) => [item.code, { label: item.label, color: item.color }]),
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Resolve mistake_type labels for dashboard failed: ${error.message}`,
+          );
+        }
+
+        return {
+          analysisReviewedTradeCount: reviewedTrades.length,
+          coreAnalysisCorrectCount: coreAnalysisCorrectTrades.length,
+          coreAnalysisWinRate,
+          analysisCorrectButLoss: coreAnalysisCorrectTrades.filter(
+            (trade) => trade.tradeResult === TradeResult.LOSS,
+          ).length,
+          analysisWrongButProfit: reviewedTrades.filter(
+            (trade) => anyWrong(trade) && trade.tradeResult === TradeResult.PROFIT,
+          ).length,
+          dimensions: dimensionStats,
+          topMistakes: topMistakeCodes.map(([code, count]) => ({
+            code,
+            label: mistakeLabelMap.get(code)?.label || code,
+            color: mistakeLabelMap.get(code)?.color,
+            count,
+          })),
+        };
+      };
+
       // 两种交易数量字段（用于图表）
       const recent30RealTradeCount = recent30Trades.length;
       const recent30SimulationTradeCount = recent30SimulationTrades.length;
@@ -1588,6 +1732,9 @@ export class TradeService {
       const recent30SimulationDisciplineStats = calculateDisciplineStats(
         recent30SimulationTrades,
         previous30SimulationTrades,
+      );
+      const analysisReviewStats = await calculateAnalysisReviewStats(
+        analysisReviewRealTrades,
       );
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
@@ -1626,6 +1773,7 @@ export class TradeService {
           recent30SimulationRStats,
           recent30DisciplineStats,
           recent30SimulationDisciplineStats,
+          analysisReviewStats,
           summaryHighlights,
           recentTrades,
         },
