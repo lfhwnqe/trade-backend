@@ -25,6 +25,7 @@ import {
   ChecklistState,
   ExitType,
   ExitQualityTag,
+  AnalysisReviewResult,
 } from './create-trade.dto';
 import { TradeGrade } from './create-trade.dto';
 import { ApiProperty } from '@nestjs/swagger';
@@ -572,6 +573,42 @@ export class UpdateTradeDto {
   @Type(() => MarketStructureAnalysisImage)
   @ArrayMaxSize(5)
   analysisImagesDetailed?: MarketStructureAnalysisImage[];
+
+  @ApiProperty({ description: '市场结构分析复盘结果', enum: AnalysisReviewResult, required: false })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  marketStructureReview?: AnalysisReviewResult;
+
+  @ApiProperty({ description: '价格行为分析复盘结果', enum: AnalysisReviewResult, required: false })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  priceActionReview?: AnalysisReviewResult;
+
+  @ApiProperty({ description: '订单流分析复盘结果', enum: AnalysisReviewResult, required: false })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  orderFlowReview?: AnalysisReviewResult;
+
+  @ApiProperty({ description: '辅助指标分析复盘结果', enum: AnalysisReviewResult, required: false })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  indicatorReview?: AnalysisReviewResult;
+
+  @ApiProperty({ description: '分析错因标签编码，来自 mistake_type 字典', type: [String], required: false })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  analysisMistakeCodes?: string[];
+
+  @ApiProperty({ description: '主分析错因编码，来自 mistake_type 字典', required: false })
+  @IsOptional()
+  @IsString()
+  primaryAnalysisMistakeCode?: string;
+
+  @ApiProperty({ description: '分析复盘总结', required: false })
+  @IsOptional()
+  @IsString()
+  analysisReviewSummary?: string;
 
   // ===== R 模型（计划层） =====
   @ApiProperty({ description: '风险模型版本', example: 'r-v1', required: false })

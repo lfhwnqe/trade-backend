@@ -9,6 +9,7 @@ import {
   TradeGrade,
   TradeType,
   ChecklistState,
+  AnalysisReviewResult,
 } from '../dto/create-trade.dto';
 
 /**
@@ -95,6 +96,13 @@ export interface Trade {
   lessonsLearnedImportance?: number; // 交易完成后总结重要性评分
   analysisImages?: ImageResource[]; // 分析图（旧字段），最多5张
   analysisImagesDetailed?: MarketStructureAnalysisImage[]; // 分析图（新字段），最多5张
+  marketStructureReview?: AnalysisReviewResult; // 市场结构分析复盘结果
+  priceActionReview?: AnalysisReviewResult; // 价格行为分析复盘结果
+  orderFlowReview?: AnalysisReviewResult; // 订单流分析复盘结果
+  indicatorReview?: AnalysisReviewResult; // 辅助指标分析复盘结果
+  analysisMistakeCodes?: string[]; // 分析错因标签编码，来自 mistake_type
+  primaryAnalysisMistakeCode?: string; // 主分析错因编码，来自 mistake_type
+  analysisReviewSummary?: string; // 分析复盘总结
 
   // ===== R 模型（计划层） =====
   riskModelVersion?: string; // 风险模型版本，例如 r-v1

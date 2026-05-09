@@ -410,6 +410,32 @@ export class TradeService {
     const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
     const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
+    const normalizedAnalysisMistakeCodes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'mistake_type',
+      dto.analysisMistakeCodes,
+    );
+    const trimmedPrimaryAnalysisMistakeCode = dto.primaryAnalysisMistakeCode?.trim();
+    const primaryAnalysisMistakeCode = trimmedPrimaryAnalysisMistakeCode
+      ? (
+          await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'mistake_type',
+            [trimmedPrimaryAnalysisMistakeCode],
+          )
+        )[0]
+      : undefined;
+    if (
+      primaryAnalysisMistakeCode &&
+      !normalizedAnalysisMistakeCodes.includes(primaryAnalysisMistakeCode)
+    ) {
+      throw new ValidationException(
+        'primaryAnalysisMistakeCode must be included in analysisMistakeCodes',
+        ERROR_CODES.VALIDATION_INVALID_VALUE,
+        '主分析错因必须包含在分析错因标签中',
+      );
+    }
+
     const normalizedExitQualityTag = this.ensureExitQualityTagForExited({
       status: dto.status,
       exitQualityTag: dto.exitQualityTag,
@@ -496,6 +522,13 @@ export class TradeService {
       lessonsLearned: dto.lessonsLearned,
       analysisImages: dto.analysisImages,
       analysisImagesDetailed: dto.analysisImagesDetailed,
+      marketStructureReview: dto.marketStructureReview,
+      priceActionReview: dto.priceActionReview,
+      orderFlowReview: dto.orderFlowReview,
+      indicatorReview: dto.indicatorReview,
+      analysisMistakeCodes: normalizedAnalysisMistakeCodes,
+      primaryAnalysisMistakeCode,
+      analysisReviewSummary: dto.analysisReviewSummary,
       // R模型字段
       riskModelVersion: dto.riskModelVersion,
       plannedRiskAmount: dto.plannedRiskAmount,
@@ -1925,6 +1958,27 @@ export class TradeService {
       const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
       const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
+      let normalizedAnalysisMistakeCodes: string[] | undefined;
+      if (dto.analysisMistakeCodes !== undefined) {
+        normalizedAnalysisMistakeCodes = await this.dictionaryService.assertCategoryCodesExist(
+          userId,
+          'mistake_type',
+          dto.analysisMistakeCodes,
+        );
+      }
+
+      let primaryAnalysisMistakeCode: string | undefined;
+      if (dto.primaryAnalysisMistakeCode !== undefined) {
+        const trimmed = dto.primaryAnalysisMistakeCode.trim();
+        if (trimmed) {
+          [primaryAnalysisMistakeCode] = await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'mistake_type',
+            [trimmed],
+          );
+        }
+      }
+
       const updatedTradeData: Partial<Trade> = {
         ...dto,
         analysisTime: dto.analysisTime, // 行情分析时间
@@ -1940,6 +1994,12 @@ export class TradeService {
         ...(dto.entryPlanA !== undefined ? { entryPlanA: normalizedEntryPlanA } : {}),
         ...(dto.entryPlanB !== undefined ? { entryPlanB: normalizedEntryPlanB } : {}),
         ...(dto.entryPlanC !== undefined ? { entryPlanC: normalizedEntryPlanC } : {}),
+        ...(dto.analysisMistakeCodes !== undefined
+          ? { analysisMistakeCodes: normalizedAnalysisMistakeCodes }
+          : {}),
+        ...(dto.primaryAnalysisMistakeCode !== undefined
+          ? { primaryAnalysisMistakeCode }
+          : {}),
         ...(normalizedProfitLossPercentage !== undefined
           ? { profitLossPercentage: normalizedProfitLossPercentage }
           : {}),
@@ -1978,6 +2038,17 @@ export class TradeService {
           'entryPlaybookType is required',
           ERROR_CODES.VALIDATION_REQUIRED_FIELD,
           '入场剧本类型为必填项',
+        );
+      }
+
+      if (
+        merged.primaryAnalysisMistakeCode &&
+        !merged.analysisMistakeCodes?.includes(merged.primaryAnalysisMistakeCode)
+      ) {
+        throw new ValidationException(
+          'primaryAnalysisMistakeCode must be included in analysisMistakeCodes',
+          ERROR_CODES.VALIDATION_INVALID_VALUE,
+          '主分析错因必须包含在分析错因标签中',
         );
       }
 

@@ -60,6 +60,14 @@ export enum ExitQualityTag {
   UNKNOWN = 'UNKNOWN',
 }
 
+// 分析复盘结果
+export enum AnalysisReviewResult {
+  CORRECT = 'CORRECT',
+  WRONG = 'WRONG',
+  PARTIAL = 'PARTIAL',
+  NOT_REVIEWED = 'NOT_REVIEWED',
+}
+
 // 交易记录状态枚举
 export enum TradeStatus {
   ANALYZED = '已分析',
@@ -521,15 +529,11 @@ export class CreateTradeDto {
   @ApiProperty({
     description: '离场理由',
     example: '价格达到目标位，成交量有很大的放大',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  @ValidateIf(
-    (o) =>
-      o.status === TradeStatus.ENTERED ||
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
-  )
-  exitReason: string;
+  exitReason?: string;
 
   @ApiProperty({
     description: '提前离场原因',
@@ -545,15 +549,11 @@ export class CreateTradeDto {
     description: '交易过程中心态记录',
     example:
       '入场后价格快速下跌，感到紧张但坚持止损点\n价格回升后感到放松，按计划持有',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  @ValidateIf(
-    (o) =>
-      o.status === TradeStatus.ENTERED ||
-      o.status === TradeStatus.EXITED ||
-      o.status === TradeStatus.EARLY_EXITED,
-  )
-  mentalityNotes: string;
+  mentalityNotes?: string;
 
   @ApiProperty({
     description: '已入场分析图，最多5张',
@@ -695,13 +695,11 @@ export class CreateTradeDto {
   @ApiProperty({
     description: '实际行情路径分析',
     example: '价格如预期在价值区内震荡后向上突破，但突破力度不及预期',
+    required: false,
   })
+  @IsOptional()
   @IsString()
-  @ValidateIf(
-    (o) =>
-      o.status === TradeStatus.EXITED || o.status === TradeStatus.EARLY_EXITED,
-  )
-  actualPathAnalysis: string;
+  actualPathAnalysis?: string;
 
   @ApiProperty({
     description: '交易标签（用户自定义，用于回测/统计）',
@@ -766,6 +764,61 @@ export class CreateTradeDto {
   @Type(() => MarketStructureAnalysisImage)
   @ArrayMaxSize(5)
   analysisImagesDetailed?: MarketStructureAnalysisImage[];
+
+  @ApiPropertyOptional({
+    description: '市场结构分析复盘结果',
+    enum: AnalysisReviewResult,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  marketStructureReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '价格行为分析复盘结果',
+    enum: AnalysisReviewResult,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  priceActionReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '订单流分析复盘结果',
+    enum: AnalysisReviewResult,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  orderFlowReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '辅助指标分析复盘结果',
+    enum: AnalysisReviewResult,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  indicatorReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '分析错因标签编码，来自 mistake_type 字典',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  analysisMistakeCodes?: string[];
+
+  @ApiPropertyOptional({
+    description: '主分析错因编码，来自 mistake_type 字典',
+  })
+  @IsOptional()
+  @IsString()
+  primaryAnalysisMistakeCode?: string;
+
+  @ApiPropertyOptional({
+    description: '分析复盘总结',
+  })
+  @IsOptional()
+  @IsString()
+  analysisReviewSummary?: string;
 
   // ===== R 模型（计划层） =====
   @ApiProperty({ description: '风险模型版本', example: 'r-v1', required: false })
