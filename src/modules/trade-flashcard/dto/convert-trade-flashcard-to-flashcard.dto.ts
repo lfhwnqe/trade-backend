@@ -23,4 +23,31 @@ export class ConvertTradeFlashcardToFlashcardDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: '2026-04-10 14:35 UTC+8',
+    description: '转换为常规训练闪卡时的行情时间；原交易闪卡缺失时可在这里补录',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  marketTimeInfo?: string;
+
+  @ApiPropertyOptional({
+    example: 'BTC/USDT',
+    description: '转换为常规训练闪卡时的币对；原交易闪卡缺失时可在这里补录',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  symbolPairInfo?: string;
+
+  @ApiPropertyOptional({
+    example: 'pullback_continuation',
+    description: '转换为常规训练闪卡时的剧本类型；原交易闪卡缺失时可在这里补录',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  playbookType?: string;
 }

@@ -241,7 +241,12 @@ export class TradeFlashcardService {
     if (!card.postEntryImageUrl?.trim()) {
       throw new BadRequestException('postEntryImageUrl is required for conversion');
     }
-    if (!card.marketTimeInfo?.trim() || !card.symbolPairInfo?.trim() || !card.playbookType?.trim()) {
+
+    const marketTimeInfo = dto.marketTimeInfo?.trim() || card.marketTimeInfo?.trim();
+    const symbolPairInfo = dto.symbolPairInfo?.trim() || card.symbolPairInfo?.trim();
+    const playbookType = dto.playbookType?.trim() || card.playbookType?.trim();
+
+    if (!marketTimeInfo || !symbolPairInfo || !playbookType) {
       throw new BadRequestException('marketTimeInfo, symbolPairInfo and playbookType are required for conversion');
     }
 
@@ -251,9 +256,9 @@ export class TradeFlashcardService {
       expectedAction: dto.expectedAction,
       direction: dto.expectedAction,
       systemOutcomeType: dto.systemOutcomeType,
-      marketTimeInfo: card.marketTimeInfo,
-      symbolPairInfo: card.symbolPairInfo,
-      playbookType: card.playbookType,
+      marketTimeInfo,
+      symbolPairInfo,
+      playbookType,
       tagCodes: card.tagCodes,
       notes: [card.notes, card.summary, dto.notes].filter(Boolean).join('\n\n') || undefined,
     });
