@@ -407,6 +407,16 @@ export class TradeService {
         '主分析错因必须包含在分析错因标签中',
       );
     }
+    if (
+      dto.marketStructureReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE ||
+      dto.priceActionReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE
+    ) {
+      throw new ValidationException(
+        'NO_SPECIFIC_FEATURE is only allowed for orderFlowReview and indicatorReview',
+        ERROR_CODES.VALIDATION_INVALID_VALUE,
+        '没有特定特征仅适用于订单流分析和指标参数分析',
+      );
+    }
 
     const trimmedExitReasonCode = dto.exitReasonCode?.trim();
     const validatedExitReasonCode = trimmedExitReasonCode
@@ -502,6 +512,7 @@ export class TradeService {
       priceActionReview: dto.priceActionReview,
       orderFlowReview: dto.orderFlowReview,
       indicatorReview: dto.indicatorReview,
+      riskRewardRatioPrecise: dto.riskRewardRatioPrecise,
       analysisMistakeCodes: normalizedAnalysisMistakeCodes,
       primaryAnalysisMistakeCode,
       analysisReviewSummary: dto.analysisReviewSummary,
@@ -1628,12 +1639,16 @@ export class TradeService {
             const wrong = fieldTrades.filter(
               (trade) => trade[field] === AnalysisReviewResult.WRONG,
             ).length;
+            const noSpecificFeature = trades.filter(
+              (trade) => trade[field] === AnalysisReviewResult.NO_SPECIFIC_FEATURE,
+            ).length;
 
             acc[field] = {
               reviewed: fieldTrades.length,
               correct,
               partial,
               wrong,
+              noSpecificFeature,
               correctRate:
                 fieldTrades.length > 0 ? round2((correct / fieldTrades.length) * 100) : 0,
             };
@@ -1646,10 +1661,18 @@ export class TradeService {
               correct: number;
               partial: number;
               wrong: number;
+              noSpecificFeature: number;
               correctRate: number;
             }
           >,
         );
+
+        const riskRewardRatioPrecisionTrades = trades.filter(
+          (trade) => typeof trade.riskRewardRatioPrecise === 'boolean',
+        );
+        const riskRewardRatioPreciseCount = riskRewardRatioPrecisionTrades.filter(
+          (trade) => trade.riskRewardRatioPrecise === true,
+        ).length;
 
         const mistakeCounts = new Map<string, number>();
         reviewedTrades.forEach((trade) => {
@@ -1696,6 +1719,18 @@ export class TradeService {
           analysisWrongButProfit: reviewedTrades.filter(
             (trade) => anyWrong(trade) && trade.tradeResult === TradeResult.PROFIT,
           ).length,
+          riskRewardRatioPrecision: {
+            recorded: riskRewardRatioPrecisionTrades.length,
+            precise: riskRewardRatioPreciseCount,
+            imprecise: riskRewardRatioPrecisionTrades.length - riskRewardRatioPreciseCount,
+            preciseRate:
+              riskRewardRatioPrecisionTrades.length > 0
+                ? round2(
+                    (riskRewardRatioPreciseCount / riskRewardRatioPrecisionTrades.length) *
+                      100,
+                  )
+                : 0,
+          },
           dimensions: dimensionStats,
           topMistakes: topMistakeCodes.map(([code, count]) => ({
             code,
@@ -2162,6 +2197,16 @@ export class TradeService {
           'primaryAnalysisMistakeCode must be included in analysisMistakeCodes',
           ERROR_CODES.VALIDATION_INVALID_VALUE,
           '主分析错因必须包含在分析错因标签中',
+        );
+      }
+      if (
+        merged.marketStructureReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE ||
+        merged.priceActionReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE
+      ) {
+        throw new ValidationException(
+          'NO_SPECIFIC_FEATURE is only allowed for orderFlowReview and indicatorReview',
+          ERROR_CODES.VALIDATION_INVALID_VALUE,
+          '没有特定特征仅适用于订单流分析和指标参数分析',
         );
       }
 

@@ -66,6 +66,7 @@ export enum AnalysisReviewResult {
   WRONG = 'WRONG',
   PARTIAL = 'PARTIAL',
   NOT_REVIEWED = 'NOT_REVIEWED',
+  NO_SPECIFIC_FEATURE = 'NO_SPECIFIC_FEATURE',
 }
 
 // 交易记录状态枚举
@@ -747,6 +748,13 @@ export class CreateTradeDto {
   @IsOptional()
   @IsEnum(AnalysisReviewResult)
   indicatorReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '盈亏比设置是否精准',
+  })
+  @IsOptional()
+  @IsBoolean()
+  riskRewardRatioPrecise?: boolean;
 
   @ApiPropertyOptional({
     description: '分析错因标签编码，来自 mistake_type 字典',

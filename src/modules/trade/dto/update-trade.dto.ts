@@ -582,6 +582,11 @@ export class UpdateTradeDto {
   @IsEnum(AnalysisReviewResult)
   indicatorReview?: AnalysisReviewResult;
 
+  @ApiProperty({ description: '盈亏比设置是否精准', required: false })
+  @IsOptional()
+  @IsBoolean()
+  riskRewardRatioPrecise?: boolean;
+
   @ApiProperty({ description: '分析错因标签编码，来自 mistake_type 字典', type: [String], required: false })
   @IsOptional()
   @IsArray()

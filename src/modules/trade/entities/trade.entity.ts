@@ -96,6 +96,7 @@ export interface Trade {
   priceActionReview?: AnalysisReviewResult; // 价格行为分析复盘结果
   orderFlowReview?: AnalysisReviewResult; // 订单流分析复盘结果
   indicatorReview?: AnalysisReviewResult; // 辅助指标分析复盘结果
+  riskRewardRatioPrecise?: boolean; // 盈亏比设置是否精准
   analysisMistakeCodes?: string[]; // 分析错因标签编码，来自 mistake_type
   primaryAnalysisMistakeCode?: string; // 主分析错因编码，来自 mistake_type
   analysisReviewSummary?: string; // 分析复盘总结
