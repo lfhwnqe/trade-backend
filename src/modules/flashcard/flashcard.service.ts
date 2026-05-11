@@ -48,6 +48,8 @@ import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simu
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
 import { MistakeService } from '../mistake/mistake.service';
+import { UpdateFlashcardDrillStatusDto } from './dto/update-flashcard-drill-status.dto';
+import { DuplicateFlashcardCardDto } from './dto/duplicate-flashcard-card.dto';
 
 @Injectable()
 export class FlashcardService {
@@ -180,7 +182,9 @@ export class FlashcardService {
 
   async randomCards(userId: string, dto: RandomFlashcardCardsDto) {
     const cards = await this.listAllCards(userId);
-    const filtered = cards.filter((card) => this.matchesFilters(card, dto));
+    const filtered = cards.filter(
+      (card) => this.isDrillEnabled(card) && this.matchesFilters(card, dto),
+    );
 
     this.shuffleInPlace(filtered);
 
@@ -303,6 +307,11 @@ export class FlashcardService {
           return false;
         }
       }
+      if (dto.drillStatus && dto.drillStatus !== 'ALL') {
+        if (this.resolveDrillStatus(card) !== dto.drillStatus) {
+          return false;
+        }
+      }
       return true;
     });
 
@@ -390,6 +399,183 @@ export class FlashcardService {
       data: {
         cardId,
       },
+    };
+  }
+
+  async updateCardDrillStatus(
+    userId: string,
+    cardId: string,
+    dto: UpdateFlashcardDrillStatusDto,
+  ) {
+    const now = new Date().toISOString();
+    const isDisabled = dto.drillStatus === 'DISABLED';
+    const disabledReason = dto.disabledReason?.trim();
+
+    const updated = await this.db.update({
+      TableName: this.tableName,
+      Key: { userId, cardId },
+      ConditionExpression:
+        'attribute_exists(cardId) AND (attribute_not_exists(entityType) OR entityType = :entityTypeCard)',
+      UpdateExpression: isDisabled
+        ? 'SET drillStatus = :drillStatus, disabledAt = :disabledAt, disabledReason = :disabledReason, updatedAt = :updatedAt, entityType = if_not_exists(entityType, :entityTypeCard)'
+        : 'SET drillStatus = :drillStatus, updatedAt = :updatedAt, entityType = if_not_exists(entityType, :entityTypeCard) REMOVE disabledAt, disabledReason',
+      ExpressionAttributeValues: isDisabled
+        ? {
+            ':entityTypeCard': 'CARD',
+            ':drillStatus': dto.drillStatus,
+            ':disabledAt': now,
+            ':disabledReason': disabledReason || '',
+            ':updatedAt': now,
+          }
+        : {
+            ':entityTypeCard': 'CARD',
+            ':drillStatus': dto.drillStatus,
+            ':updatedAt': now,
+          },
+      ReturnValues: 'ALL_NEW',
+    });
+
+    return {
+      success: true,
+      data: await this.attachDictionaryTags(
+        this.normalizeCard(updated.Attributes as FlashcardCard),
+      ),
+    };
+  }
+
+  async duplicateCard(
+    userId: string,
+    cardId: string,
+    dto: DuplicateFlashcardCardDto,
+  ) {
+    const source = await this.getCardById(userId, cardId);
+    const overrides = dto.overrides || {};
+    const now = new Date().toISOString();
+    const nextCardId = uuidv4();
+
+    const expectedAction =
+      overrides.expectedAction ||
+      overrides.direction ||
+      source.expectedAction ||
+      source.direction;
+    const behaviorType =
+      overrides.behaviorType === undefined
+        ? source.behaviorType
+        : overrides.behaviorType;
+    const invalidationType =
+      overrides.invalidationType === undefined
+        ? source.invalidationType
+        : overrides.invalidationType;
+    const systemOutcomeType =
+      overrides.systemOutcomeType === undefined
+        ? source.systemOutcomeType
+        : overrides.systemOutcomeType;
+    const earlyExitTag =
+      overrides.earlyExitTag === undefined
+        ? source.earlyExitTag === true
+        : overrides.earlyExitTag === true;
+    const earlyExitReason = earlyExitTag
+      ? overrides.earlyExitReason === undefined
+        ? source.earlyExitReason
+        : overrides.earlyExitReason.trim() || undefined
+      : undefined;
+    const earlyExitImageUrls = earlyExitTag
+      ? overrides.earlyExitImageUrls === undefined
+        ? source.earlyExitImageUrls
+        : overrides.earlyExitImageUrls.map((item) => item.trim()).filter(Boolean)
+      : undefined;
+    const orderFlowImageUrls =
+      overrides.orderFlowImageUrls === undefined
+        ? source.orderFlowImageUrls
+        : overrides.orderFlowImageUrls.map((item) => item.trim()).filter(Boolean);
+    const orderFlowRemark =
+      overrides.orderFlowRemark === undefined
+        ? source.orderFlowRemark
+        : overrides.orderFlowRemark.trim() || undefined;
+    const marketTimeInfo =
+      overrides.marketTimeInfo === undefined
+        ? source.marketTimeInfo
+        : overrides.marketTimeInfo.trim() || undefined;
+    const symbolPairInfo =
+      overrides.symbolPairInfo === undefined
+        ? source.symbolPairInfo
+        : overrides.symbolPairInfo.trim() || undefined;
+    const playbookType =
+      overrides.playbookType === undefined
+        ? source.playbookType
+        : (
+            await this.dictionaryService.assertCategoryCodesExist(
+              userId,
+              'playbook_type',
+              overrides.playbookType ? [overrides.playbookType] : undefined,
+            )
+          )[0];
+    const notes =
+      overrides.notes === undefined
+        ? source.notes
+        : overrides.notes.trim() || undefined;
+    const tagCodes =
+      overrides.tagCodes === undefined
+        ? source.tagCodes
+        : await this.dictionaryService.assertCategoryCodesExist(
+            userId,
+            'flashcard_tag',
+            overrides.tagCodes,
+          );
+
+    if (!expectedAction) {
+      throw new BadRequestException('expectedAction is required');
+    }
+    if (!systemOutcomeType) {
+      throw new BadRequestException('systemOutcomeType is required');
+    }
+    if (!marketTimeInfo?.trim()) {
+      throw new BadRequestException('marketTimeInfo is required');
+    }
+    if (!symbolPairInfo?.trim()) {
+      throw new BadRequestException('symbolPairInfo is required');
+    }
+    if (!playbookType) {
+      throw new BadRequestException('playbookType is required');
+    }
+
+    const item: FlashcardCard = {
+      id: nextCardId,
+      userId,
+      cardId: nextCardId,
+      entityType: 'CARD',
+      questionImageUrl: overrides.questionImageUrl || source.questionImageUrl,
+      answerImageUrl: overrides.answerImageUrl || source.answerImageUrl,
+      expectedAction,
+      direction: expectedAction,
+      behaviorType,
+      invalidationType,
+      systemOutcomeType,
+      earlyExitTag,
+      earlyExitReason,
+      earlyExitImageUrls,
+      orderFlowImageUrls,
+      orderFlowRemark,
+      marketTimeInfo,
+      symbolPairInfo,
+      playbookType,
+      notes,
+      tagCodes,
+      drillStatus: 'ENABLED',
+      copiedFromCardId: source.cardId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({
+      TableName: this.tableName,
+      Item: item,
+      ConditionExpression: 'attribute_not_exists(cardId)',
+    });
+
+    return {
+      success: true,
+      data: await this.attachDictionaryTags(this.normalizeCard(item)),
     };
   }
 
@@ -1521,7 +1707,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: cards,
+      data: cards.filter((card) => this.isDrillEnabled(card)),
     };
   }
 
@@ -1538,7 +1724,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: cards,
+      data: cards.filter((card) => this.isDrillEnabled(card)),
     };
   }
 
@@ -1851,7 +2037,9 @@ export class FlashcardService {
     count: number,
   ): Promise<FlashcardCard[]> {
     if (source === 'ALL') {
-      const cards = await this.listAllCards(userId);
+      const cards = (await this.listAllCards(userId)).filter((card) =>
+        this.isDrillEnabled(card),
+      );
       this.shuffleInPlace(cards);
       return cards.slice(0, count);
     }
@@ -1866,7 +2054,9 @@ export class FlashcardService {
     }
 
     const cardIds = relationItems.map((item) => item.targetCardId);
-    const cards = await this.batchGetCardsByIds(userId, cardIds);
+    const cards = (await this.batchGetCardsByIds(userId, cardIds)).filter(
+      (card) => this.isDrillEnabled(card),
+    );
     this.shuffleInPlace(cards);
     return cards.slice(0, count);
   }
@@ -2933,7 +3123,16 @@ export class FlashcardService {
       ...card,
       expectedAction,
       direction: expectedAction,
+      drillStatus: this.resolveDrillStatus(card),
     };
+  }
+
+  private resolveDrillStatus(card: FlashcardCard) {
+    return card.drillStatus === 'DISABLED' ? 'DISABLED' : 'ENABLED';
+  }
+
+  private isDrillEnabled(card: FlashcardCard) {
+    return this.resolveDrillStatus(card) === 'ENABLED';
   }
 
   private async attachDictionaryTags(card: FlashcardCard): Promise<FlashcardCard> {

@@ -30,6 +30,8 @@ import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-att
 import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
+import { UpdateFlashcardDrillStatusDto } from './dto/update-flashcard-drill-status.dto';
+import { DuplicateFlashcardCardDto } from './dto/duplicate-flashcard-card.dto';
 import {
   GetFlashcardDrillAnalyticsDto,
   GetFlashcardDrillCardErrorRankingDto,
@@ -148,6 +150,7 @@ export class FlashcardController {
   @ApiQuery({ name: 'cardId', required: false })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'marketTimeInfo', required: false })
+  @ApiQuery({ name: 'drillStatus', required: false, enum: ['ENABLED', 'DISABLED', 'ALL'] })
   @ApiQuery({ name: 'sortBy', required: false, enum: ['CREATED_AT', 'UPDATED_AT', 'QUALITY_SCORE_AVG', 'SIMULATION_RESOLVED_COUNT', 'SIMULATION_AVG_RR'] })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
   @ApiResponse({ status: 200, description: '返回分页数据 items + nextCursor' })
@@ -574,6 +577,42 @@ export class FlashcardController {
     }
 
     return this.flashcardService.updateCardNote(userId, cardId, dto.note);
+  }
+
+  @ApiOperation({ summary: '更新闪卡常规 Drill 抽题状态' })
+  @ApiParam({ name: 'cardId', description: '卡片 ID' })
+  @ApiBody({ type: UpdateFlashcardDrillStatusDto })
+  @ApiResponse({ status: 200, description: '更新成功并返回卡片对象' })
+  @Patch('cards/:cardId/drill-status')
+  async updateCardDrillStatus(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: UpdateFlashcardDrillStatusDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.updateCardDrillStatus(userId, cardId, dto);
+  }
+
+  @ApiOperation({ summary: '复制闪卡' })
+  @ApiParam({ name: 'cardId', description: '来源卡片 ID' })
+  @ApiBody({ type: DuplicateFlashcardCardDto })
+  @ApiResponse({ status: 200, description: '复制成功并返回新卡片对象' })
+  @Post('cards/:cardId/duplicate')
+  async duplicateCard(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Body() dto: DuplicateFlashcardCardDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.duplicateCard(userId, cardId, dto);
   }
 
   @ApiOperation({ summary: '更新闪卡信息' })

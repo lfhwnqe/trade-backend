@@ -63,6 +63,10 @@ export const FLASHCARD_SOURCE_VALUES = [
 ] as const;
 export type FlashcardSource = (typeof FLASHCARD_SOURCE_VALUES)[number];
 
+export const FLASHCARD_DRILL_STATUS_VALUES = ['ENABLED', 'DISABLED'] as const;
+export type FlashcardDrillStatus =
+  (typeof FLASHCARD_DRILL_STATUS_VALUES)[number];
+
 export const FLASHCARD_CARD_SORT_BY_VALUES = [
   'CREATED_AT',
   'UPDATED_AT',
@@ -107,6 +111,10 @@ export interface FlashcardCard {
   notes?: string;
   tagCodes?: string[];
   tagItems?: Array<{ code: string; label: string; color?: string; status?: string }>;
+  drillStatus?: FlashcardDrillStatus;
+  disabledAt?: string;
+  disabledReason?: string;
+  copiedFromCardId?: string;
   simulationAttemptCount?: number;
   simulationResolvedCount?: number;
   simulationSuccessCount?: number;

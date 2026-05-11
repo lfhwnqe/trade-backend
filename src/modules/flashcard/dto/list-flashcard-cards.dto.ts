@@ -5,10 +5,12 @@ import {
   FLASHCARD_BEHAVIOR_TYPE_VALUES,
   FLASHCARD_CARD_SORT_BY_VALUES,
   FLASHCARD_CARD_SORT_ORDER_VALUES,
+  FLASHCARD_DRILL_STATUS_VALUES,
   FLASHCARD_INVALIDATION_TYPE_VALUES,
   FlashcardBehaviorType,
   FlashcardCardSortBy,
   FlashcardCardSortOrder,
+  FlashcardDrillStatus,
   FlashcardInvalidationType,
 } from '../flashcard.types';
 
@@ -63,6 +65,15 @@ export class ListFlashcardCardsDto {
   @IsOptional()
   @IsString()
   marketTimeInfo?: string;
+
+  @ApiPropertyOptional({
+    enum: [...FLASHCARD_DRILL_STATUS_VALUES, 'ALL'],
+    default: 'ALL',
+    description: '常规 Drill 抽题状态筛选；历史空值按 ENABLED 兼容',
+  })
+  @IsOptional()
+  @IsIn([...FLASHCARD_DRILL_STATUS_VALUES, 'ALL'])
+  drillStatus?: FlashcardDrillStatus | 'ALL';
 
   @ApiPropertyOptional({ enum: FLASHCARD_CARD_SORT_BY_VALUES, default: 'CREATED_AT' })
   @IsOptional()
