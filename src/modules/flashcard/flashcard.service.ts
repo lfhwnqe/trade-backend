@@ -19,6 +19,7 @@ import {
   FlashcardDrillAnalyticsTrendPoint,
   FlashcardDrillAnalyticsWindow,
   FlashcardDrillAttemptItem,
+  FlashcardDrillMistakeReason,
   FlashcardDrillSessionItem,
   FlashcardFavoriteItem,
   FlashcardSimulationAttemptItem,
@@ -616,6 +617,12 @@ export class FlashcardService {
       const existingAttempt = existingAttemptResult.Item as FlashcardDrillAttemptItem;
       const nextUserAction = dto.userAction;
       const nextIsCorrect = expectedAction === nextUserAction;
+      const mistakeReasons = this.resolveDrillMistakeReasons(
+        nextIsCorrect,
+        dto.mistakeReasons,
+        dto.mistakeReason,
+        existingAttempt,
+      );
 
       if (typeof dto.isFavorite === 'boolean') {
         await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
@@ -625,19 +632,34 @@ export class FlashcardService {
         await this.updateCardNote(userId, dto.cardId, dto.note);
       }
 
+      const updateSetParts = [
+        'userAction = :userAction',
+        'expectedAction = :expectedAction',
+        'isCorrect = :isCorrect',
+        'isFavorite = :isFavorite',
+        'noteSnapshot = :noteSnapshot',
+        'updatedAt = :updatedAt',
+      ];
+      const updateExpressionValues: Record<string, unknown> = {
+        ':userAction': nextUserAction,
+        ':expectedAction': expectedAction,
+        ':isCorrect': nextIsCorrect,
+        ':isFavorite': dto.isFavorite === true ? true : existingAttempt.isFavorite === true,
+        ':noteSnapshot': typeof dto.note === 'string' ? dto.note.trim() || undefined : existingAttempt.noteSnapshot,
+        ':updatedAt': now,
+      };
+      if (!nextIsCorrect) {
+        updateSetParts.push('mistakeReasons = :mistakeReasons');
+        updateExpressionValues[':mistakeReasons'] = mistakeReasons;
+      }
+
       await this.db.update({
         TableName: this.tableName,
         Key: { userId, cardId: attemptKey },
-        UpdateExpression:
-          'SET userAction = :userAction, expectedAction = :expectedAction, isCorrect = :isCorrect, isFavorite = :isFavorite, noteSnapshot = :noteSnapshot, updatedAt = :updatedAt',
-        ExpressionAttributeValues: {
-          ':userAction': nextUserAction,
-          ':expectedAction': expectedAction,
-          ':isCorrect': nextIsCorrect,
-          ':isFavorite': dto.isFavorite === true ? true : existingAttempt.isFavorite === true,
-          ':noteSnapshot': typeof dto.note === 'string' ? dto.note.trim() || undefined : existingAttempt.noteSnapshot,
-          ':updatedAt': now,
-        },
+        UpdateExpression: `SET ${updateSetParts.join(', ')}${
+          nextIsCorrect ? ' REMOVE mistakeReasons, mistakeReason' : ''
+        }`,
+        ExpressionAttributeValues: updateExpressionValues,
       });
 
       if (
@@ -668,6 +690,7 @@ export class FlashcardService {
           data: {
             isCorrect: nextIsCorrect,
             expectedAction,
+            mistakeReasons,
             runningStats: this.toSessionStats(
               sessionUpdate.Attributes as FlashcardDrillSessionItem,
             ),
@@ -680,10 +703,17 @@ export class FlashcardService {
         data: {
           isCorrect: nextIsCorrect,
           expectedAction,
+          mistakeReasons,
           runningStats: this.toSessionStats(session),
         },
       };
     }
+
+    const mistakeReasons = this.resolveDrillMistakeReasons(
+      isCorrect,
+      dto.mistakeReasons,
+      dto.mistakeReason,
+    );
 
     if (typeof dto.isFavorite === 'boolean') {
       await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
@@ -707,6 +737,7 @@ export class FlashcardService {
       userAction: dto.userAction,
       expectedAction,
       isCorrect,
+      ...(mistakeReasons.length ? { mistakeReasons } : {}),
       isFavorite: dto.isFavorite === true,
       noteSnapshot: card.notes,
       answeredAt: now,
@@ -744,6 +775,7 @@ export class FlashcardService {
       data: {
         isCorrect,
         expectedAction,
+        mistakeReasons,
         runningStats: this.toSessionStats(updatedSession),
       },
     };
@@ -1581,6 +1613,7 @@ export class FlashcardService {
             userAction: item.userAction,
             expectedAction: item.expectedAction,
             isCorrect: item.isCorrect,
+            mistakeReasons: item.mistakeReasons || (item.mistakeReason ? [item.mistakeReason] : undefined),
             isFavorite: item.isFavorite,
             noteSnapshot: item.noteSnapshot,
             answeredAt: item.answeredAt,
@@ -2785,6 +2818,30 @@ export class FlashcardService {
 
   private resolveExpectedAction(card: FlashcardCard) {
     return card.expectedAction || card.direction || 'NO_TRADE';
+  }
+
+  private resolveDrillMistakeReasons(
+    isCorrect: boolean,
+    incomingReasons?: FlashcardDrillMistakeReason[],
+    incomingLegacyReason?: FlashcardDrillMistakeReason,
+    existingAttempt?: FlashcardDrillAttemptItem,
+  ): FlashcardDrillMistakeReason[] {
+    if (isCorrect) {
+      if (incomingReasons?.length || incomingLegacyReason) {
+        throw new BadRequestException('mistakeReasons is not allowed when answer is correct');
+      }
+      return [];
+    }
+
+    const mistakeReasons =
+      incomingReasons ||
+      (incomingLegacyReason ? [incomingLegacyReason] : undefined) ||
+      existingAttempt?.mistakeReasons ||
+      (existingAttempt?.mistakeReason ? [existingAttempt.mistakeReason] : undefined);
+    if (!mistakeReasons?.length) {
+      throw new BadRequestException('mistakeReasons is required when answer is wrong');
+    }
+    return Array.from(new Set(mistakeReasons));
   }
 
   private shuffleInPlace<T>(arr: T[]) {

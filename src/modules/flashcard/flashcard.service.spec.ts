@@ -31,6 +31,7 @@ jest.mock('uuid', () => ({
 }));
 
 import { v4 as uuidv4 } from 'uuid';
+import { BadRequestException } from '@nestjs/common';
 import { FlashcardService } from './flashcard.service';
 import { ResourceNotFoundException } from '../../base/exceptions/custom.exceptions';
 
@@ -259,6 +260,10 @@ describe('FlashcardService', () => {
       userAction: 'SHORT',
       isFavorite: true,
       note: '  fresh note  ',
+      mistakeReasons: [
+        'MARKET_STRUCTURE_ANALYSIS_WRONG',
+        'PRICE_ACTION_ANALYSIS_WRONG',
+      ],
     } as any);
 
     expect(result.success).toBe(true);
@@ -270,8 +275,61 @@ describe('FlashcardService', () => {
       expect.objectContaining({ Item: expect.objectContaining({ cardId: 'wrong#card-1' }) }),
     );
     expect(mockDb.put).toHaveBeenCalledWith(
-      expect.objectContaining({ Item: expect.objectContaining({ cardId: 'attempt#session-1#card-1' }) }),
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          cardId: 'attempt#session-1#card-1',
+          mistakeReasons: [
+            'MARKET_STRUCTURE_ANALYSIS_WRONG',
+            'PRICE_ACTION_ANALYSIS_WRONG',
+          ],
+        }),
+      }),
     );
+  });
+
+  it('should reject wrong drill attempt without mistake reason', async () => {
+    const service = makeService();
+
+    mockDb.get
+      .mockResolvedValueOnce({
+        Item: {
+          userId: 'user-1',
+          cardId: 'session#session-1',
+          entityType: 'SESSION',
+          sessionId: 'session-1',
+          source: 'ALL',
+          total: 1,
+          answered: 0,
+          correct: 0,
+          wrong: 0,
+          score: 0,
+          status: 'IN_PROGRESS',
+          cardIds: ['card-1'],
+          startedAt: '2026-03-09T10:00:00.000Z',
+          createdAt: '2026-03-09T10:00:00.000Z',
+          updatedAt: '2026-03-09T10:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          userId: 'user-1',
+          cardId: 'card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'question-url',
+          answerImageUrl: 'answer-url',
+          expectedAction: 'LONG',
+          createdAt: '2026-03-09T09:00:00.000Z',
+          updatedAt: '2026-03-09T09:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({});
+
+    await expect(
+      service.submitAttempt('user-1', 'session-1', {
+        cardId: 'card-1',
+        userAction: 'SHORT',
+      } as any),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('should submit simulation attempt and aggregate card metrics', async () => {

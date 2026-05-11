@@ -2,6 +2,13 @@ export const FLASHCARD_DIRECTION_VALUES = ['LONG', 'SHORT', 'NO_TRADE'] as const
 export type FlashcardDirection = (typeof FLASHCARD_DIRECTION_VALUES)[number];
 export type FlashcardAction = FlashcardDirection;
 
+export const FLASHCARD_DRILL_MISTAKE_REASON_VALUES = [
+  'MARKET_STRUCTURE_ANALYSIS_WRONG',
+  'PRICE_ACTION_ANALYSIS_WRONG',
+] as const;
+export type FlashcardDrillMistakeReason =
+  (typeof FLASHCARD_DRILL_MISTAKE_REASON_VALUES)[number];
+
 export const FLASHCARD_BEHAVIOR_TYPE_VALUES = [
   'ZONE_REJECTION',
   'ZONE_FAKE_BREAK',
@@ -141,6 +148,8 @@ export interface FlashcardDrillAttemptItem {
   userAction: FlashcardAction;
   expectedAction: FlashcardAction;
   isCorrect: boolean;
+  mistakeReasons?: FlashcardDrillMistakeReason[];
+  mistakeReason?: FlashcardDrillMistakeReason;
   isFavorite: boolean;
   noteSnapshot?: string;
   answeredAt: string;

@@ -1,8 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 import {
+  ArrayNotEmpty,
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import {
+  FLASHCARD_DRILL_MISTAKE_REASON_VALUES,
   FLASHCARD_DIRECTION_VALUES,
   FlashcardAction,
+  FlashcardDrillMistakeReason,
 } from '../flashcard.types';
 
 export class CreateFlashcardDrillAttemptDto {
@@ -31,4 +42,26 @@ export class CreateFlashcardDrillAttemptDto {
   @IsString()
   @MaxLength(2000)
   note?: string;
+
+  @ApiPropertyOptional({
+    enum: FLASHCARD_DRILL_MISTAKE_REASON_VALUES,
+    isArray: true,
+    description: '做错题后的错因集合；当后端判定 isCorrect=false 时至少选择一个',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsIn(FLASHCARD_DRILL_MISTAKE_REASON_VALUES, { each: true })
+  mistakeReasons?: FlashcardDrillMistakeReason[];
+
+  @ApiPropertyOptional({
+    enum: FLASHCARD_DRILL_MISTAKE_REASON_VALUES,
+    description: '兼容旧单选字段；新调用请使用 mistakeReasons',
+    deprecated: true,
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(FLASHCARD_DRILL_MISTAKE_REASON_VALUES)
+  mistakeReason?: FlashcardDrillMistakeReason;
 }
