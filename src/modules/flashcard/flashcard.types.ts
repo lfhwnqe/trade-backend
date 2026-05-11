@@ -254,6 +254,26 @@ export interface FlashcardDrillAnalyticsDimensionStat {
   wrongRate: number;
 }
 
+export interface FlashcardDrillCardErrorRankingItem {
+  cardId: string;
+  questionImageUrl: string;
+  answerImageUrl?: string;
+  symbolPairInfo?: string;
+  marketTimeInfo?: string;
+  playbookType?: string;
+  playbookLabel?: string;
+  answeredCount: number;
+  wrongCount: number;
+  correctCount: number;
+  errorRate: number;
+  mistakeReasonCounts: Array<{
+    reason: FlashcardDrillMistakeReason;
+    count: number;
+  }>;
+  lastAnsweredAt?: string;
+  drillStatus?: string;
+}
+
 export interface FlashcardSimulationPlaybookFailureReasonStat {
   reason: string;
   count: number;

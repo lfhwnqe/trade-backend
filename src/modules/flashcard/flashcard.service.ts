@@ -15,6 +15,7 @@ import {
   FlashcardCardSortBy,
   FlashcardCollectionDistributionItem,
   FlashcardCollectionState,
+  FlashcardDrillCardErrorRankingItem,
   FlashcardDrillAnalyticsDimensionStat,
   FlashcardDrillAnalyticsTrendPoint,
   FlashcardDrillAnalyticsWindow,
@@ -35,7 +36,10 @@ import { StartFlashcardDrillSessionDto } from './dto/start-flashcard-drill-sessi
 import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-attempt.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
-import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
+import {
+  GetFlashcardDrillAnalyticsDto,
+  GetFlashcardDrillCardErrorRankingDto,
+} from './dto/get-flashcard-drill-analytics.dto';
 import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
 import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
 import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
@@ -1708,6 +1712,134 @@ export class FlashcardService {
             invalidationAggregation.unlabeledAttemptCount,
           behaviorTypes: behaviorAggregation.stats,
           invalidationTypes: invalidationAggregation.stats,
+        },
+      },
+    };
+  }
+
+  async getDrillCardErrorRanking(
+    userId: string,
+    dto: GetFlashcardDrillCardErrorRankingDto,
+  ) {
+    const recentWindow = dto.recentWindow || 30;
+    const minAnswered = dto.minAnswered || 3;
+    const limit = dto.limit || 20;
+    const sessions = await this.listAllDrillSessions(userId);
+    const completedSessions = sessions
+      .filter((session) => session.status === 'COMPLETED')
+      .sort((a, b) => this.sessionSortTs(b) - this.sessionSortTs(a));
+    const recentSessions = completedSessions.slice(0, recentWindow);
+    const attempts = await this.listAttemptsForSessions(
+      userId,
+      recentSessions.map((session) => session.sessionId),
+    );
+    const referencedCards = await this.batchGetCardsByIds(
+      userId,
+      attempts.map((attempt) => attempt.targetCardId),
+    );
+    const cardsById = new Map(
+      referencedCards.map((card) => [card.cardId, card] as const),
+    );
+    const playbookCodes = Array.from(
+      new Set(
+        referencedCards
+          .map((card) => card.playbookType)
+          .filter((item): item is string => Boolean(item)),
+      ),
+    );
+    const playbookItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+      userId,
+      'playbook_type',
+      playbookCodes,
+    );
+    const playbookLabelByCode = new Map(
+      (playbookItems || []).map((item: any) => [item.code, item.label] as const),
+    );
+
+    const grouped = new Map<
+      string,
+      {
+        answeredCount: number;
+        wrongCount: number;
+        correctCount: number;
+        mistakeReasonCounts: Map<FlashcardDrillMistakeReason, number>;
+        lastAnsweredAt?: string;
+      }
+    >();
+    for (const attempt of attempts) {
+      const stat = grouped.get(attempt.targetCardId) || {
+        answeredCount: 0,
+        wrongCount: 0,
+        correctCount: 0,
+        mistakeReasonCounts: new Map<FlashcardDrillMistakeReason, number>(),
+        lastAnsweredAt: undefined,
+      };
+      stat.answeredCount += 1;
+      if (attempt.isCorrect) {
+        stat.correctCount += 1;
+      } else {
+        stat.wrongCount += 1;
+        const mistakeReasons = attempt.mistakeReasons || (attempt.mistakeReason ? [attempt.mistakeReason] : []);
+        for (const reason of mistakeReasons) {
+          stat.mistakeReasonCounts.set(
+            reason,
+            (stat.mistakeReasonCounts.get(reason) || 0) + 1,
+          );
+        }
+      }
+      if (!stat.lastAnsweredAt || attempt.answeredAt > stat.lastAnsweredAt) {
+        stat.lastAnsweredAt = attempt.answeredAt;
+      }
+      grouped.set(attempt.targetCardId, stat);
+    }
+
+    const rankedItems = Array.from(grouped.entries())
+      .filter(([, stat]) => stat.answeredCount >= minAnswered)
+      .map(([cardId, stat]): FlashcardDrillCardErrorRankingItem | null => {
+        const card = cardsById.get(cardId);
+        if (!card) {
+          return null;
+        }
+        return {
+          cardId,
+          questionImageUrl: card.questionImageUrl,
+          answerImageUrl: card.answerImageUrl,
+          symbolPairInfo: card.symbolPairInfo,
+          marketTimeInfo: card.marketTimeInfo,
+          playbookType: card.playbookType,
+          playbookLabel: card.playbookType
+            ? playbookLabelByCode.get(card.playbookType) || card.playbookType
+            : undefined,
+          answeredCount: stat.answeredCount,
+          wrongCount: stat.wrongCount,
+          correctCount: stat.correctCount,
+          errorRate: stat.answeredCount > 0 ? stat.wrongCount / stat.answeredCount : 0,
+          mistakeReasonCounts: Array.from(stat.mistakeReasonCounts.entries())
+            .map(([reason, count]) => ({ reason, count }))
+            .sort((a, b) => b.count - a.count),
+          lastAnsweredAt: stat.lastAnsweredAt,
+          drillStatus: (card as FlashcardCard & { drillStatus?: string }).drillStatus,
+        };
+      })
+      .filter((item): item is FlashcardDrillCardErrorRankingItem => Boolean(item))
+      .sort((a, b) => {
+        if (b.errorRate !== a.errorRate) {
+          return b.errorRate - a.errorRate;
+        }
+        if (b.wrongCount !== a.wrongCount) {
+          return b.wrongCount - a.wrongCount;
+        }
+        return (b.lastAnsweredAt || '').localeCompare(a.lastAnsweredAt || '');
+      });
+
+    return {
+      success: true,
+      data: {
+        items: rankedItems.slice(0, limit),
+        summary: {
+          recentWindow,
+          minAnswered,
+          rankedCardCount: rankedItems.length,
         },
       },
     };

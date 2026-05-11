@@ -22,6 +22,7 @@ describe('FlashcardController', () => {
       finishSession: jest.fn(),
       listDrillSessions: jest.fn(),
       getDrillAnalytics: jest.fn(),
+      getDrillCardErrorRanking: jest.fn(),
       startSimulationSession: jest.fn(),
       createSimulationAttempt: jest.fn(),
       resolveSimulationAttempt: jest.fn(),
@@ -148,6 +149,26 @@ describe('FlashcardController', () => {
     expect(result).toEqual({
       success: true,
       data: { summary: { totalCompletedSessions: 0 } },
+    });
+  });
+
+  it('should forward card error ranking query with current user id', async () => {
+    const { controller, flashcardService } = makeController();
+    flashcardService.getDrillCardErrorRanking.mockResolvedValue({
+      success: true,
+      data: { items: [], summary: { recentWindow: 30, minAnswered: 3, rankedCardCount: 0 } },
+    });
+
+    const query = { recentWindow: 30, minAnswered: 3, limit: 20 } as any;
+    const result = await controller.getDrillCardErrorRanking(makeReq(), query);
+
+    expect(flashcardService.getDrillCardErrorRanking).toHaveBeenCalledWith(
+      'user-1',
+      query,
+    );
+    expect(result).toEqual({
+      success: true,
+      data: { items: [], summary: { recentWindow: 30, minAnswered: 3, rankedCardCount: 0 } },
     });
   });
 

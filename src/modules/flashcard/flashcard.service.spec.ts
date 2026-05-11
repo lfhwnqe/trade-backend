@@ -60,7 +60,11 @@ describe('FlashcardService', () => {
     ),
   } as any;
 
-  const makeService = () => new FlashcardService(configService, dictionaryService);
+  const mistakeService = {
+    createFromSimulationAttempt: jest.fn(),
+  } as any;
+
+  const makeService = () => new FlashcardService(configService, dictionaryService, mistakeService);
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -180,6 +184,98 @@ describe('FlashcardService', () => {
     );
     expect(result.success).toBe(true);
     expect(result.data.expectedAction).toBe('SHORT');
+  });
+
+  it('should rank drill cards by error rate with min answered guard', async () => {
+    const service = makeService();
+    mockDb.query
+      .mockResolvedValueOnce({
+        Items: [
+          {
+            userId: 'user-1',
+            cardId: 'session#session-1',
+            entityType: 'SESSION',
+            sessionId: 'session-1',
+            source: 'ALL',
+            total: 3,
+            answered: 3,
+            correct: 1,
+            wrong: 2,
+            score: 67,
+            status: 'COMPLETED',
+            cardIds: ['card-1', 'card-2', 'card-3'],
+            startedAt: '2026-05-10T10:00:00.000Z',
+            endedAt: '2026-05-10T10:05:00.000Z',
+            createdAt: '2026-05-10T10:00:00.000Z',
+            updatedAt: '2026-05-10T10:05:00.000Z',
+          },
+          {
+            userId: 'user-1',
+            cardId: 'session#session-2',
+            entityType: 'SESSION',
+            sessionId: 'session-2',
+            source: 'ALL',
+            total: 3,
+            answered: 3,
+            correct: 2,
+            wrong: 1,
+            score: 33,
+            status: 'COMPLETED',
+            cardIds: ['card-1', 'card-2', 'card-3'],
+            startedAt: '2026-05-11T10:00:00.000Z',
+            endedAt: '2026-05-11T10:05:00.000Z',
+            createdAt: '2026-05-11T10:00:00.000Z',
+            updatedAt: '2026-05-11T10:05:00.000Z',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { userId: 'user-1', cardId: 'attempt#session-2#card-1', entityType: 'ATTEMPT', sessionId: 'session-2', targetCardId: 'card-1', userAction: 'SHORT', expectedAction: 'LONG', isCorrect: false, mistakeReasons: ['MARKET_STRUCTURE_ANALYSIS_WRONG'], isFavorite: false, answeredAt: '2026-05-11T10:01:00.000Z', createdAt: '2026-05-11T10:01:00.000Z', updatedAt: '2026-05-11T10:01:00.000Z' },
+          { userId: 'user-1', cardId: 'attempt#session-2#card-2', entityType: 'ATTEMPT', sessionId: 'session-2', targetCardId: 'card-2', userAction: 'LONG', expectedAction: 'LONG', isCorrect: true, isFavorite: false, answeredAt: '2026-05-11T10:02:00.000Z', createdAt: '2026-05-11T10:02:00.000Z', updatedAt: '2026-05-11T10:02:00.000Z' },
+          { userId: 'user-1', cardId: 'attempt#session-2#card-3', entityType: 'ATTEMPT', sessionId: 'session-2', targetCardId: 'card-3', userAction: 'LONG', expectedAction: 'LONG', isCorrect: true, isFavorite: false, answeredAt: '2026-05-11T10:03:00.000Z', createdAt: '2026-05-11T10:03:00.000Z', updatedAt: '2026-05-11T10:03:00.000Z' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        Items: [
+          { userId: 'user-1', cardId: 'attempt#session-1#card-1', entityType: 'ATTEMPT', sessionId: 'session-1', targetCardId: 'card-1', userAction: 'LONG', expectedAction: 'LONG', isCorrect: true, isFavorite: false, answeredAt: '2026-05-10T10:01:00.000Z', createdAt: '2026-05-10T10:01:00.000Z', updatedAt: '2026-05-10T10:01:00.000Z' },
+          { userId: 'user-1', cardId: 'attempt#session-1#card-2', entityType: 'ATTEMPT', sessionId: 'session-1', targetCardId: 'card-2', userAction: 'SHORT', expectedAction: 'LONG', isCorrect: false, mistakeReasons: ['PRICE_ACTION_ANALYSIS_WRONG'], isFavorite: false, answeredAt: '2026-05-10T10:02:00.000Z', createdAt: '2026-05-10T10:02:00.000Z', updatedAt: '2026-05-10T10:02:00.000Z' },
+          { userId: 'user-1', cardId: 'attempt#session-1#card-3', entityType: 'ATTEMPT', sessionId: 'session-1', targetCardId: 'card-3', userAction: 'LONG', expectedAction: 'LONG', isCorrect: true, isFavorite: false, answeredAt: '2026-05-10T10:03:00.000Z', createdAt: '2026-05-10T10:03:00.000Z', updatedAt: '2026-05-10T10:03:00.000Z' },
+        ],
+      });
+    mockDb.batchGet.mockResolvedValueOnce({
+      Responses: {
+        'flashcards-test': [
+          { userId: 'user-1', cardId: 'card-1', entityType: 'CARD', questionImageUrl: 'q1', answerImageUrl: 'a1', symbolPairInfo: 'BTCUSDT', marketTimeInfo: 'London', playbookType: 'PB1', createdAt: '2026-05-01T00:00:00.000Z', updatedAt: '2026-05-01T00:00:00.000Z' },
+          { userId: 'user-1', cardId: 'card-2', entityType: 'CARD', questionImageUrl: 'q2', answerImageUrl: 'a2', symbolPairInfo: 'ETHUSDT', marketTimeInfo: 'NY', playbookType: 'PB2', createdAt: '2026-05-01T00:00:00.000Z', updatedAt: '2026-05-01T00:00:00.000Z' },
+          { userId: 'user-1', cardId: 'card-3', entityType: 'CARD', questionImageUrl: 'q3', answerImageUrl: 'a3', symbolPairInfo: 'SOLUSDT', marketTimeInfo: 'Asia', playbookType: 'PB3', createdAt: '2026-05-01T00:00:00.000Z', updatedAt: '2026-05-01T00:00:00.000Z' },
+        ],
+      },
+    });
+
+    const result = await service.getDrillCardErrorRanking('user-1', {
+      recentWindow: 2,
+      minAnswered: 2,
+      limit: 10,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data.items.map((item: any) => item.cardId)).toEqual(['card-1', 'card-2', 'card-3']);
+    expect(result.data.items[0]).toEqual(expect.objectContaining({
+      cardId: 'card-1',
+      answeredCount: 2,
+      wrongCount: 1,
+      correctCount: 1,
+      errorRate: 0.5,
+      playbookLabel: 'PB1',
+      mistakeReasonCounts: [{ reason: 'MARKET_STRUCTURE_ANALYSIS_WRONG', count: 1 }],
+      symbolPairInfo: 'BTCUSDT',
+    }));
+    expect(result.data.summary).toEqual({
+      recentWindow: 2,
+      minAnswered: 2,
+      rankedCardCount: 3,
+    });
   });
 
   it('should submit wrong attempt, persist wrong-book/favorite, and update running stats', async () => {

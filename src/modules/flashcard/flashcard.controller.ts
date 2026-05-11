@@ -30,7 +30,10 @@ import { CreateFlashcardDrillAttemptDto } from './dto/create-flashcard-drill-att
 import { UpdateFlashcardNoteDto } from './dto/update-flashcard-note.dto';
 import { ListFlashcardDrillSessionsDto } from './dto/list-flashcard-drill-sessions.dto';
 import { UpdateFlashcardCardDto } from './dto/update-flashcard-card.dto';
-import { GetFlashcardDrillAnalyticsDto } from './dto/get-flashcard-drill-analytics.dto';
+import {
+  GetFlashcardDrillAnalyticsDto,
+  GetFlashcardDrillCardErrorRankingDto,
+} from './dto/get-flashcard-drill-analytics.dto';
 import { StartFlashcardSimulationSessionDto } from './dto/start-flashcard-simulation-session.dto';
 import { CreateFlashcardSimulationAttemptDto } from './dto/create-flashcard-simulation-attempt.dto';
 import { ResolveFlashcardSimulationAttemptDto } from './dto/resolve-flashcard-simulation-attempt.dto';
@@ -320,6 +323,27 @@ export class FlashcardController {
     }
 
     return this.flashcardService.getDrillAnalytics(userId, query);
+  }
+
+  @ApiOperation({ summary: '获取训练成绩页错误率最高闪卡排行' })
+  @ApiQuery({ name: 'recentWindow', required: false, example: 30 })
+  @ApiQuery({ name: 'minAnswered', required: false, example: 3 })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiResponse({
+    status: 200,
+    description: '返回按错误率排序的卡片级 Drill 统计',
+  })
+  @Get('drill/analytics/cards')
+  async getDrillCardErrorRanking(
+    @Req() req: Request,
+    @Query() query: GetFlashcardDrillCardErrorRankingDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) {
+      throw new NotFoundException('用户信息异常');
+    }
+
+    return this.flashcardService.getDrillCardErrorRanking(userId, query);
   }
 
   @ApiOperation({ summary: '开始一次闪卡模拟盘训练并创建会话' })
