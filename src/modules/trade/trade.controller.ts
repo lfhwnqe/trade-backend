@@ -53,13 +53,55 @@ export class TradeController {
   }
 
   @ApiOperation({ summary: '获取交易仪表盘数据' })
+  @ApiQuery({
+    name: 'analysisRange',
+    required: false,
+    description: '分析复盘统计对比范围: 7d | 30d | 3m',
+    example: '7d',
+  })
   @ApiResponse({ status: 200, description: '仪表盘数据获取成功' })
   @Get('dashboard')
-  async getDashboard(@Req() req: Request) {
+  async getDashboard(
+    @Req() req: Request,
+    @Query('analysisRange') analysisRange?: string,
+  ) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    const result = await this.tradeService.getDashboardData(userId);
+    const normalizedAnalysisRange = analysisRange ?? '7d';
+    if (!['7d', '30d', '3m'].includes(normalizedAnalysisRange)) {
+      throw new BadRequestException('analysisRange 参数不合法');
+    }
+    const result = await this.tradeService.getDashboardData(
+      userId,
+      normalizedAnalysisRange as '7d' | '30d' | '3m',
+    );
     return result;
+  }
+
+  @ApiOperation({ summary: '获取交易仪表盘分析复盘对比统计' })
+  @ApiQuery({
+    name: 'range',
+    required: false,
+    description: '分析复盘统计对比范围: 7d | 30d | 3m',
+    example: '7d',
+  })
+  @ApiResponse({ status: 200, description: '分析复盘统计获取成功' })
+  @Get('dashboard/analysis-review')
+  async getDashboardAnalysisReview(
+    @Req() req: Request,
+    @Query('range') range?: string,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    const normalizedRange = range ?? '7d';
+    if (!['7d', '30d', '3m'].includes(normalizedRange)) {
+      throw new BadRequestException('range 参数不合法');
+    }
+    const data = await this.tradeService.getDashboardAnalysisReviewStats(
+      userId,
+      normalizedRange as '7d' | '30d' | '3m',
+    );
+    return { success: true, data };
   }
 
   @ApiOperation({ summary: '获取最近时间段交易胜率趋势' })

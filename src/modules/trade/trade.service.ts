@@ -1238,7 +1238,251 @@ export class TradeService {
     }
   }
 
-  async getDashboardData(userId: string) {
+  async getDashboardAnalysisReviewStats(
+    userId: string,
+    analysisRange: '7d' | '30d' | '3m' = '7d',
+  ) {
+    const now = new Date();
+    const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+    const getAnalysisReviewRangeWindow = (range: '7d' | '30d' | '3m') => {
+      const end = new Date(now);
+      const currentStart = new Date(end);
+      if (range === '7d') {
+        currentStart.setDate(currentStart.getDate() - 7);
+      } else if (range === '30d') {
+        currentStart.setDate(currentStart.getDate() - 30);
+      } else {
+        currentStart.setMonth(currentStart.getMonth() - 3);
+      }
+
+      const windowMs = end.getTime() - currentStart.getTime();
+      const previousStart = new Date(currentStart.getTime() - windowMs);
+      const previousEnd = new Date(currentStart.getTime() - 1);
+
+      return {
+        range,
+        current: {
+          start: currentStart,
+          end,
+        },
+        previous: {
+          start: previousStart,
+          end: previousEnd,
+        },
+      };
+    };
+
+    const fetchClosedRealTradesByExitTime = async (start: Date, end: Date) => {
+      const items: Trade[] = [];
+      let lastKey: Record<string, any> | undefined;
+      do {
+        const result = await this.db.query({
+          TableName: this.tableName,
+          IndexName: 'userId-exitTime-index',
+          KeyConditionExpression:
+            'userId = :userId AND #exitTime BETWEEN :start AND :end',
+          FilterExpression:
+            '(#status = :exited OR #status = :earlyExited) AND tradeType = :real',
+          ExpressionAttributeNames: {
+            '#exitTime': 'exitTime',
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':userId': userId,
+            ':start': start.toISOString(),
+            ':end': end.toISOString(),
+            ':exited': '已离场',
+            ':earlyExited': '提前离场',
+            ':real': TradeType.REAL,
+          },
+          ScanIndexForward: false,
+          ExclusiveStartKey: lastKey,
+        });
+
+        items.push(...((result.Items || []) as Trade[]));
+        lastKey = result.LastEvaluatedKey;
+      } while (lastKey);
+
+      return items;
+    };
+
+    const calculateAnalysisReviewStats = (trades: Trade[]) => {
+      const reviewFields = [
+        'marketStructureReview',
+        'priceActionReview',
+        'orderFlowReview',
+        'indicatorReview',
+      ] as const;
+
+      const isReviewed = (value: unknown) =>
+        value === AnalysisReviewResult.CORRECT ||
+        value === AnalysisReviewResult.WRONG ||
+        value === AnalysisReviewResult.PARTIAL;
+      const hasFinalResult = (trade: Trade) =>
+        trade.tradeResult === TradeResult.PROFIT ||
+        trade.tradeResult === TradeResult.LOSS ||
+        trade.tradeResult === TradeResult.BREAKEVEN;
+
+      const reviewedTrades = trades.filter(
+        (trade) =>
+          hasFinalResult(trade) &&
+          (isReviewed(trade.marketStructureReview) ||
+            isReviewed(trade.priceActionReview)),
+      );
+
+      const coreAnalysisCorrectTrades = reviewedTrades.filter(
+        (trade) =>
+          trade.marketStructureReview === AnalysisReviewResult.CORRECT &&
+          trade.priceActionReview === AnalysisReviewResult.CORRECT,
+      );
+      const coreAnalysisWinRate =
+        coreAnalysisCorrectTrades.length > 0
+          ? round2(
+              (coreAnalysisCorrectTrades.filter(
+                (trade) => trade.tradeResult === TradeResult.PROFIT,
+              ).length /
+                coreAnalysisCorrectTrades.length) *
+                100,
+            )
+          : 0;
+
+      const anyWrong = (trade: Trade) =>
+        reviewFields.some((field) => trade[field] === AnalysisReviewResult.WRONG);
+
+      const dimensionStats = reviewFields.reduce(
+        (acc, field) => {
+          const fieldTrades = trades.filter((trade) => isReviewed(trade[field]));
+          const correct = fieldTrades.filter(
+            (trade) => trade[field] === AnalysisReviewResult.CORRECT,
+          ).length;
+          const partial = fieldTrades.filter(
+            (trade) => trade[field] === AnalysisReviewResult.PARTIAL,
+          ).length;
+          const wrong = fieldTrades.filter(
+            (trade) => trade[field] === AnalysisReviewResult.WRONG,
+          ).length;
+          const noSpecificFeature = trades.filter(
+            (trade) => trade[field] === AnalysisReviewResult.NO_SPECIFIC_FEATURE,
+          ).length;
+
+          acc[field] = {
+            reviewed: fieldTrades.length,
+            correct,
+            partial,
+            wrong,
+            noSpecificFeature,
+            correctRate:
+              fieldTrades.length > 0 ? round2((correct / fieldTrades.length) * 100) : 0,
+          };
+          return acc;
+        },
+        {} as Record<
+          (typeof reviewFields)[number],
+          {
+            reviewed: number;
+            correct: number;
+            partial: number;
+            wrong: number;
+            noSpecificFeature: number;
+            correctRate: number;
+          }
+        >,
+      );
+
+      const riskRewardRatioPrecisionTrades = trades.filter(
+        (trade) => typeof trade.riskRewardRatioPrecise === 'boolean',
+      );
+      const riskRewardRatioPreciseCount = riskRewardRatioPrecisionTrades.filter(
+        (trade) => trade.riskRewardRatioPrecise === true,
+      ).length;
+
+      return {
+        analysisReviewedTradeCount: reviewedTrades.length,
+        coreAnalysisCorrectCount: coreAnalysisCorrectTrades.length,
+        coreAnalysisWinRate,
+        analysisCorrectButLoss: coreAnalysisCorrectTrades.filter(
+          (trade) => trade.tradeResult === TradeResult.LOSS,
+        ).length,
+        analysisWrongButProfit: reviewedTrades.filter(
+          (trade) => anyWrong(trade) && trade.tradeResult === TradeResult.PROFIT,
+        ).length,
+        riskRewardRatioPrecision: {
+          recorded: riskRewardRatioPrecisionTrades.length,
+          precise: riskRewardRatioPreciseCount,
+          imprecise: riskRewardRatioPrecisionTrades.length - riskRewardRatioPreciseCount,
+          preciseRate:
+            riskRewardRatioPrecisionTrades.length > 0
+              ? round2(
+                  (riskRewardRatioPreciseCount / riskRewardRatioPrecisionTrades.length) *
+                    100,
+                )
+              : 0,
+        },
+        dimensions: dimensionStats,
+      };
+    };
+
+    const window = getAnalysisReviewRangeWindow(analysisRange);
+    const [currentTrades, previousTrades] = await Promise.all([
+      fetchClosedRealTradesByExitTime(window.current.start, window.current.end),
+      fetchClosedRealTradesByExitTime(window.previous.start, window.previous.end),
+    ]);
+    const current = calculateAnalysisReviewStats(currentTrades);
+    const previous = calculateAnalysisReviewStats(previousTrades);
+    const delta = {
+      analysisReviewedTradeCount:
+        current.analysisReviewedTradeCount - previous.analysisReviewedTradeCount,
+      coreAnalysisCorrectCount:
+        current.coreAnalysisCorrectCount - previous.coreAnalysisCorrectCount,
+      coreAnalysisWinRate: round2(
+        current.coreAnalysisWinRate - previous.coreAnalysisWinRate,
+      ),
+      analysisCorrectButLoss:
+        current.analysisCorrectButLoss - previous.analysisCorrectButLoss,
+      analysisWrongButProfit:
+        current.analysisWrongButProfit - previous.analysisWrongButProfit,
+      riskRewardRatioPreciseRate: round2(
+        current.riskRewardRatioPrecision.preciseRate -
+          previous.riskRewardRatioPrecision.preciseRate,
+      ),
+      dimensions: {
+        marketStructureReview: round2(
+          current.dimensions.marketStructureReview.correctRate -
+            previous.dimensions.marketStructureReview.correctRate,
+        ),
+        priceActionReview: round2(
+          current.dimensions.priceActionReview.correctRate -
+            previous.dimensions.priceActionReview.correctRate,
+        ),
+        orderFlowReview: round2(
+          current.dimensions.orderFlowReview.correctRate -
+            previous.dimensions.orderFlowReview.correctRate,
+        ),
+        indicatorReview: round2(
+          current.dimensions.indicatorReview.correctRate -
+            previous.dimensions.indicatorReview.correctRate,
+        ),
+      },
+    };
+
+    return {
+      ...current,
+      range: window.range,
+      currentPeriod: {
+        start: window.current.start.toISOString(),
+        end: window.current.end.toISOString(),
+      },
+      previousPeriod: {
+        start: window.previous.start.toISOString(),
+        end: window.previous.end.toISOString(),
+      },
+      previous,
+      delta,
+    };
+  }
+
+  async getDashboardData(userId: string, analysisRange: '7d' | '30d' | '3m' = '7d') {
     try {
       const now = new Date();
       const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -1356,10 +1600,74 @@ export class TradeService {
         return items.slice(0, maxItems);
       };
 
+      const getAnalysisReviewRangeWindow = (range: '7d' | '30d' | '3m') => {
+        const end = new Date(now);
+        const currentStart = new Date(end);
+        if (range === '7d') {
+          currentStart.setDate(currentStart.getDate() - 7);
+        } else if (range === '30d') {
+          currentStart.setDate(currentStart.getDate() - 30);
+        } else {
+          currentStart.setMonth(currentStart.getMonth() - 3);
+        }
+
+        const windowMs = end.getTime() - currentStart.getTime();
+        const previousStart = new Date(currentStart.getTime() - windowMs);
+        const previousEnd = new Date(currentStart.getTime() - 1);
+
+        return {
+          range,
+          current: {
+            start: currentStart,
+            end,
+          },
+          previous: {
+            start: previousStart,
+            end: previousEnd,
+          },
+        };
+      };
+
+      const fetchClosedRealTradesByExitTime = async (
+        start: Date,
+        end: Date,
+      ) => {
+        const items: Trade[] = [];
+        let lastKey: Record<string, any> | undefined;
+        do {
+          const result = await this.db.query({
+            TableName: this.tableName,
+            IndexName: 'userId-exitTime-index',
+            KeyConditionExpression:
+              'userId = :userId AND #exitTime BETWEEN :start AND :end',
+            FilterExpression:
+              '(#status = :exited OR #status = :earlyExited) AND tradeType = :real',
+            ExpressionAttributeNames: {
+              '#exitTime': 'exitTime',
+              '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+              ':userId': userId,
+              ':start': start.toISOString(),
+              ':end': end.toISOString(),
+              ':exited': '已离场',
+              ':earlyExited': '提前离场',
+              ':real': TradeType.REAL,
+            },
+            ScanIndexForward: false,
+            ExclusiveStartKey: lastKey,
+          });
+
+          items.push(...((result.Items || []) as Trade[]));
+          lastKey = result.LastEvaluatedKey;
+        } while (lastKey);
+
+        return items;
+      };
+
       const [
         recentClosedRealTrades,
         recentClosedSimulationTrades,
-        analysisReviewRealTrades,
       ] =
         await Promise.all([
           fetchRecentClosedTrades('userId-exitTime-index', TradeType.REAL, 60),
@@ -1368,7 +1676,6 @@ export class TradeService {
             TradeType.SIMULATION,
             60,
           ),
-          fetchRecentClosedTrades('userId-exitTime-index', TradeType.REAL, 500),
         ]);
 
       const recent30Trades = recentClosedRealTrades.slice(0, 30);
@@ -1671,6 +1978,66 @@ export class TradeService {
         };
       };
 
+      const calculateAnalysisReviewComparison = async () => {
+        const window = getAnalysisReviewRangeWindow(analysisRange);
+        const [currentTrades, previousTrades] = await Promise.all([
+          fetchClosedRealTradesByExitTime(window.current.start, window.current.end),
+          fetchClosedRealTradesByExitTime(window.previous.start, window.previous.end),
+        ]);
+        const current = await calculateAnalysisReviewStats(currentTrades);
+        const previous = await calculateAnalysisReviewStats(previousTrades);
+        const delta = {
+          analysisReviewedTradeCount:
+            current.analysisReviewedTradeCount - previous.analysisReviewedTradeCount,
+          coreAnalysisCorrectCount:
+            current.coreAnalysisCorrectCount - previous.coreAnalysisCorrectCount,
+          coreAnalysisWinRate: round2(
+            current.coreAnalysisWinRate - previous.coreAnalysisWinRate,
+          ),
+          analysisCorrectButLoss:
+            current.analysisCorrectButLoss - previous.analysisCorrectButLoss,
+          analysisWrongButProfit:
+            current.analysisWrongButProfit - previous.analysisWrongButProfit,
+          riskRewardRatioPreciseRate: round2(
+            current.riskRewardRatioPrecision.preciseRate -
+              previous.riskRewardRatioPrecision.preciseRate,
+          ),
+          dimensions: {
+            marketStructureReview: round2(
+              current.dimensions.marketStructureReview.correctRate -
+                previous.dimensions.marketStructureReview.correctRate,
+            ),
+            priceActionReview: round2(
+              current.dimensions.priceActionReview.correctRate -
+                previous.dimensions.priceActionReview.correctRate,
+            ),
+            orderFlowReview: round2(
+              current.dimensions.orderFlowReview.correctRate -
+                previous.dimensions.orderFlowReview.correctRate,
+            ),
+            indicatorReview: round2(
+              current.dimensions.indicatorReview.correctRate -
+                previous.dimensions.indicatorReview.correctRate,
+            ),
+          },
+        };
+
+        return {
+          ...current,
+          range: window.range,
+          currentPeriod: {
+            start: window.current.start.toISOString(),
+            end: window.current.end.toISOString(),
+          },
+          previousPeriod: {
+            start: window.previous.start.toISOString(),
+            end: window.previous.end.toISOString(),
+          },
+          previous,
+          delta,
+        };
+      };
+
       // 两种交易数量字段（用于图表）
       const recent30RealTradeCount = recent30Trades.length;
       const recent30SimulationTradeCount = recent30SimulationTrades.length;
@@ -1698,9 +2065,7 @@ export class TradeService {
         recent30SimulationTrades,
         previous30SimulationTrades,
       );
-      const analysisReviewStats = await calculateAnalysisReviewStats(
-        analysisReviewRealTrades,
-      );
+      const analysisReviewStats = await calculateAnalysisReviewComparison();
 
       const summaryResult = await this.getRandomFiveStarSummaries(userId);
       const summaryHighlights = summaryResult.data?.items ?? [];
