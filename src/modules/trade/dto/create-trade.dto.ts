@@ -285,14 +285,6 @@ export class CreateTradeDto {
   vah?: number;
 
   @ApiProperty({
-    description: '其他关键价格点',
-    example: '日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2',
-  })
-  @IsString()
-  @IsOptional()
-  keyPriceLevels: string;
-
-  @ApiProperty({
     description: '交易标的',
     example: 'eth',
   })
@@ -756,29 +748,6 @@ export class CreateTradeDto {
   @IsBoolean()
   riskRewardRatioPrecise?: boolean;
 
-  @ApiPropertyOptional({
-    description: '分析错因标签编码，来自 mistake_type 字典',
-    type: [String],
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  analysisMistakeCodes?: string[];
-
-  @ApiPropertyOptional({
-    description: '主分析错因编码，来自 mistake_type 字典',
-  })
-  @IsOptional()
-  @IsString()
-  primaryAnalysisMistakeCode?: string;
-
-  @ApiPropertyOptional({
-    description: '分析复盘总结',
-  })
-  @IsOptional()
-  @IsString()
-  analysisReviewSummary?: string;
-
   // ===== R 模型（计划层） =====
   @ApiProperty({ description: '风险模型版本', example: 'r-v1', required: false })
   @IsOptional()
@@ -904,13 +873,4 @@ export class CreateTradeDto {
   @IsOptional()
   grade: TradeGrade;
 
-  // ========== 新增：分析是否过期 ==========
-  @ApiProperty({
-    description: '分析是否过期，由用户手动标记',
-    example: false,
-    required: false,
-  })
-  @IsBoolean()
-  @IsOptional()
-  analysisExpired: boolean;
 }

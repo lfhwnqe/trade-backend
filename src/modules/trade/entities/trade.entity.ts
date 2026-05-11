@@ -34,9 +34,6 @@ export interface Trade {
   // ========== 交易重要性分级 ==========
   grade?: TradeGrade; // 交易分级，高/中/低
 
-  // ========== 分析是否过期 ==========
-  analysisExpired?: boolean; // 分析是否过期，由用户手动标记
-
   // ===== 分享相关 =====
   isShareable?: boolean; // 是否可分享
   shareId?: string; // 分享ID（对外使用，唯一）
@@ -48,7 +45,6 @@ export interface Trade {
   poc?: number; // 成交量分布图POC价格
   val?: number; // 价值区下沿价格
   vah?: number; // 价值区上沿价格
-  keyPriceLevels?: string; // 其他关键价格点
   marketStructure: MarketStructure; // 市场结构判断: 平衡/失衡/未见过
   marketStructureAnalysis: string; // 市场结构详细分析
   preEntrySummary?: string; // 入场前分析总结
@@ -97,9 +93,6 @@ export interface Trade {
   orderFlowReview?: AnalysisReviewResult; // 订单流分析复盘结果
   indicatorReview?: AnalysisReviewResult; // 辅助指标分析复盘结果
   riskRewardRatioPrecise?: boolean; // 盈亏比设置是否精准
-  analysisMistakeCodes?: string[]; // 分析错因标签编码，来自 mistake_type
-  primaryAnalysisMistakeCode?: string; // 主分析错因编码，来自 mistake_type
-  analysisReviewSummary?: string; // 分析复盘总结
 
   // ===== R 模型（计划层） =====
   riskModelVersion?: string; // 风险模型版本，例如 r-v1

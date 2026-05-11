@@ -353,11 +353,6 @@ export class TradeController {
           example: '高',
           description: '交易分级',
         },
-        analysisExpired: {
-          type: 'boolean',
-          example: false,
-          description: '分析是否过期',
-        },
         analysisPeriod: {
           type: 'string',
           example: '1小时',

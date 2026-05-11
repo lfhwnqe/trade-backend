@@ -37,7 +37,6 @@
 | poc | number | 成交量分布图POC价格（Point of Control） | 147.8 |
 | val | number | 价值区下沿价格（Value Area Low） | 145.2 |
 | vah | number | 价值区上沿价格（Value Area High） | 150.5 |
-| keyPriceLevels | string | 其他关键价格点 | "日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2" |
 | marketStructure | enum | 市场结构判断 | 平衡/失衡/未见过 |
 | marketStructureAnalysis | string | 市场结构详细分析 | "市场处于平衡状态，价格在价值区内震荡..." |
 | preEntrySummary | string | 入场前分析总结 | "当前市场结构偏平衡，关注价值区上沿突破机会" |

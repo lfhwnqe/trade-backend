@@ -147,16 +147,6 @@ export class UpdateTradeDto {
   @IsEnum(TradeGrade)
   grade?: TradeGrade;
 
-  // ========== 新增：分析是否过期 ==========
-  @ApiProperty({
-    description: '分析是否过期，由用户手动标记',
-    example: false,
-    required: false,
-  })
-  @IsOptional()
-  @IsBoolean()
-  analysisExpired?: boolean;
-
   @ApiProperty({
     description: '价值区上沿价格',
     example: 150.5,
@@ -166,15 +156,6 @@ export class UpdateTradeDto {
   @IsNumber()
   @Type(() => Number)
   vah?: number;
-
-  @ApiProperty({
-    description: '其他关键价格点',
-    example: '日内高点: 152.3\n日内低点: 144.8\n前日收盘: 146.2',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  keyPriceLevels?: string;
 
   @ApiProperty({
     description: '市场结构判断',
@@ -586,22 +567,6 @@ export class UpdateTradeDto {
   @IsOptional()
   @IsBoolean()
   riskRewardRatioPrecise?: boolean;
-
-  @ApiProperty({ description: '分析错因标签编码，来自 mistake_type 字典', type: [String], required: false })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  analysisMistakeCodes?: string[];
-
-  @ApiProperty({ description: '主分析错因编码，来自 mistake_type 字典', required: false })
-  @IsOptional()
-  @IsString()
-  primaryAnalysisMistakeCode?: string;
-
-  @ApiProperty({ description: '分析复盘总结', required: false })
-  @IsOptional()
-  @IsString()
-  analysisReviewSummary?: string;
 
   // ===== R 模型（计划层） =====
   @ApiProperty({ description: '风险模型版本', example: 'r-v1', required: false })

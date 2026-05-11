@@ -382,31 +382,6 @@ export class TradeService {
     const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
     const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
-    const normalizedAnalysisMistakeCodes = await this.dictionaryService.assertCategoryCodesExist(
-      userId,
-      'mistake_type',
-      dto.analysisMistakeCodes,
-    );
-    const trimmedPrimaryAnalysisMistakeCode = dto.primaryAnalysisMistakeCode?.trim();
-    const primaryAnalysisMistakeCode = trimmedPrimaryAnalysisMistakeCode
-      ? (
-          await this.dictionaryService.assertCategoryCodesExist(
-            userId,
-            'mistake_type',
-            [trimmedPrimaryAnalysisMistakeCode],
-          )
-        )[0]
-      : undefined;
-    if (
-      primaryAnalysisMistakeCode &&
-      !normalizedAnalysisMistakeCodes.includes(primaryAnalysisMistakeCode)
-    ) {
-      throw new ValidationException(
-        'primaryAnalysisMistakeCode must be included in analysisMistakeCodes',
-        ERROR_CODES.VALIDATION_INVALID_VALUE,
-        '主分析错因必须包含在分析错因标签中',
-      );
-    }
     if (
       dto.marketStructureReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE ||
       dto.priceActionReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE
@@ -474,7 +449,6 @@ export class TradeService {
       poc: dto.poc,
       val: dto.val,
       vah: dto.vah,
-      keyPriceLevels: dto.keyPriceLevels,
       marketStructure: dto.marketStructure,
       marketStructureAnalysis: dto.marketStructureAnalysis,
       possiblePlaybookTypes: normalizedPossiblePlaybookTypes,
@@ -513,9 +487,6 @@ export class TradeService {
       orderFlowReview: dto.orderFlowReview,
       indicatorReview: dto.indicatorReview,
       riskRewardRatioPrecise: dto.riskRewardRatioPrecise,
-      analysisMistakeCodes: normalizedAnalysisMistakeCodes,
-      primaryAnalysisMistakeCode,
-      analysisReviewSummary: dto.analysisReviewSummary,
       // R模型字段
       riskModelVersion: dto.riskModelVersion,
       plannedRiskAmount: dto.plannedRiskAmount,
@@ -1674,41 +1645,6 @@ export class TradeService {
           (trade) => trade.riskRewardRatioPrecise === true,
         ).length;
 
-        const mistakeCounts = new Map<string, number>();
-        reviewedTrades.forEach((trade) => {
-          const codes = Array.from(
-            new Set(
-              [
-                trade.primaryAnalysisMistakeCode,
-                ...(trade.analysisMistakeCodes || []),
-              ]
-                .map((code) => `${code || ''}`.trim())
-                .filter(Boolean),
-            ),
-          );
-          codes.forEach((code) => mistakeCounts.set(code, (mistakeCounts.get(code) || 0) + 1));
-        });
-
-        const topMistakeCodes = Array.from(mistakeCounts.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5);
-
-        let mistakeLabelMap = new Map<string, { label: string; color?: string }>();
-        try {
-          const resolved = await this.dictionaryService.resolveCategoryItemsByCodes(
-            userId,
-            'mistake_type',
-            topMistakeCodes.map(([code]) => code),
-          );
-          mistakeLabelMap = new Map(
-            resolved.map((item) => [item.code, { label: item.label, color: item.color }]),
-          );
-        } catch (error) {
-          this.logger.warn(
-            `Resolve mistake_type labels for dashboard failed: ${error.message}`,
-          );
-        }
-
         return {
           analysisReviewedTradeCount: reviewedTrades.length,
           coreAnalysisCorrectCount: coreAnalysisCorrectTrades.length,
@@ -1732,12 +1668,6 @@ export class TradeService {
                 : 0,
           },
           dimensions: dimensionStats,
-          topMistakes: topMistakeCodes.map(([code, count]) => ({
-            code,
-            label: mistakeLabelMap.get(code)?.label || code,
-            color: mistakeLabelMap.get(code)?.color,
-            count,
-          })),
         };
       };
 
@@ -2106,27 +2036,6 @@ export class TradeService {
       const normalizedEntryPlanB = await normalizePlanPlaybookType(dto.entryPlanB);
       const normalizedEntryPlanC = await normalizePlanPlaybookType(dto.entryPlanC);
 
-      let normalizedAnalysisMistakeCodes: string[] | undefined;
-      if (dto.analysisMistakeCodes !== undefined) {
-        normalizedAnalysisMistakeCodes = await this.dictionaryService.assertCategoryCodesExist(
-          userId,
-          'mistake_type',
-          dto.analysisMistakeCodes,
-        );
-      }
-
-      let primaryAnalysisMistakeCode: string | undefined;
-      if (dto.primaryAnalysisMistakeCode !== undefined) {
-        const trimmed = dto.primaryAnalysisMistakeCode.trim();
-        if (trimmed) {
-          [primaryAnalysisMistakeCode] = await this.dictionaryService.assertCategoryCodesExist(
-            userId,
-            'mistake_type',
-            [trimmed],
-          );
-        }
-      }
-
       const updatedTradeData: Partial<Trade> = {
         ...dto,
         analysisTime: dto.analysisTime, // 行情分析时间
@@ -2142,12 +2051,6 @@ export class TradeService {
         ...(dto.entryPlanA !== undefined ? { entryPlanA: normalizedEntryPlanA } : {}),
         ...(dto.entryPlanB !== undefined ? { entryPlanB: normalizedEntryPlanB } : {}),
         ...(dto.entryPlanC !== undefined ? { entryPlanC: normalizedEntryPlanC } : {}),
-        ...(dto.analysisMistakeCodes !== undefined
-          ? { analysisMistakeCodes: normalizedAnalysisMistakeCodes }
-          : {}),
-        ...(dto.primaryAnalysisMistakeCode !== undefined
-          ? { primaryAnalysisMistakeCode }
-          : {}),
         ...(normalizedProfitLossPercentage !== undefined
           ? { profitLossPercentage: normalizedProfitLossPercentage }
           : {}),
@@ -2189,16 +2092,6 @@ export class TradeService {
         );
       }
 
-      if (
-        merged.primaryAnalysisMistakeCode &&
-        !merged.analysisMistakeCodes?.includes(merged.primaryAnalysisMistakeCode)
-      ) {
-        throw new ValidationException(
-          'primaryAnalysisMistakeCode must be included in analysisMistakeCodes',
-          ERROR_CODES.VALIDATION_INVALID_VALUE,
-          '主分析错因必须包含在分析错因标签中',
-        );
-      }
       if (
         merged.marketStructureReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE ||
         merged.priceActionReview === AnalysisReviewResult.NO_SPECIFIC_FEATURE
@@ -2318,7 +2211,6 @@ export class TradeService {
       const newTrade: Trade = this.sanitizeTradeImageUrlsForStorage({
         ...originalTrade,
         transactionId: newTransactionId, // 新的交易ID
-        analysisExpired: false, // 将分析已过期字段设置为未过期
         isShareable: false,
         createdAt: now,
         updatedAt: now,
