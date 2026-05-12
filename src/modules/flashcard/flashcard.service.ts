@@ -184,7 +184,7 @@ export class FlashcardService {
   async randomCards(userId: string, dto: RandomFlashcardCardsDto) {
     const cards = await this.listAllCards(userId);
     const filtered = cards.filter(
-      (card) => this.isDrillEnabled(card) && this.matchesFilters(card, dto),
+      (card) => this.isDrillTrainable(card) && this.matchesFilters(card, dto),
     );
 
     this.shuffleInPlace(filtered);
@@ -1708,7 +1708,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: cards.filter((card) => this.isDrillEnabled(card)),
+      data: cards.filter((card) => this.isDrillTrainable(card)),
     };
   }
 
@@ -1725,7 +1725,7 @@ export class FlashcardService {
 
     return {
       success: true,
-      data: cards.filter((card) => this.isDrillEnabled(card)),
+      data: cards.filter((card) => this.isDrillTrainable(card)),
     };
   }
 
@@ -2119,7 +2119,7 @@ export class FlashcardService {
   ): Promise<FlashcardCard[]> {
     if (source === 'ALL') {
       const cards = (await this.listAllCards(userId)).filter((card) =>
-        this.isDrillEnabled(card),
+        this.isDrillTrainable(card),
       );
       this.shuffleInPlace(cards);
       return cards.slice(0, count);
@@ -2136,7 +2136,7 @@ export class FlashcardService {
 
     const cardIds = relationItems.map((item) => item.targetCardId);
     const cards = (await this.batchGetCardsByIds(userId, cardIds)).filter(
-      (card) => this.isDrillEnabled(card),
+      (card) => this.isDrillTrainable(card),
     );
     this.shuffleInPlace(cards);
     return cards.slice(0, count);
@@ -3214,6 +3214,23 @@ export class FlashcardService {
 
   private isDrillEnabled(card: FlashcardCard) {
     return this.resolveDrillStatus(card) === 'ENABLED';
+  }
+
+  private isDrillTrainable(card: FlashcardCard) {
+    return this.isDrillEnabled(card) && this.isQualityEligibleForDrill(card);
+  }
+
+  private isQualityEligibleForDrill(card: FlashcardCard) {
+    if (typeof card.qualityScoreAvg !== 'number') {
+      return true;
+    }
+
+    const hasRatedScore =
+      typeof card.qualityScoreCount === 'number'
+        ? card.qualityScoreCount > 0
+        : true;
+
+    return !hasRatedScore || card.qualityScoreAvg > 3;
   }
 
   private async attachDictionaryTags(card: FlashcardCard): Promise<FlashcardCard> {

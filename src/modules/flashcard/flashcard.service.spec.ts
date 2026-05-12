@@ -71,6 +71,125 @@ describe('FlashcardService', () => {
     (uuidv4 as jest.Mock).mockReturnValue('uuid-1');
   });
 
+  it('should exclude cards rated 3 or below from random drill cards', async () => {
+    const service = makeService();
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-high',
+          entityType: 'CARD',
+          questionImageUrl: 'q-high',
+          answerImageUrl: 'a-high',
+          qualityScoreAvg: 4,
+          qualityScoreCount: 1,
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-low',
+          entityType: 'CARD',
+          questionImageUrl: 'q-low',
+          answerImageUrl: 'a-low',
+          qualityScoreAvg: 3,
+          qualityScoreCount: 1,
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-reset',
+          entityType: 'CARD',
+          questionImageUrl: 'q-reset',
+          answerImageUrl: 'a-reset',
+          qualityScoreAvg: 0,
+          qualityScoreCount: 0,
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-unrated',
+          entityType: 'CARD',
+          questionImageUrl: 'q-unrated',
+          answerImageUrl: 'a-unrated',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+      ],
+    });
+
+    const result = await service.randomCards('user-1', { count: 20 } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.map((item: any) => item.cardId).sort()).toEqual([
+      'card-high',
+      'card-reset',
+      'card-unrated',
+    ]);
+  });
+
+  it('should exclude cards rated 3 or below when starting a drill session', async () => {
+    const service = makeService();
+    mockDb.query.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'user-1',
+          cardId: 'card-high',
+          entityType: 'CARD',
+          questionImageUrl: 'q-high',
+          answerImageUrl: 'a-high',
+          qualityScoreAvg: 4,
+          qualityScoreCount: 1,
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-low',
+          entityType: 'CARD',
+          questionImageUrl: 'q-low',
+          answerImageUrl: 'a-low',
+          qualityScoreAvg: 2.9,
+          qualityScoreCount: 2,
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+        {
+          userId: 'user-1',
+          cardId: 'card-unrated',
+          entityType: 'CARD',
+          questionImageUrl: 'q-unrated',
+          answerImageUrl: 'a-unrated',
+          createdAt: '2026-05-12T00:00:00.000Z',
+          updatedAt: '2026-05-12T00:00:00.000Z',
+        },
+      ],
+    });
+    mockDb.put.mockResolvedValueOnce({});
+
+    const result = await service.startSession('user-1', {
+      source: 'ALL',
+      count: 20,
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.count).toBe(2);
+    expect(result.data.cards.map((item: any) => item.cardId).sort()).toEqual([
+      'card-high',
+      'card-unrated',
+    ]);
+    expect(mockDb.put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          cardIds: expect.not.arrayContaining(['card-low']),
+          total: 2,
+        }),
+      }),
+    );
+  });
+
   it('should sort flashcard cards by createdAt when sortBy=CREATED_AT', async () => {
     const service = makeService();
     mockDb.query.mockResolvedValueOnce({
