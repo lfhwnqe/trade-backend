@@ -660,6 +660,11 @@ export class TradeService {
       tradeStatus,
       tradeResult,
       followedSystemStrictly,
+      marketStructureReview,
+      priceActionReview,
+      orderFlowReview,
+      indicatorReview,
+      riskRewardRatioPrecise,
       dateTimeRange,
       tradeType,
       analysisPeriod,
@@ -693,6 +698,22 @@ export class TradeService {
       if (typeof followedSystemStrictly === 'boolean')
         items = items.filter(
           (t) => t.followedSystemStrictly === followedSystemStrictly,
+        );
+      if (marketStructureReview)
+        items = items.filter(
+          (t) => t.marketStructureReview === marketStructureReview,
+        );
+      if (priceActionReview)
+        items = items.filter(
+          (t) => t.priceActionReview === priceActionReview,
+        );
+      if (orderFlowReview)
+        items = items.filter((t) => t.orderFlowReview === orderFlowReview);
+      if (indicatorReview)
+        items = items.filter((t) => t.indicatorReview === indicatorReview);
+      if (typeof riskRewardRatioPrecise === 'boolean')
+        items = items.filter(
+          (t) => t.riskRewardRatioPrecise === riskRewardRatioPrecise,
         );
       // 处理日期范围查询 - 支持两种方式：dateTimeRange 对象或 dateFrom/dateTo 参数
       let fromDate = '';

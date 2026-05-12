@@ -421,6 +421,47 @@ export class TradeController {
           example: true,
           description: '是否严格遵守交易系统',
         },
+        marketStructureReview: {
+          type: 'string',
+          enum: ['CORRECT', 'WRONG', 'PARTIAL', 'NOT_REVIEWED'],
+          example: 'WRONG',
+          description: '市场结构分析复盘结果',
+        },
+        priceActionReview: {
+          type: 'string',
+          enum: ['CORRECT', 'WRONG', 'PARTIAL', 'NOT_REVIEWED'],
+          example: 'WRONG',
+          description: '价格行为分析复盘结果',
+        },
+        orderFlowReview: {
+          type: 'string',
+          enum: [
+            'CORRECT',
+            'WRONG',
+            'PARTIAL',
+            'NOT_REVIEWED',
+            'NO_SPECIFIC_FEATURE',
+          ],
+          example: 'WRONG',
+          description: '订单流分析复盘结果',
+        },
+        indicatorReview: {
+          type: 'string',
+          enum: [
+            'CORRECT',
+            'WRONG',
+            'PARTIAL',
+            'NOT_REVIEWED',
+            'NO_SPECIFIC_FEATURE',
+          ],
+          example: 'NO_SPECIFIC_FEATURE',
+          description: '指标参数分析复盘结果',
+        },
+        riskRewardRatioPrecise: {
+          type: 'boolean',
+          example: true,
+          description: '盈亏比设置是否精准',
+        },
       },
     },
   })

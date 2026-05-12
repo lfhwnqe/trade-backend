@@ -6,9 +6,11 @@ import {
   ValidateNested,
   IsObject,
   IsBoolean,
+  IsEnum,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { AnalysisReviewResult } from './create-trade.dto';
 
 export class DateTimeRangeDto {
   @IsOptional()
@@ -80,6 +82,50 @@ export class TradeQueryDto {
   @IsOptional()
   @IsBoolean()
   followedSystemStrictly?: boolean;
+
+  @ApiPropertyOptional({
+    description: '市场结构分析复盘结果',
+    enum: AnalysisReviewResult,
+    example: AnalysisReviewResult.WRONG,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  marketStructureReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '价格行为分析复盘结果',
+    enum: AnalysisReviewResult,
+    example: AnalysisReviewResult.WRONG,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  priceActionReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '订单流分析复盘结果',
+    enum: AnalysisReviewResult,
+    example: AnalysisReviewResult.WRONG,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  orderFlowReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '指标参数分析复盘结果',
+    enum: AnalysisReviewResult,
+    example: AnalysisReviewResult.NO_SPECIFIC_FEATURE,
+  })
+  @IsOptional()
+  @IsEnum(AnalysisReviewResult)
+  indicatorReview?: AnalysisReviewResult;
+
+  @ApiPropertyOptional({
+    description: '盈亏比设置是否精准',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  riskRewardRatioPrecise?: boolean;
 
   @ApiPropertyOptional({ description: '交易类型', example: '模拟交易' })
   @IsOptional()
