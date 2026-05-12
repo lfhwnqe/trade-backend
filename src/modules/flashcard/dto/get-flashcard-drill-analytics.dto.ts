@@ -32,10 +32,10 @@ export class GetFlashcardDrillCardErrorRankingDto extends GetFlashcardDrillAnaly
   minAnswered?: number;
 
   @ApiPropertyOptional({
-    example: 20,
+    example: 5,
     minimum: 1,
     maximum: 100,
-    description: '最多返回多少张闪卡',
+    description: '最多返回多少条单卡与剧本错误排行',
   })
   @IsOptional()
   @Type(() => Number)

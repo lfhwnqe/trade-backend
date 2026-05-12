@@ -282,6 +282,17 @@ export interface FlashcardDrillCardErrorRankingItem {
   drillStatus?: string;
 }
 
+export interface FlashcardDrillPlaybookErrorRankingItem {
+  playbookType?: string;
+  playbookLabel: string;
+  answeredCount: number;
+  wrongCount: number;
+  correctCount: number;
+  errorRate: number;
+  cardCount: number;
+  lastAnsweredAt?: string;
+}
+
 export interface FlashcardSimulationPlaybookFailureReasonStat {
   reason: string;
   count: number;

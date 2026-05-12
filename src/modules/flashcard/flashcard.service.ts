@@ -16,6 +16,7 @@ import {
   FlashcardCollectionDistributionItem,
   FlashcardCollectionState,
   FlashcardDrillCardErrorRankingItem,
+  FlashcardDrillPlaybookErrorRankingItem,
   FlashcardDrillAnalyticsDimensionStat,
   FlashcardDrillAnalyticsTrendPoint,
   FlashcardDrillAnalyticsWindow,
@@ -1630,13 +1631,13 @@ export class FlashcardService {
           .filter((item): item is string => Boolean(item)),
       ),
     );
-    const playbookItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+    const playbookDictionaryItems = await this.dictionaryService.resolveCategoryItemsByCodes(
       userId,
       'playbook_type',
       playbookCodes,
     );
     const playbookLabelByCode = new Map(
-      (playbookItems || []).map((item: any) => [item.code, item.label] as const),
+      (playbookDictionaryItems || []).map((item: any) => [item.code, item.label] as const),
     );
 
     const grouped = new Map<string, { cardIds: Set<string>; attempts: FlashcardSimulationAttemptItem[] }>();
@@ -1909,7 +1910,7 @@ export class FlashcardService {
   ) {
     const recentWindow = dto.recentWindow || 30;
     const minAnswered = dto.minAnswered || 3;
-    const limit = dto.limit || 20;
+    const limit = dto.limit || 5;
     const sessions = await this.listAllDrillSessions(userId);
     const completedSessions = sessions
       .filter((session) => session.status === 'COMPLETED')
@@ -1923,23 +1924,26 @@ export class FlashcardService {
       userId,
       attempts.map((attempt) => attempt.targetCardId),
     );
+    const enabledReferencedCards = referencedCards.filter((card) =>
+      this.isDrillEnabled(card),
+    );
     const cardsById = new Map(
-      referencedCards.map((card) => [card.cardId, card] as const),
+      enabledReferencedCards.map((card) => [card.cardId, card] as const),
     );
     const playbookCodes = Array.from(
       new Set(
-        referencedCards
+        enabledReferencedCards
           .map((card) => card.playbookType)
           .filter((item): item is string => Boolean(item)),
       ),
     );
-    const playbookItems = await this.dictionaryService.resolveCategoryItemsByCodes(
+    const drillPlaybookDictionaryItems = await this.dictionaryService.resolveCategoryItemsByCodes(
       userId,
       'playbook_type',
       playbookCodes,
     );
     const playbookLabelByCode = new Map(
-      (playbookItems || []).map((item: any) => [item.code, item.label] as const),
+      (drillPlaybookDictionaryItems || []).map((item: any) => [item.code, item.label] as const),
     );
 
     const grouped = new Map<
@@ -1952,7 +1956,23 @@ export class FlashcardService {
         lastAnsweredAt?: string;
       }
     >();
+    const playbookGrouped = new Map<
+      string,
+      {
+        playbookType?: string;
+        answeredCount: number;
+        wrongCount: number;
+        correctCount: number;
+        cardIds: Set<string>;
+        lastAnsweredAt?: string;
+      }
+    >();
     for (const attempt of attempts) {
+      const card = cardsById.get(attempt.targetCardId);
+      if (!card) {
+        continue;
+      }
+
       const stat = grouped.get(attempt.targetCardId) || {
         answeredCount: 0,
         wrongCount: 0,
@@ -1977,6 +1997,30 @@ export class FlashcardService {
         stat.lastAnsweredAt = attempt.answeredAt;
       }
       grouped.set(attempt.targetCardId, stat);
+
+      const playbookKey = card.playbookType || '__UNSPECIFIED__';
+      const playbookStat = playbookGrouped.get(playbookKey) || {
+        playbookType: card.playbookType,
+        answeredCount: 0,
+        wrongCount: 0,
+        correctCount: 0,
+        cardIds: new Set<string>(),
+        lastAnsweredAt: undefined,
+      };
+      playbookStat.answeredCount += 1;
+      if (attempt.isCorrect) {
+        playbookStat.correctCount += 1;
+      } else {
+        playbookStat.wrongCount += 1;
+      }
+      playbookStat.cardIds.add(attempt.targetCardId);
+      if (
+        !playbookStat.lastAnsweredAt ||
+        attempt.answeredAt > playbookStat.lastAnsweredAt
+      ) {
+        playbookStat.lastAnsweredAt = attempt.answeredAt;
+      }
+      playbookGrouped.set(playbookKey, playbookStat);
     }
 
     const rankedItems = Array.from(grouped.entries())
@@ -2017,15 +2061,52 @@ export class FlashcardService {
         }
         return (b.lastAnsweredAt || '').localeCompare(a.lastAnsweredAt || '');
       });
+    const allPlaybookItems = Array.from(playbookGrouped.values())
+      .filter((stat) => stat.answeredCount >= minAnswered)
+      .map((stat): FlashcardDrillPlaybookErrorRankingItem => ({
+        playbookType: stat.playbookType,
+        playbookLabel: stat.playbookType
+          ? playbookLabelByCode.get(stat.playbookType) || stat.playbookType
+          : '未标记剧本',
+        answeredCount: stat.answeredCount,
+        wrongCount: stat.wrongCount,
+        correctCount: stat.correctCount,
+        errorRate:
+          stat.answeredCount > 0 ? stat.wrongCount / stat.answeredCount : 0,
+        cardCount: stat.cardIds.size,
+        lastAnsweredAt: stat.lastAnsweredAt,
+      }));
+    const playbookItems = [...allPlaybookItems]
+      .sort((a, b) => {
+        if (b.errorRate !== a.errorRate) {
+          return b.errorRate - a.errorRate;
+        }
+        if (b.wrongCount !== a.wrongCount) {
+          return b.wrongCount - a.wrongCount;
+        }
+        return (b.lastAnsweredAt || '').localeCompare(a.lastAnsweredAt || '');
+      });
+    const playbookWrongCountItems = [...allPlaybookItems].sort((a, b) => {
+      if (b.wrongCount !== a.wrongCount) {
+        return b.wrongCount - a.wrongCount;
+      }
+      if (b.errorRate !== a.errorRate) {
+        return b.errorRate - a.errorRate;
+      }
+      return (b.lastAnsweredAt || '').localeCompare(a.lastAnsweredAt || '');
+    });
 
     return {
       success: true,
       data: {
         items: rankedItems.slice(0, limit),
+        playbookItems: playbookItems.slice(0, limit),
+        playbookWrongCountItems: playbookWrongCountItems.slice(0, limit),
         summary: {
           recentWindow,
           minAnswered,
           rankedCardCount: rankedItems.length,
+          rankedPlaybookCount: playbookItems.length,
         },
       },
     };

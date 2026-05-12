@@ -331,10 +331,10 @@ export class FlashcardController {
   @ApiOperation({ summary: '获取训练成绩页错误率最高闪卡排行' })
   @ApiQuery({ name: 'recentWindow', required: false, example: 30 })
   @ApiQuery({ name: 'minAnswered', required: false, example: 3 })
-  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiQuery({ name: 'limit', required: false, example: 5 })
   @ApiResponse({
     status: 200,
-    description: '返回按错误率排序的卡片级 Drill 统计',
+    description: '返回按错误率排序的卡片级与剧本级 Drill 统计',
   })
   @Get('drill/analytics/cards')
   async getDrillCardErrorRanking(
