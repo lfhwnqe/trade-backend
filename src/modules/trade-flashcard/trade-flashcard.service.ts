@@ -89,18 +89,24 @@ export class TradeFlashcardService {
       )
     )[0];
 
+    const entryImageUrls = this.normalizeImageUrls(dto.entryImageUrls);
+    const finalTrendImageUrl = dto.finalTrendImageUrl?.trim() || dto.postEntryImageUrl?.trim() || undefined;
+
     const item: TradeFlashcardCard = {
       id: cardId,
       userId,
       cardId,
       entityType: 'TRADE_FLASHCARD',
       tradeFlashcardType: dto.tradeFlashcardType,
-      lifecycleStatus: this.resolveLifecycleStatus(dto.postEntryImageUrl, dto.progressImageUrls),
+      lifecycleStatus: this.resolveLifecycleStatus(finalTrendImageUrl),
       processResult: dto.processResult,
       isSystemAligned: dto.isSystemAligned,
       preEntryImageUrl: dto.preEntryImageUrl.trim(),
+      entryImageUrls,
+      entryTimeInfo: dto.entryTimeInfo?.trim() || undefined,
+      finalTrendImageUrl,
       postEntryImageUrl: dto.postEntryImageUrl?.trim() || undefined,
-      progressImageUrls: (dto.progressImageUrls || []).map((item) => item.trim()).filter(Boolean),
+      progressImageUrls: this.normalizeImageUrls(dto.progressImageUrls),
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       playbookType: normalizedPlaybookType,
@@ -184,15 +190,21 @@ export class TradeFlashcardService {
     const updated: TradeFlashcardCard = {
       ...existing,
       tradeFlashcardType: dto.tradeFlashcardType || existing.tradeFlashcardType,
-      lifecycleStatus: this.resolveLifecycleStatus(
-        dto.postEntryImageUrl !== undefined ? dto.postEntryImageUrl : existing.postEntryImageUrl,
-        dto.progressImageUrls !== undefined ? dto.progressImageUrls : existing.progressImageUrls,
-      ),
+      lifecycleStatus: this.resolveLifecycleStatus(this.resolveNextFinalTrendImageUrl(existing, dto)),
       processResult:
         dto.processResult !== undefined ? dto.processResult : existing.processResult,
       isSystemAligned:
         dto.isSystemAligned !== undefined ? dto.isSystemAligned : existing.isSystemAligned,
       preEntryImageUrl: dto.preEntryImageUrl?.trim() || existing.preEntryImageUrl,
+      entryImageUrls:
+        dto.entryImageUrls !== undefined
+          ? this.normalizeImageUrls(dto.entryImageUrls)
+          : existing.entryImageUrls,
+      entryTimeInfo:
+        dto.entryTimeInfo !== undefined
+          ? dto.entryTimeInfo.trim() || undefined
+          : existing.entryTimeInfo,
+      finalTrendImageUrl: this.resolveNextFinalTrendImageUrl(existing, dto),
       postEntryImageUrl:
         dto.postEntryImageUrl !== undefined
           ? dto.postEntryImageUrl.trim() || undefined
@@ -238,11 +250,16 @@ export class TradeFlashcardService {
     if (card.convertedToFlashcardAt || card.convertedFlashcardId) {
       throw new BadRequestException('This trade flashcard has already been converted');
     }
-    if (!card.postEntryImageUrl?.trim()) {
-      throw new BadRequestException('postEntryImageUrl is required for conversion');
+    const entryImageUrl = card.entryImageUrls?.[0]?.trim();
+    const finalTrendImageUrl = card.finalTrendImageUrl?.trim();
+    if (!entryImageUrl) {
+      throw new BadRequestException('entryImageUrls[0] is required for conversion');
+    }
+    if (!finalTrendImageUrl) {
+      throw new BadRequestException('finalTrendImageUrl is required for conversion');
     }
 
-    const marketTimeInfo = dto.marketTimeInfo?.trim() || card.marketTimeInfo?.trim();
+    const marketTimeInfo = dto.marketTimeInfo?.trim() || card.entryTimeInfo?.trim() || card.marketTimeInfo?.trim();
     const symbolPairInfo = dto.symbolPairInfo?.trim() || card.symbolPairInfo?.trim();
     const playbookType = dto.playbookType?.trim() || card.playbookType?.trim();
 
@@ -251,8 +268,8 @@ export class TradeFlashcardService {
     }
 
     const created = await this.flashcardService.createCard(userId, {
-      questionImageUrl: card.preEntryImageUrl,
-      answerImageUrl: card.postEntryImageUrl,
+      questionImageUrl: entryImageUrl,
+      answerImageUrl: finalTrendImageUrl,
       expectedAction: dto.expectedAction,
       direction: dto.expectedAction,
       systemOutcomeType: dto.systemOutcomeType,
@@ -324,19 +341,45 @@ export class TradeFlashcardService {
     return { ...normalizedCard, tagItems };
   }
 
-  private resolveLifecycleStatus(postEntryImageUrl?: string, progressImageUrls?: string[]) {
-    const hasPost = Boolean(postEntryImageUrl?.trim());
-    const progressCount = (progressImageUrls || []).map((item) => item.trim()).filter(Boolean).length;
-    if (hasPost && progressCount > 0) return 'COMPLETED';
+  private normalizeImageUrls(urls?: string[]) {
+    return (urls || []).map((item) => item.trim()).filter(Boolean);
+  }
+
+  private resolveLifecycleStatus(finalTrendImageUrl?: string) {
+    if (finalTrendImageUrl?.trim()) return 'COMPLETED';
     return 'IN_PROGRESS';
   }
 
   private normalizeCard(card: TradeFlashcardCard): TradeFlashcardCard {
-    return {
+    const finalTrendImageUrl = card.finalTrendImageUrl || card.postEntryImageUrl;
+    const normalized: TradeFlashcardCard = {
       ...card,
-      lifecycleStatus:
-        card.lifecycleStatus || this.resolveLifecycleStatus(card.postEntryImageUrl, card.progressImageUrls),
+      entryImageUrls: this.normalizeImageUrls(card.entryImageUrls),
+      finalTrendImageUrl,
+      lifecycleStatus: this.resolveLifecycleStatus(finalTrendImageUrl),
     };
+    delete normalized.progressImageUrls;
+
+    if (!normalized.postEntryImageUrl) {
+      delete normalized.postEntryImageUrl;
+    }
+
+    return {
+      ...normalized,
+    };
+  }
+
+  private resolveNextFinalTrendImageUrl(
+    existing: TradeFlashcardCard,
+    dto: UpdateTradeFlashcardCardDto,
+  ) {
+    if (dto.finalTrendImageUrl !== undefined) {
+      return dto.finalTrendImageUrl.trim() || undefined;
+    }
+    if (dto.postEntryImageUrl !== undefined) {
+      return dto.postEntryImageUrl.trim() || undefined;
+    }
+    return existing.finalTrendImageUrl || existing.postEntryImageUrl;
   }
 
   private sortCards(

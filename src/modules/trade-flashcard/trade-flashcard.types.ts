@@ -9,6 +9,8 @@ export type TradeFlashcardProcessResult = (typeof TRADE_FLASHCARD_PROCESS_RESULT
 
 export const TRADE_FLASHCARD_IMAGE_SCOPE_VALUES = [
   'pre-entry',
+  'entry',
+  'final-trend',
   'post-entry',
   'progress',
 ] as const;
@@ -30,6 +32,9 @@ export interface TradeFlashcardCard {
   processResult?: TradeFlashcardProcessResult;
   isSystemAligned?: boolean;
   preEntryImageUrl: string;
+  entryImageUrls?: string[];
+  entryTimeInfo?: string;
+  finalTrendImageUrl?: string;
   postEntryImageUrl?: string;
   progressImageUrls?: string[];
   marketTimeInfo?: string;

@@ -26,7 +26,26 @@ export class UpdateTradeFlashcardCardDto {
   @IsUrl()
   postEntryImageUrl?: string;
 
-  @ApiPropertyOptional({ type: [String], description: '走势截图，最多 5 张' })
+  @ApiPropertyOptional({ type: [String], description: '入场时截图，最多 5 张；第一张用于转换常规训练闪卡题图' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(5)
+  @IsUrl({}, { each: true })
+  entryImageUrls?: string[];
+
+  @ApiPropertyOptional({ example: '2026-04-10 14:38 UTC+8' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  entryTimeInfo?: string;
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/trade-flashcards/u1/final-trend/2026-04-10/final.png' })
+  @IsOptional()
+  @IsString()
+  @IsUrl()
+  finalTrendImageUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: '旧走势截图，最多 5 张；TF-M2 后仅保留兼容' })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(5)
