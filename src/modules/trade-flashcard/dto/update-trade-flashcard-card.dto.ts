@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 import {
   TRADE_FLASHCARD_PROCESS_RESULT_VALUES,
   TRADE_FLASHCARD_TYPE_VALUES,
@@ -23,6 +23,7 @@ export class UpdateTradeFlashcardCardDto {
   @ApiPropertyOptional({ example: 'https://cdn.example.com/trade-flashcards/u1/post-entry/2026-04-10/def.png' })
   @IsOptional()
   @IsString()
+  @ValidateIf((_, value) => value !== '')
   @IsUrl()
   postEntryImageUrl?: string;
 
@@ -42,6 +43,7 @@ export class UpdateTradeFlashcardCardDto {
   @ApiPropertyOptional({ example: 'https://cdn.example.com/trade-flashcards/u1/final-trend/2026-04-10/final.png' })
   @IsOptional()
   @IsString()
+  @ValidateIf((_, value) => value !== '')
   @IsUrl()
   finalTrendImageUrl?: string;
 

@@ -206,9 +206,11 @@ export class TradeFlashcardService {
           : existing.entryTimeInfo,
       finalTrendImageUrl: this.resolveNextFinalTrendImageUrl(existing, dto),
       postEntryImageUrl:
-        dto.postEntryImageUrl !== undefined
-          ? dto.postEntryImageUrl.trim() || undefined
-          : existing.postEntryImageUrl,
+        dto.finalTrendImageUrl !== undefined
+          ? dto.finalTrendImageUrl.trim() || undefined
+          : dto.postEntryImageUrl !== undefined
+            ? dto.postEntryImageUrl.trim() || undefined
+            : existing.postEntryImageUrl,
       progressImageUrls:
         dto.progressImageUrls !== undefined
           ? dto.progressImageUrls.map((item) => item.trim()).filter(Boolean)
