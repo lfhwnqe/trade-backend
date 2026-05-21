@@ -20,6 +20,8 @@ import {
   TradeFlashcardCardSortOrder,
 } from './trade-flashcard.types';
 
+const PRE_ENTRY_IMAGE_LIMIT = 10;
+
 @Injectable()
 export class TradeFlashcardService {
   private readonly db: DynamoDBDocument;
@@ -70,8 +72,12 @@ export class TradeFlashcardService {
   }
 
   async createCard(userId: string, dto: CreateTradeFlashcardCardDto) {
-    if (!dto.preEntryImageUrl?.trim()) {
-      throw new BadRequestException('preEntryImageUrl is required');
+    const preEntryImageUrls = this.normalizeImageUrls(
+      dto.preEntryImageUrls !== undefined ? dto.preEntryImageUrls : dto.preEntryImageUrl ? [dto.preEntryImageUrl] : [],
+    );
+    this.assertImageUrlLimit(preEntryImageUrls, PRE_ENTRY_IMAGE_LIMIT, 'preEntryImageUrls');
+    if (!preEntryImageUrls.length) {
+      throw new BadRequestException('preEntryImageUrls[0] is required');
     }
 
     const now = new Date().toISOString();
@@ -101,7 +107,8 @@ export class TradeFlashcardService {
       lifecycleStatus: this.resolveLifecycleStatus(finalTrendImageUrl),
       processResult: dto.processResult,
       isSystemAligned: dto.isSystemAligned,
-      preEntryImageUrl: dto.preEntryImageUrl.trim(),
+      preEntryImageUrl: preEntryImageUrls[0],
+      preEntryImageUrls,
       entryImageUrls,
       entryTimeInfo: dto.entryTimeInfo?.trim() || undefined,
       finalTrendImageUrl,
@@ -186,6 +193,7 @@ export class TradeFlashcardService {
           )
         )[0]
       : existing.playbookType;
+    const nextPreEntryImageUrls = this.resolveNextPreEntryImageUrls(existing, dto);
 
     const updated: TradeFlashcardCard = {
       ...existing,
@@ -195,7 +203,8 @@ export class TradeFlashcardService {
         dto.processResult !== undefined ? dto.processResult : existing.processResult,
       isSystemAligned:
         dto.isSystemAligned !== undefined ? dto.isSystemAligned : existing.isSystemAligned,
-      preEntryImageUrl: dto.preEntryImageUrl?.trim() || existing.preEntryImageUrl,
+      preEntryImageUrl: nextPreEntryImageUrls[0],
+      preEntryImageUrls: nextPreEntryImageUrls,
       entryImageUrls:
         dto.entryImageUrls !== undefined
           ? this.normalizeImageUrls(dto.entryImageUrls)
@@ -347,6 +356,12 @@ export class TradeFlashcardService {
     return (urls || []).map((item) => item.trim()).filter(Boolean);
   }
 
+  private assertImageUrlLimit(urls: string[], limit: number, fieldName: string) {
+    if (urls.length > limit) {
+      throw new BadRequestException(`${fieldName} must contain no more than ${limit} images`);
+    }
+  }
+
   private resolveLifecycleStatus(finalTrendImageUrl?: string) {
     if (finalTrendImageUrl?.trim()) return 'COMPLETED';
     return 'IN_PROGRESS';
@@ -354,8 +369,13 @@ export class TradeFlashcardService {
 
   private normalizeCard(card: TradeFlashcardCard): TradeFlashcardCard {
     const finalTrendImageUrl = card.finalTrendImageUrl || card.postEntryImageUrl;
+    const preEntryImageUrls = this.normalizeImageUrls(
+      card.preEntryImageUrls?.length ? card.preEntryImageUrls : [card.preEntryImageUrl],
+    );
     const normalized: TradeFlashcardCard = {
       ...card,
+      preEntryImageUrl: preEntryImageUrls[0],
+      preEntryImageUrls,
       entryImageUrls: this.normalizeImageUrls(card.entryImageUrls),
       finalTrendImageUrl,
       lifecycleStatus: this.resolveLifecycleStatus(finalTrendImageUrl),
@@ -369,6 +389,26 @@ export class TradeFlashcardService {
     return {
       ...normalized,
     };
+  }
+
+  private resolveNextPreEntryImageUrls(
+    existing: TradeFlashcardCard,
+    dto: UpdateTradeFlashcardCardDto,
+  ) {
+    const existingUrls = this.normalizeImageUrls(
+      existing.preEntryImageUrls?.length ? existing.preEntryImageUrls : [existing.preEntryImageUrl],
+    );
+    const nextUrls = dto.preEntryImageUrls !== undefined
+      ? this.normalizeImageUrls(dto.preEntryImageUrls)
+      : dto.preEntryImageUrl !== undefined
+        ? this.normalizeImageUrls([dto.preEntryImageUrl])
+        : existingUrls;
+
+    this.assertImageUrlLimit(nextUrls, PRE_ENTRY_IMAGE_LIMIT, 'preEntryImageUrls');
+    if (!nextUrls.length) {
+      throw new BadRequestException('preEntryImageUrls[0] is required');
+    }
+    return nextUrls;
   }
 
   private resolveNextFinalTrendImageUrl(

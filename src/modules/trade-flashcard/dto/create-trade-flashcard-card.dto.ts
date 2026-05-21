@@ -13,10 +13,25 @@ export class CreateTradeFlashcardCardDto {
   @IsIn(TRADE_FLASHCARD_TYPE_VALUES)
   tradeFlashcardType: TradeFlashcardType;
 
-  @ApiProperty({ example: 'https://cdn.example.com/trade-flashcards/u1/pre-entry/2026-04-10/abc.png' })
+  @ApiPropertyOptional({
+    example: 'https://cdn.example.com/trade-flashcards/u1/pre-entry/2026-04-10/abc.png',
+    description: '入场前截图旧主图字段；兼容读取，创建时优先使用 preEntryImageUrls[0]',
+  })
+  @IsOptional()
   @IsString()
   @IsUrl()
-  preEntryImageUrl: string;
+  preEntryImageUrl?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['https://cdn.example.com/trade-flashcards/u1/pre-entry/2026-04-10/pre1.png'],
+    description: '入场前走势跟踪截图，最多 10 张；第一张同步为兼容 preEntryImageUrl',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUrl({}, { each: true })
+  preEntryImageUrls?: string[];
 
   @ApiPropertyOptional({ example: 'https://cdn.example.com/trade-flashcards/u1/post-entry/2026-04-10/def.png' })
   @IsOptional()
