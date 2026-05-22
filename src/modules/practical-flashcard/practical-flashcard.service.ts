@@ -121,10 +121,12 @@ export class PracticalFlashcardService {
 
   async updateCard(userId: string, cardId: string, dto: UpdatePracticalFlashcardCardDto) {
     const existing = await this.getCardOrThrow(userId, cardId);
-    const normalizedTagCodes = dto.tagCodes !== undefined
-      ? await this.dictionaryService.assertCategoryCodesExist(userId, 'flashcard_tag', dto.tagCodes)
+    const hasField = (field: keyof UpdatePracticalFlashcardCardDto) =>
+      Object.prototype.hasOwnProperty.call(dto, field);
+    const normalizedTagCodes = hasField('tagCodes')
+      ? await this.dictionaryService.assertCategoryCodesExist(userId, 'flashcard_tag', dto.tagCodes || [])
       : existing.tagCodes;
-    const normalizedPlaybookType = dto.playbookType !== undefined
+    const normalizedPlaybookType = hasField('playbookType')
       ? (
           await this.dictionaryService.assertCategoryCodesExist(
             userId,
@@ -139,21 +141,21 @@ export class PracticalFlashcardService {
 
     const updated: PracticalFlashcardCard = {
       ...existing,
-      status: dto.status !== undefined ? dto.status : existing.status,
-      expectedDirection: dto.expectedDirection !== undefined ? dto.expectedDirection : existing.expectedDirection,
-      standardEntryPrice: dto.standardEntryPrice !== undefined ? dto.standardEntryPrice : existing.standardEntryPrice,
+      status: hasField('status') ? dto.status || existing.status : existing.status,
+      expectedDirection: hasField('expectedDirection') ? dto.expectedDirection || undefined : existing.expectedDirection,
+      standardEntryPrice: hasField('standardEntryPrice') ? dto.standardEntryPrice ?? undefined : existing.standardEntryPrice,
       standardStopLossPrice:
-        dto.standardStopLossPrice !== undefined ? dto.standardStopLossPrice : existing.standardStopLossPrice,
+        hasField('standardStopLossPrice') ? dto.standardStopLossPrice ?? undefined : existing.standardStopLossPrice,
       standardTakeProfitPrice:
-        dto.standardTakeProfitPrice !== undefined ? dto.standardTakeProfitPrice : existing.standardTakeProfitPrice,
+        hasField('standardTakeProfitPrice') ? dto.standardTakeProfitPrice ?? undefined : existing.standardTakeProfitPrice,
       playbookType: normalizedPlaybookType,
       tagCodes: normalizedTagCodes,
       orderFlowImageUrls:
-        dto.orderFlowImageUrls !== undefined ? this.normalizeUrls(dto.orderFlowImageUrls) : existing.orderFlowImageUrls,
+        hasField('orderFlowImageUrls') ? this.normalizeUrls(dto.orderFlowImageUrls || []) : existing.orderFlowImageUrls,
       orderFlowRemark:
-        dto.orderFlowRemark !== undefined ? dto.orderFlowRemark.trim() || undefined : existing.orderFlowRemark,
-      notes: dto.notes !== undefined ? dto.notes.trim() || undefined : existing.notes,
-      summary: dto.summary !== undefined ? dto.summary.trim() || undefined : existing.summary,
+        hasField('orderFlowRemark') ? dto.orderFlowRemark?.trim() || undefined : existing.orderFlowRemark,
+      notes: hasField('notes') ? dto.notes?.trim() || undefined : existing.notes,
+      summary: hasField('summary') ? dto.summary?.trim() || undefined : existing.summary,
       updatedAt: new Date().toISOString(),
     };
 
