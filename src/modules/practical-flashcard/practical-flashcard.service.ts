@@ -7,21 +7,28 @@ import { ResourceNotFoundException, ValidationException } from '../../base/excep
 import { ConfigService } from '../common/config.service';
 import { DictionaryService } from '../dictionary/dictionary.service';
 import { TradeFlashcardCard } from '../trade-flashcard/trade-flashcard.types';
+import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
+import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
+import { StartPracticalFlashcardAttemptDto } from './dto/start-practical-flashcard-attempt.dto';
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import {
   PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES,
+  PracticalFlashcardAttempt,
   PracticalFlashcardCandle,
   PracticalFlashcardCard,
   PracticalFlashcardInterval,
+  PracticalFlashcardRunningStats,
 } from './practical-flashcard.types';
 
 const DEFAULT_LOOKBACK_MS = 5 * 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
 const BINANCE_LIMIT = 1000;
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
+const PRACTICAL_ATTEMPT_PREFIX = 'practical-attempt#';
 
 @Injectable()
 export class PracticalFlashcardService {
@@ -210,6 +217,155 @@ export class PracticalFlashcardService {
     await this.getCardOrThrow(userId, cardId);
     await this.db.delete({ TableName: this.tableName, Key: { userId, cardId } });
     return { success: true, data: true };
+  }
+
+  async startAttempt(userId: string, dto: StartPracticalFlashcardAttemptDto) {
+    const card = await this.getCardOrThrow(userId, dto.cardId);
+    if (card.status !== 'ACTIVE') {
+      throw new BadRequestException('Only active practical flashcards can be practiced');
+    }
+
+    const now = new Date().toISOString();
+    const attemptId = uuidv4();
+    const attempt: PracticalFlashcardAttempt = {
+      id: attemptId,
+      userId,
+      cardId: this.makeAttemptKey(attemptId),
+      entityType: 'PRACTICAL_FLASHCARD_ATTEMPT',
+      attemptId,
+      targetCardId: card.cardId,
+      status: 'IN_PROGRESS',
+      currentCandleIndex: card.initialVisibleCandleIndex,
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: attempt });
+    return { success: true, data: { attemptId, attempt, card } };
+  }
+
+  async createAttemptTrade(
+    userId: string,
+    attemptId: string,
+    dto: CreatePracticalFlashcardAttemptTradeDto,
+  ) {
+    const attempt = await this.getAttemptOrThrow(userId, attemptId);
+    if (attempt.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Only in-progress attempts can open a trade');
+    }
+    if (attempt.tradeOpenedCandleIndex !== undefined) {
+      throw new BadRequestException('This attempt already has a confirmed trade');
+    }
+
+    const card = await this.getCardOrThrow(userId, attempt.targetCardId);
+    const currentCandleIndex = this.clampCandleIndex(dto.currentCandleIndex, card.candles);
+    const candle = card.candles[currentCandleIndex];
+    if (!candle) {
+      throw new BadRequestException('currentCandleIndex is outside candle snapshot range');
+    }
+
+    const entryPrice = candle.close;
+    this.assertTradePrices(dto.direction, entryPrice, dto.stopLossPrice, dto.takeProfitPrice);
+    const preTradeMarketStructureAnalysis = dto.preTradeMarketStructureAnalysis.trim();
+    if (!preTradeMarketStructureAnalysis) {
+      throw new BadRequestException('preTradeMarketStructureAnalysis is required');
+    }
+    const plannedRr = this.calculatePlannedRr(dto.direction, entryPrice, dto.stopLossPrice, dto.takeProfitPrice);
+    const now = new Date().toISOString();
+    const updated: PracticalFlashcardAttempt = {
+      ...attempt,
+      decision: dto.direction,
+      tradeDirection: dto.direction,
+      tradeOpenedCandleIndex: currentCandleIndex,
+      currentCandleIndex,
+      entryPrice,
+      stopLossPrice: dto.stopLossPrice,
+      takeProfitPrice: dto.takeProfitPrice,
+      plannedRr,
+      preTradeMarketStructureAnalysis,
+      preTradePriceActionAnalysis: dto.preTradePriceActionAnalysis?.trim() || undefined,
+      preTradeOrderFlowAnalysis: dto.preTradeOrderFlowAnalysis?.trim() || undefined,
+      drawingSnapshot: dto.drawingSnapshot ?? attempt.drawingSnapshot,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: updated });
+    return { success: true, data: updated };
+  }
+
+  async resolveAttempt(
+    userId: string,
+    attemptId: string,
+    dto: ResolvePracticalFlashcardAttemptDto,
+  ) {
+    const attempt = await this.getAttemptOrThrow(userId, attemptId);
+    if (attempt.status === 'RESOLVED') {
+      return { success: true, data: { attempt, runningStats: await this.getRunningStats(userId) } };
+    }
+    if (!attempt.tradeDirection || attempt.tradeOpenedCandleIndex === undefined) {
+      throw new BadRequestException('Confirm a trade before resolving the attempt');
+    }
+
+    const card = await this.getCardOrThrow(userId, attempt.targetCardId);
+    const fallbackFinalIndex = attempt.currentCandleIndex ?? card.resultCandleIndex ?? card.candles.length - 1;
+    const finalCandleIndex = this.clampCandleIndex(dto.finalCandleIndex ?? fallbackFinalIndex, card.candles);
+    const calculated = this.calculateTradeOutcome(card.candles, attempt, finalCandleIndex);
+    const now = new Date().toISOString();
+    const orderFlowAnalysisUsed = dto.orderFlowAnalysisUsed;
+    const updated: PracticalFlashcardAttempt = {
+      ...attempt,
+      status: 'RESOLVED',
+      finalCandleIndex,
+      currentCandleIndex: finalCandleIndex,
+      realizedR: dto.realizedR ?? calculated.realizedR,
+      isWin: dto.isWin ?? calculated.isWin,
+      maxFavorableR: dto.maxFavorableR ?? calculated.maxFavorableR,
+      maxAdverseR: dto.maxAdverseR ?? calculated.maxAdverseR,
+      drawingSnapshot: dto.drawingSnapshot ?? attempt.drawingSnapshot,
+      marketStructureAnalysisCorrect: dto.marketStructureAnalysisCorrect,
+      priceActionAnalysisCorrect: dto.priceActionAnalysisCorrect,
+      orderFlowAnalysisUsed,
+      orderFlowAnalysisCorrect: orderFlowAnalysisUsed ? dto.orderFlowAnalysisCorrect : undefined,
+      riskRewardSetupCorrect: dto.riskRewardSetupCorrect,
+      mistakeReasons: dto.mistakeReasons?.map((item) => item.trim()).filter(Boolean),
+      notes: dto.notes?.trim() || undefined,
+      summary: dto.summary?.trim() || undefined,
+      resolvedAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: updated });
+    return { success: true, data: { attempt: updated, runningStats: await this.getRunningStats(userId) } };
+  }
+
+  async listAttempts(userId: string, dto: ListPracticalFlashcardAttemptsDto) {
+    const pageSize = dto.pageSize || 20;
+    const offset = this.decodeOffsetCursor(dto.cursor);
+    const all = await this.listAllAttempts(userId);
+    const filtered = all.filter((attempt) => {
+      if (dto.cardId && attempt.targetCardId !== dto.cardId) return false;
+      if (dto.decision && attempt.decision !== dto.decision) return false;
+      if (typeof dto.isWin === 'boolean' && attempt.isWin !== dto.isWin) return false;
+      return true;
+    });
+    const sorted = filtered.sort(
+      (a, b) => this.safeParseTimestamp(b.createdAt) - this.safeParseTimestamp(a.createdAt),
+    );
+    const items = sorted.slice(offset, offset + pageSize);
+    const nextOffset = offset + items.length;
+    return {
+      success: true,
+      data: {
+        items,
+        totalCount: filtered.length,
+        nextCursor: nextOffset < filtered.length ? this.encodeOffsetCursor(nextOffset) : null,
+      },
+    };
+  }
+
+  async getAttempt(userId: string, attemptId: string) {
+    return { success: true, data: await this.getAttemptOrThrow(userId, attemptId) };
   }
 
   private async buildCardFromInput(
@@ -427,6 +583,68 @@ export class PracticalFlashcardService {
     return Promise.all(cards.map((item) => this.attachDictionaryTags(item)));
   }
 
+  private async listAllAttempts(userId: string) {
+    const attempts: PracticalFlashcardAttempt[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const result = await this.db.query({
+        TableName: this.tableName,
+        KeyConditionExpression: 'userId = :userId AND begins_with(cardId, :prefix)',
+        ExpressionAttributeValues: { ':userId': userId, ':prefix': PRACTICAL_ATTEMPT_PREFIX },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+      attempts.push(
+        ...((result.Items || []) as PracticalFlashcardAttempt[]).filter(
+          (item) => item.entityType === 'PRACTICAL_FLASHCARD_ATTEMPT',
+        ),
+      );
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+    return attempts;
+  }
+
+  private async getAttemptOrThrow(userId: string, attemptId: string) {
+    const result = await this.db.get({
+      TableName: this.tableName,
+      Key: { userId, cardId: this.makeAttemptKey(attemptId) },
+    });
+    const item = result.Item as PracticalFlashcardAttempt | undefined;
+    if (!item || item.entityType !== 'PRACTICAL_FLASHCARD_ATTEMPT') {
+      throw new ResourceNotFoundException(
+        'Practical flashcard attempt not found',
+        ERROR_CODES.RESOURCE_NOT_FOUND,
+        '实操闪卡训练记录不存在',
+      );
+    }
+    return item;
+  }
+
+  private async getRunningStats(userId: string): Promise<PracticalFlashcardRunningStats> {
+    const attempts = await this.listAllAttempts(userId);
+    const resolved = attempts.filter((attempt) => attempt.status === 'RESOLVED');
+    const wins = resolved.filter((attempt) => attempt.isWin === true).length;
+    const realizedValues = resolved
+      .map((attempt) => attempt.realizedR)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const plannedValues = attempts
+      .map((attempt) => attempt.plannedRr)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const revealCount = resolved.filter((attempt) => attempt.usedOrderFlowReveal).length;
+    const totalRealizedR = realizedValues.reduce((sum, value) => sum + value, 0);
+    return {
+      attemptCount: attempts.length,
+      resolvedCount: resolved.length,
+      winRate: resolved.length ? wins / resolved.length : null,
+      avgRealizedR: realizedValues.length ? totalRealizedR / realizedValues.length : null,
+      totalRealizedR,
+      avgPlannedRr: plannedValues.length
+        ? plannedValues.reduce((sum, value) => sum + value, 0) / plannedValues.length
+        : null,
+      orderFlowRevealRate: resolved.length ? revealCount / resolved.length : null,
+    };
+  }
+
   private async attachDictionaryTags(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
     const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
       card.userId,
@@ -525,6 +743,103 @@ export class PracticalFlashcardService {
 
   private normalizeUrls(urls?: string[]) {
     return (urls || []).map((item) => item.trim()).filter(Boolean);
+  }
+
+  private makeAttemptKey(attemptId: string) {
+    return `${PRACTICAL_ATTEMPT_PREFIX}${attemptId}`;
+  }
+
+  private clampCandleIndex(index: number, candles: PracticalFlashcardCandle[]) {
+    if (!candles.length) {
+      throw new BadRequestException('candle snapshot is empty');
+    }
+    return Math.max(0, Math.min(Math.round(index), candles.length - 1));
+  }
+
+  private assertTradePrices(direction: 'LONG' | 'SHORT', entryPrice: number, stopLossPrice: number, takeProfitPrice: number) {
+    if (![entryPrice, stopLossPrice, takeProfitPrice].every((value) => Number.isFinite(value) && value > 0)) {
+      throw new BadRequestException('entryPrice, stopLossPrice and takeProfitPrice must be positive numbers');
+    }
+    if (direction === 'LONG' && !(stopLossPrice < entryPrice && takeProfitPrice > entryPrice)) {
+      throw new BadRequestException('LONG trade requires stopLossPrice < entryPrice < takeProfitPrice');
+    }
+    if (direction === 'SHORT' && !(takeProfitPrice < entryPrice && stopLossPrice > entryPrice)) {
+      throw new BadRequestException('SHORT trade requires takeProfitPrice < entryPrice < stopLossPrice');
+    }
+  }
+
+  private calculatePlannedRr(direction: 'LONG' | 'SHORT', entryPrice: number, stopLossPrice: number, takeProfitPrice: number) {
+    const risk = direction === 'LONG' ? entryPrice - stopLossPrice : stopLossPrice - entryPrice;
+    const reward = direction === 'LONG' ? takeProfitPrice - entryPrice : entryPrice - takeProfitPrice;
+    if (risk <= 0 || reward <= 0) {
+      throw new BadRequestException('Invalid stop loss or take profit for selected direction');
+    }
+    return reward / risk;
+  }
+
+  private calculateTradeOutcome(
+    candles: PracticalFlashcardCandle[],
+    attempt: PracticalFlashcardAttempt,
+    finalCandleIndex: number,
+  ) {
+    const direction = attempt.tradeDirection;
+    const entryIndex = attempt.tradeOpenedCandleIndex;
+    const entryPrice = attempt.entryPrice;
+    const stopLossPrice = attempt.stopLossPrice;
+    const takeProfitPrice = attempt.takeProfitPrice;
+    if (!direction || entryIndex === undefined || entryPrice === undefined || stopLossPrice === undefined || takeProfitPrice === undefined) {
+      throw new BadRequestException('Attempt trade is incomplete');
+    }
+
+    const risk = Math.abs(entryPrice - stopLossPrice);
+    if (!Number.isFinite(risk) || risk <= 0) {
+      throw new BadRequestException('Attempt risk is invalid');
+    }
+
+    const start = Math.min(entryIndex + 1, candles.length - 1);
+    const end = this.clampCandleIndex(finalCandleIndex, candles);
+    const window = candles.slice(start, end + 1);
+    let hit: 'TAKE_PROFIT' | 'STOP_LOSS' | null = null;
+    let maxFavorableR = 0;
+    let maxAdverseR = 0;
+
+    for (const candle of window) {
+      const favorable = direction === 'LONG' ? candle.high - entryPrice : entryPrice - candle.low;
+      const adverse = direction === 'LONG' ? entryPrice - candle.low : candle.high - entryPrice;
+      maxFavorableR = Math.max(maxFavorableR, favorable / risk);
+      maxAdverseR = Math.max(maxAdverseR, adverse / risk);
+
+      const stopHit = direction === 'LONG' ? candle.low <= stopLossPrice : candle.high >= stopLossPrice;
+      const takeProfitHit = direction === 'LONG' ? candle.high >= takeProfitPrice : candle.low <= takeProfitPrice;
+      if (stopHit && takeProfitHit) {
+        hit = 'STOP_LOSS';
+        break;
+      }
+      if (stopHit) {
+        hit = 'STOP_LOSS';
+        break;
+      }
+      if (takeProfitHit) {
+        hit = 'TAKE_PROFIT';
+        break;
+      }
+    }
+
+    const lastClose = candles[end]?.close ?? entryPrice;
+    const floatingR = direction === 'LONG' ? (lastClose - entryPrice) / risk : (entryPrice - lastClose) / risk;
+    const realizedR =
+      hit === 'TAKE_PROFIT'
+        ? this.calculatePlannedRr(direction, entryPrice, stopLossPrice, takeProfitPrice)
+        : hit === 'STOP_LOSS'
+          ? -1
+          : floatingR;
+
+    return {
+      realizedR,
+      isWin: realizedR > 0,
+      maxFavorableR,
+      maxAdverseR,
+    };
   }
 
   private resolveCandleIndex(candles: PracticalFlashcardCandle[], timestamp: number) {

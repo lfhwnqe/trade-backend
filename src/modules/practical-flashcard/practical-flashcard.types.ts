@@ -13,6 +13,12 @@ export type PracticalFlashcardStatus = (typeof PRACTICAL_FLASHCARD_STATUS_VALUES
 export const PRACTICAL_FLASHCARD_DIRECTION_VALUES = ['LONG', 'SHORT', 'NO_ENTRY'] as const;
 export type PracticalFlashcardDirection = (typeof PRACTICAL_FLASHCARD_DIRECTION_VALUES)[number];
 
+export const PRACTICAL_FLASHCARD_TRADE_DIRECTION_VALUES = ['LONG', 'SHORT'] as const;
+export type PracticalFlashcardTradeDirection = (typeof PRACTICAL_FLASHCARD_TRADE_DIRECTION_VALUES)[number];
+
+export const PRACTICAL_FLASHCARD_ATTEMPT_STATUS_VALUES = ['IN_PROGRESS', 'RESOLVED', 'ABANDONED'] as const;
+export type PracticalFlashcardAttemptStatus = (typeof PRACTICAL_FLASHCARD_ATTEMPT_STATUS_VALUES)[number];
+
 export type PracticalFlashcardCandle = {
   openTime: number;
   closeTime: number;
@@ -55,3 +61,54 @@ export interface PracticalFlashcardCard {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface PracticalFlashcardAttempt {
+  id: string;
+  userId: string;
+  cardId: string;
+  entityType: 'PRACTICAL_FLASHCARD_ATTEMPT';
+  attemptId: string;
+  targetCardId: string;
+  status: PracticalFlashcardAttemptStatus;
+  decision?: PracticalFlashcardDirection;
+  tradeOpenedCandleIndex?: number;
+  tradeDirection?: PracticalFlashcardTradeDirection;
+  entryPrice?: number;
+  stopLossPrice?: number;
+  takeProfitPrice?: number;
+  plannedRr?: number;
+  preTradeMarketStructureAnalysis?: string;
+  preTradePriceActionAnalysis?: string;
+  preTradeOrderFlowAnalysis?: string;
+  realizedR?: number;
+  isWin?: boolean;
+  maxFavorableR?: number;
+  maxAdverseR?: number;
+  finalCandleIndex?: number;
+  currentCandleIndex?: number;
+  drawingSnapshot?: unknown;
+  usedOrderFlowReveal?: boolean;
+  orderFlowRevealEvents?: Array<{ imageUrl: string; candleIndex: number; revealedAt: string }>;
+  marketStructureAnalysisCorrect?: boolean;
+  priceActionAnalysisCorrect?: boolean;
+  orderFlowAnalysisCorrect?: boolean;
+  orderFlowAnalysisUsed?: boolean;
+  riskRewardSetupCorrect?: boolean;
+  mistakeReasons?: string[];
+  notes?: string;
+  summary?: string;
+  startedAt: string;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PracticalFlashcardRunningStats = {
+  attemptCount: number;
+  resolvedCount: number;
+  winRate: number | null;
+  avgRealizedR: number | null;
+  totalRealizedR: number;
+  avgPlannedRr: number | null;
+  orderFlowRevealRate: number | null;
+};

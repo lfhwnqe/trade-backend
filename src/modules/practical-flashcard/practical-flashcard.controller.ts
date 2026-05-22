@@ -2,8 +2,12 @@ import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Q
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
+import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
+import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
+import { StartPracticalFlashcardAttemptDto } from './dto/start-practical-flashcard-attempt.dto';
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import { PracticalFlashcardService } from './practical-flashcard.service';
 
@@ -76,5 +80,64 @@ export class PracticalFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.practicalFlashcardService.deleteCard(userId, cardId);
+  }
+
+  @ApiOperation({ summary: '开始一次实操闪卡训练 attempt' })
+  @ApiBody({ type: StartPracticalFlashcardAttemptDto })
+  @Post('attempts/start')
+  async startAttempt(@Req() req: Request, @Body() dto: StartPracticalFlashcardAttemptDto) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.startAttempt(userId, dto);
+  }
+
+  @ApiOperation({ summary: '确认实操闪卡训练交易' })
+  @ApiParam({ name: 'attemptId', description: '实操训练 attempt ID' })
+  @ApiBody({ type: CreatePracticalFlashcardAttemptTradeDto })
+  @Post('attempts/:attemptId/trade')
+  async createAttemptTrade(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+    @Body() dto: CreatePracticalFlashcardAttemptTradeDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.createAttemptTrade(userId, attemptId, dto);
+  }
+
+  @ApiOperation({ summary: '完成实操闪卡训练 attempt 并保存复盘字段' })
+  @ApiParam({ name: 'attemptId', description: '实操训练 attempt ID' })
+  @ApiBody({ type: ResolvePracticalFlashcardAttemptDto })
+  @Post('attempts/:attemptId/resolve')
+  async resolveAttempt(
+    @Req() req: Request,
+    @Param('attemptId') attemptId: string,
+    @Body() dto: ResolvePracticalFlashcardAttemptDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.resolveAttempt(userId, attemptId, dto);
+  }
+
+  @ApiOperation({ summary: '分页查询实操闪卡训练记录' })
+  @ApiQuery({ name: 'pageSize', required: false, example: 20 })
+  @ApiQuery({ name: 'cursor', required: false })
+  @ApiQuery({ name: 'cardId', required: false })
+  @ApiQuery({ name: 'decision', required: false, enum: ['LONG', 'SHORT', 'NO_ENTRY'] })
+  @ApiQuery({ name: 'isWin', required: false })
+  @Get('attempts')
+  async listAttempts(@Req() req: Request, @Query() query: ListPracticalFlashcardAttemptsDto) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.listAttempts(userId, query);
+  }
+
+  @ApiOperation({ summary: '获取单次实操闪卡训练详情' })
+  @ApiParam({ name: 'attemptId', description: '实操训练 attempt ID' })
+  @Get('attempts/:attemptId')
+  async getAttempt(@Req() req: Request, @Param('attemptId') attemptId: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.getAttempt(userId, attemptId);
   }
 }
