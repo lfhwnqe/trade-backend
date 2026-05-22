@@ -9,6 +9,9 @@ import {
 export class UpdatePracticalFlashcardCardDto extends PartialType(
   PickType(CreatePracticalFlashcardCardDto, [
     'expectedDirection',
+    'entryTimeInfo',
+    'exitTimeInfo',
+    'timeZone',
     'standardEntryPrice',
     'standardStopLossPrice',
     'standardTakeProfitPrice',

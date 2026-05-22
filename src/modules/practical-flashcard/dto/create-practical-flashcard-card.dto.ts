@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsIn,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
@@ -27,6 +28,7 @@ export class CreatePracticalFlashcardCardDto {
 
   @ApiProperty({ example: 'BTCUSDT' })
   @IsString()
+  @IsNotEmpty()
   @MaxLength(40)
   symbolPairInfo: string;
 
@@ -45,6 +47,12 @@ export class CreatePracticalFlashcardCardDto {
   @IsString()
   @IsIn(PRACTICAL_FLASHCARD_INTERVAL_VALUES)
   primaryInterval?: PracticalFlashcardInterval;
+
+  @ApiPropertyOptional({ example: 'Asia/Shanghai', description: '用户浏览器 IANA 时区，用于解析无时区时间字符串' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  timeZone?: string;
 
   @ApiPropertyOptional({ example: '2026-05-22 08:30:00' })
   @IsOptional()

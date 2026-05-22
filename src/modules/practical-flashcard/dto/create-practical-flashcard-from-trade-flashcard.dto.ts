@@ -18,6 +18,12 @@ export class CreatePracticalFlashcardFromTradeFlashcardDto {
   @IsIn(PRACTICAL_FLASHCARD_INTERVAL_VALUES)
   primaryInterval?: PracticalFlashcardInterval;
 
+  @ApiPropertyOptional({ example: 'Asia/Shanghai', description: '用户浏览器 IANA 时区，用于解析无时区时间字符串' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  timeZone?: string;
+
   @ApiPropertyOptional({ example: '2026-05-22 08:30:00' })
   @IsOptional()
   @IsString()

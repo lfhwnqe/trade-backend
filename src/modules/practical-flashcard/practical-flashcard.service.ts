@@ -12,15 +12,16 @@ import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-prac
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import {
+  PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES,
   PracticalFlashcardCandle,
   PracticalFlashcardCard,
   PracticalFlashcardInterval,
-  PracticalFlashcardVenue,
 } from './practical-flashcard.types';
 
-const DEFAULT_LOOKBACK_MS = 6 * 60 * 60 * 1000;
+const DEFAULT_LOOKBACK_MS = 5 * 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
 const BINANCE_LIMIT = 1000;
+const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 
 @Injectable()
 export class PracticalFlashcardService {
@@ -68,6 +69,7 @@ export class PracticalFlashcardService {
       entryTimeInfo,
       exitTimeInfo: dto.exitTimeInfo,
       primaryInterval: dto.primaryInterval,
+      timeZone: dto.timeZone,
       snapshotStartTime: dto.snapshotStartTime,
       snapshotEndTime: dto.snapshotEndTime,
       standardEntryPrice: dto.standardEntryPrice,
@@ -139,9 +141,50 @@ export class PracticalFlashcardService {
       throw new BadRequestException('playbookType is required');
     }
 
+    const nextTimeZone = hasField('timeZone')
+      ? this.normalizeTimeZone(dto.timeZone)
+      : this.normalizeTimeZone(existing.timeZone);
+    const nextEntryTimeInfo = hasField('entryTimeInfo')
+      ? dto.entryTimeInfo?.trim()
+      : existing.entryTimeInfo;
+    const nextExitTimeInfo = hasField('exitTimeInfo')
+      ? dto.exitTimeInfo?.trim()
+      : existing.exitTimeInfo;
+    if (!nextEntryTimeInfo) {
+      throw new BadRequestException('entryTimeInfo is required');
+    }
+    if (!nextExitTimeInfo) {
+      throw new BadRequestException('exitTimeInfo is required');
+    }
+
+    const shouldRefreshCandles =
+      nextEntryTimeInfo !== existing.entryTimeInfo ||
+      nextExitTimeInfo !== existing.exitTimeInfo ||
+      (hasField('timeZone') && !existing.timeZone) ||
+      nextTimeZone !== this.normalizeTimeZone(existing.timeZone);
+    const refreshedSnapshot = shouldRefreshCandles
+      ? await this.buildSnapshotForTimeRange(existing, nextEntryTimeInfo, nextExitTimeInfo, nextTimeZone)
+      : {
+          entryTimeInfo: existing.entryTimeInfo,
+          exitTimeInfo: existing.exitTimeInfo,
+          snapshotStartTime: existing.snapshotStartTime,
+          snapshotEndTime: existing.snapshotEndTime,
+          candles: existing.candles,
+          initialVisibleCandleIndex: existing.initialVisibleCandleIndex,
+          resultCandleIndex: existing.resultCandleIndex,
+        };
+
     const updated: PracticalFlashcardCard = {
       ...existing,
       status: hasField('status') ? dto.status || existing.status : existing.status,
+      timeZone: nextTimeZone,
+      entryTimeInfo: refreshedSnapshot.entryTimeInfo,
+      exitTimeInfo: refreshedSnapshot.exitTimeInfo,
+      snapshotStartTime: refreshedSnapshot.snapshotStartTime,
+      snapshotEndTime: refreshedSnapshot.snapshotEndTime,
+      candles: refreshedSnapshot.candles,
+      initialVisibleCandleIndex: refreshedSnapshot.initialVisibleCandleIndex,
+      resultCandleIndex: refreshedSnapshot.resultCandleIndex,
       expectedDirection: hasField('expectedDirection') ? dto.expectedDirection || undefined : existing.expectedDirection,
       standardEntryPrice: hasField('standardEntryPrice') ? dto.standardEntryPrice ?? undefined : existing.standardEntryPrice,
       standardStopLossPrice:
@@ -174,17 +217,19 @@ export class PracticalFlashcardService {
     dto: CreatePracticalFlashcardCardDto & { sourceTradeFlashcardId?: string },
   ): Promise<PracticalFlashcardCard> {
     const primaryInterval = dto.primaryInterval || '15m';
-    const entryTime = this.parseTime(dto.entryTimeInfo, 'entryTimeInfo');
-    const exitTime = this.parseTime(dto.exitTimeInfo, 'exitTimeInfo');
+    const normalizedSymbol = this.assertSupportedBinanceUmSymbol(dto.venue, dto.symbolPairInfo);
+    const timeZone = this.normalizeTimeZone(dto.timeZone);
+    const entryTime = this.parseTime(dto.entryTimeInfo, 'entryTimeInfo', timeZone);
+    const exitTime = this.parseTime(dto.exitTimeInfo, 'exitTimeInfo', timeZone);
     if (exitTime.getTime() <= entryTime.getTime()) {
       throw new BadRequestException('exitTimeInfo must be after entryTimeInfo');
     }
 
     const snapshotStartTime = dto.snapshotStartTime
-      ? this.parseTime(dto.snapshotStartTime, 'snapshotStartTime')
+      ? this.parseTime(dto.snapshotStartTime, 'snapshotStartTime', timeZone)
       : new Date(entryTime.getTime() - DEFAULT_LOOKBACK_MS);
     const snapshotEndTime = dto.snapshotEndTime
-      ? this.parseTime(dto.snapshotEndTime, 'snapshotEndTime')
+      ? this.parseTime(dto.snapshotEndTime, 'snapshotEndTime', timeZone)
       : new Date(exitTime.getTime() + DEFAULT_LOOKAHEAD_MS);
     if (snapshotEndTime.getTime() <= snapshotStartTime.getTime()) {
       throw new BadRequestException('snapshotEndTime must be after snapshotStartTime');
@@ -201,8 +246,7 @@ export class PracticalFlashcardService {
     }
 
     const candles = await this.fetchCandles(
-      dto.venue,
-      dto.symbolPairInfo,
+      normalizedSymbol,
       primaryInterval,
       snapshotStartTime.getTime(),
       snapshotEndTime.getTime(),
@@ -218,8 +262,9 @@ export class PracticalFlashcardService {
       entityType: 'PRACTICAL_FLASHCARD',
       status: 'ACTIVE',
       venue: dto.venue,
-      symbolPairInfo: this.normalizeSymbol(dto.symbolPairInfo),
+      symbolPairInfo: normalizedSymbol,
       primaryInterval,
+      timeZone,
       entryTimeInfo: dto.entryTimeInfo.trim(),
       exitTimeInfo: dto.exitTimeInfo.trim(),
       snapshotStartTime: snapshotStartTime.toISOString(),
@@ -244,14 +289,13 @@ export class PracticalFlashcardService {
   }
 
   private async fetchCandles(
-    venue: PracticalFlashcardVenue,
     symbolPairInfo: string,
     interval: PracticalFlashcardInterval,
     startTime: number,
     endTime: number,
   ): Promise<PracticalFlashcardCandle[]> {
-    const baseUrl = venue === 'BINANCE_SPOT' ? 'https://api.binance.com' : 'https://fapi.binance.com';
-    const path = venue === 'BINANCE_SPOT' ? '/api/v3/klines' : '/fapi/v1/klines';
+    const baseUrl = 'https://fapi.binance.com';
+    const path = '/fapi/v1/klines';
     const params = new URLSearchParams({
       symbol: this.normalizeSymbol(symbolPairInfo),
       interval,
@@ -297,6 +341,42 @@ export class PracticalFlashcardService {
         closeTime: Number(row[6]),
       };
     });
+  }
+
+  private async buildSnapshotForTimeRange(
+    existing: PracticalFlashcardCard,
+    entryTimeInfo: string,
+    exitTimeInfo: string,
+    timeZone: string,
+  ) {
+    const normalizedSymbol = this.assertSupportedBinanceUmSymbol(existing.venue, existing.symbolPairInfo);
+    const normalizedTimeZone = this.normalizeTimeZone(timeZone);
+    const entryTime = this.parseTime(entryTimeInfo, 'entryTimeInfo', normalizedTimeZone);
+    const exitTime = this.parseTime(exitTimeInfo, 'exitTimeInfo', normalizedTimeZone);
+    if (exitTime.getTime() <= entryTime.getTime()) {
+      throw new BadRequestException('exitTimeInfo must be after entryTimeInfo');
+    }
+
+    const snapshotStartTime = new Date(entryTime.getTime() - DEFAULT_LOOKBACK_MS);
+    const snapshotEndTime = new Date(exitTime.getTime() + DEFAULT_LOOKAHEAD_MS);
+    const candles = await this.fetchCandles(
+      normalizedSymbol,
+      existing.primaryInterval || '15m',
+      snapshotStartTime.getTime(),
+      snapshotEndTime.getTime(),
+    );
+    this.assertSnapshotCoverage(candles, entryTime.getTime(), exitTime.getTime());
+
+    return {
+      entryTimeInfo: entryTimeInfo.trim(),
+      exitTimeInfo: exitTimeInfo.trim(),
+      timeZone: normalizedTimeZone,
+      snapshotStartTime: snapshotStartTime.toISOString(),
+      snapshotEndTime: snapshotEndTime.toISOString(),
+      candles,
+      initialVisibleCandleIndex: this.resolveCandleIndex(candles, entryTime.getTime()),
+      resultCandleIndex: this.resolveCandleIndex(candles, exitTime.getTime()),
+    };
   }
 
   private assertSnapshotCoverage(candles: PracticalFlashcardCandle[], entryTime: number, exitTime: number) {
@@ -356,20 +436,91 @@ export class PracticalFlashcardService {
     return { ...card, tagItems };
   }
 
-  private parseTime(value: string, fieldName: string) {
+  private parseTime(value: string, fieldName: string, timeZone = DEFAULT_TIME_ZONE) {
     const trimmed = value.trim();
-    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/.test(trimmed)
-      ? trimmed.replace(' ', 'T')
-      : trimmed;
-    const date = new Date(normalized);
+    const localMatch = trimmed.match(
+      /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/,
+    );
+    const date = localMatch
+      ? this.parseZonedTime(localMatch, this.normalizeTimeZone(timeZone))
+      : new Date(trimmed);
     if (Number.isNaN(date.getTime())) {
       throw new BadRequestException(`${fieldName} must be a valid datetime`);
     }
     return date;
   }
 
+  private parseZonedTime(match: RegExpMatchArray, timeZone: string) {
+    const [, year, month, day, hour, minute, second] = match;
+    const utcGuess = Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      Number(hour),
+      Number(minute),
+      Number(second || '0'),
+    );
+    const offset = this.getTimeZoneOffsetMs(timeZone, utcGuess);
+    let utcTime = utcGuess - offset;
+    const adjustedOffset = this.getTimeZoneOffsetMs(timeZone, utcTime);
+    if (adjustedOffset !== offset) {
+      utcTime = utcGuess - adjustedOffset;
+    }
+    return new Date(utcTime);
+  }
+
+  private getTimeZoneOffsetMs(timeZone: string, utcTime: number) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(new Date(utcTime));
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    const zonedAsUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+      Number(values.second),
+    );
+    return zonedAsUtc - utcTime;
+  }
+
+  private normalizeTimeZone(value?: string) {
+    const timeZone = value?.trim() || DEFAULT_TIME_ZONE;
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+      return timeZone;
+    } catch {
+      throw new BadRequestException('timeZone must be a valid IANA timezone');
+    }
+  }
+
   private normalizeSymbol(value: string) {
     return value.trim().replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  }
+
+  private assertSupportedBinanceUmSymbol(venue: string, symbolPairInfo: string) {
+    if (venue !== 'BINANCE_UM_FUTURES') {
+      throw new BadRequestException('Practical flashcard creation currently only supports Binance U-M futures');
+    }
+    const normalized = this.normalizeSymbol(symbolPairInfo);
+    if (!normalized) {
+      throw new BadRequestException('symbolPairInfo is required');
+    }
+    const supportedSymbols: readonly string[] = PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES;
+    if (!supportedSymbols.includes(normalized)) {
+      throw new BadRequestException(
+        `symbolPairInfo must be one of ${PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES.join(', ')}`,
+      );
+    }
+    return normalized;
   }
 
   private normalizeUrls(urls?: string[]) {
