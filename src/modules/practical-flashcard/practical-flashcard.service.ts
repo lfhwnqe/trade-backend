@@ -141,18 +141,20 @@ export class PracticalFlashcardService {
 
   async getCandlesBefore(userId: string, cardId: string, dto: GetPracticalFlashcardCandlesBeforeDto) {
     const card = await this.getCardOrThrow(userId, cardId);
-    if (!Number.isFinite(dto.beforeOpenTime)) {
+    const beforeOpenTime = Number(dto.beforeOpenTime);
+    if (!Number.isFinite(beforeOpenTime)) {
       throw new BadRequestException('beforeOpenTime must be a valid timestamp');
     }
     const firstSavedOpenTime = card.candles?.[0]?.openTime;
-    if (!firstSavedOpenTime || dto.beforeOpenTime > firstSavedOpenTime) {
+    if (!firstSavedOpenTime || beforeOpenTime > firstSavedOpenTime) {
       throw new BadRequestException('beforeOpenTime must be at or before the saved snapshot start');
     }
 
     const intervalMs = INTERVAL_MS[card.primaryInterval || '15m'];
-    const limit = Math.min(Math.max(dto.limit || 500, 1), BINANCE_LIMIT);
-    const endTime = dto.beforeOpenTime - 1;
-    const startTime = Math.max(0, dto.beforeOpenTime - intervalMs * limit);
+    const parsedLimit = Number(dto.limit || 500);
+    const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 500, 1), BINANCE_LIMIT);
+    const endTime = beforeOpenTime - 1;
+    const startTime = Math.max(0, beforeOpenTime - intervalMs * limit);
     const candles = await this.fetchCandles(
       card.symbolPairInfo,
       card.primaryInterval || '15m',
@@ -164,8 +166,8 @@ export class PracticalFlashcardService {
     return {
       success: true,
       data: {
-        items: candles.filter((candle) => candle.openTime < dto.beforeOpenTime),
-        beforeOpenTime: dto.beforeOpenTime,
+        items: candles.filter((candle) => candle.openTime < beforeOpenTime),
+        beforeOpenTime,
       },
     };
   }
