@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { GetPracticalFlashcardCandlesBeforeDto } from './dto/get-practical-flashcard-candles-before.dto';
 import { GetPracticalFlashcardDashboardAnalyticsDto } from './dto/get-practical-flashcard-dashboard-analytics.dto';
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
@@ -63,6 +64,21 @@ export class PracticalFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.practicalFlashcardService.getCard(userId, cardId);
+  }
+
+  @ApiOperation({ summary: '按需拉取实操闪卡更早历史 K 线（不写入卡片快照）' })
+  @ApiParam({ name: 'cardId', description: '实操闪卡 ID' })
+  @ApiQuery({ name: 'beforeOpenTime', required: true, example: 1716206400000 })
+  @ApiQuery({ name: 'limit', required: false, example: 500 })
+  @Get('cards/:cardId/candles/before')
+  async getCandlesBefore(
+    @Req() req: Request,
+    @Param('cardId') cardId: string,
+    @Query() query: GetPracticalFlashcardCandlesBeforeDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.getCandlesBefore(userId, cardId, query);
   }
 
   @ApiOperation({ summary: '更新实操闪卡非行情字段' })

@@ -10,6 +10,7 @@ import { TradeFlashcardCard } from '../trade-flashcard/trade-flashcard.types';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { GetPracticalFlashcardCandlesBeforeDto } from './dto/get-practical-flashcard-candles-before.dto';
 import { GetPracticalFlashcardDashboardAnalyticsDto } from './dto/get-practical-flashcard-dashboard-analytics.dto';
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
@@ -34,6 +35,9 @@ import {
 const DEFAULT_LOOKBACK_MS = 5 * 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
 const BINANCE_LIMIT = 1000;
+const INTERVAL_MS: Record<PracticalFlashcardInterval, number> = {
+  '15m': 15 * 60 * 1000,
+};
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 const PRACTICAL_ATTEMPT_PREFIX = 'practical-attempt#';
 
@@ -133,6 +137,37 @@ export class PracticalFlashcardService {
 
   async getCard(userId: string, cardId: string) {
     return { success: true, data: await this.getCardOrThrow(userId, cardId) };
+  }
+
+  async getCandlesBefore(userId: string, cardId: string, dto: GetPracticalFlashcardCandlesBeforeDto) {
+    const card = await this.getCardOrThrow(userId, cardId);
+    if (!Number.isFinite(dto.beforeOpenTime)) {
+      throw new BadRequestException('beforeOpenTime must be a valid timestamp');
+    }
+    const firstSavedOpenTime = card.candles?.[0]?.openTime;
+    if (!firstSavedOpenTime || dto.beforeOpenTime > firstSavedOpenTime) {
+      throw new BadRequestException('beforeOpenTime must be at or before the saved snapshot start');
+    }
+
+    const intervalMs = INTERVAL_MS[card.primaryInterval || '15m'];
+    const limit = Math.min(Math.max(dto.limit || 500, 1), BINANCE_LIMIT);
+    const endTime = dto.beforeOpenTime - 1;
+    const startTime = Math.max(0, dto.beforeOpenTime - intervalMs * limit);
+    const candles = await this.fetchCandles(
+      card.symbolPairInfo,
+      card.primaryInterval || '15m',
+      startTime,
+      endTime,
+      { allowEmpty: true },
+    );
+
+    return {
+      success: true,
+      data: {
+        items: candles.filter((candle) => candle.openTime < dto.beforeOpenTime),
+        beforeOpenTime: dto.beforeOpenTime,
+      },
+    };
   }
 
   async updateCard(userId: string, cardId: string, dto: UpdatePracticalFlashcardCardDto) {
@@ -620,6 +655,7 @@ export class PracticalFlashcardService {
     interval: PracticalFlashcardInterval,
     startTime: number,
     endTime: number,
+    options: { allowEmpty?: boolean } = {},
   ): Promise<PracticalFlashcardCandle[]> {
     const baseUrl = 'https://fapi.binance.com';
     const path = '/fapi/v1/klines';
@@ -653,6 +689,7 @@ export class PracticalFlashcardService {
       );
     }
     if (!Array.isArray(raw) || raw.length === 0) {
+      if (options.allowEmpty) return [];
       throw new BadRequestException('No candles returned for the requested snapshot range');
     }
 
