@@ -435,6 +435,12 @@ export class PracticalFlashcardService {
     return { success: true, data: await this.getAttemptOrThrow(userId, attemptId) };
   }
 
+  async deleteAttempt(userId: string, attemptId: string) {
+    await this.getAttemptOrThrow(userId, attemptId);
+    await this.db.delete({ TableName: this.tableName, Key: { userId, cardId: this.makeAttemptKey(attemptId) } });
+    return { success: true, data: true };
+  }
+
   async getDashboardAnalytics(userId: string, dto: GetPracticalFlashcardDashboardAnalyticsDto) {
     const allAttempts = await this.listAllAttempts(userId);
     const cards = await this.listAllCards(userId);

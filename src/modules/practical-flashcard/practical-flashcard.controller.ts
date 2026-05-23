@@ -143,6 +143,15 @@ export class PracticalFlashcardController {
     return this.practicalFlashcardService.listAttempts(userId, query);
   }
 
+  @ApiOperation({ summary: '删除单次实操闪卡训练记录' })
+  @ApiParam({ name: 'attemptId', description: '实操训练 attempt ID' })
+  @Delete('attempts/:attemptId')
+  async deleteAttempt(@Req() req: Request, @Param('attemptId') attemptId: string) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.deleteAttempt(userId, attemptId);
+  }
+
   @ApiOperation({ summary: '查询实操闪卡训练统计 Dashboard' })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
