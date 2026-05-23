@@ -146,3 +146,52 @@ export type PracticalFlashcardRunningStats = {
   avgPlannedRr: number | null;
   orderFlowRevealRate: number | null;
 };
+
+export type PracticalFlashcardAnalyticsGroup = {
+  key: string;
+  label: string;
+  attemptCount: number;
+  resolvedCount: number;
+  winCount: number;
+  winRate: number | null;
+  avgRealizedR: number | null;
+  totalRealizedR: number;
+  avgPlannedRr: number | null;
+};
+
+export type PracticalFlashcardAnalysisDimensionStats = {
+  key: string;
+  label: string;
+  reviewedCount: number;
+  correctCount: number;
+  wrongCount: number;
+  correctRate: number | null;
+};
+
+export type PracticalFlashcardAnalyticsAttemptSample = {
+  attemptId: string;
+  targetCardId: string;
+  resolvedAt?: string;
+  symbolPairInfo?: string;
+  playbookType?: string;
+  tradeDirection?: PracticalFlashcardTradeDirection;
+  realizedR?: number;
+  isWin?: boolean;
+  mistakeReasons?: string[];
+  summary?: string;
+};
+
+export type PracticalFlashcardDashboardAnalytics = PracticalFlashcardRunningStats & {
+  filters: {
+    from?: string;
+    to?: string;
+    playbookType?: string;
+    symbolPairInfo?: string;
+  };
+  analysisDimensions: PracticalFlashcardAnalysisDimensionStats[];
+  playbookStats: PracticalFlashcardAnalyticsGroup[];
+  symbolStats: PracticalFlashcardAnalyticsGroup[];
+  cardStats: PracticalFlashcardAnalyticsGroup[];
+  recentAttempts: PracticalFlashcardAnalyticsAttemptSample[];
+  recentWrongAttempts: PracticalFlashcardAnalyticsAttemptSample[];
+};

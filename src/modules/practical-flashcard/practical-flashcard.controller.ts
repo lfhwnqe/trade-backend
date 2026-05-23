@@ -4,6 +4,7 @@ import { Request } from 'express';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { GetPracticalFlashcardDashboardAnalyticsDto } from './dto/get-practical-flashcard-dashboard-analytics.dto';
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
 import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
@@ -140,6 +141,21 @@ export class PracticalFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.practicalFlashcardService.listAttempts(userId, query);
+  }
+
+  @ApiOperation({ summary: '查询实操闪卡训练统计 Dashboard' })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'playbookType', required: false })
+  @ApiQuery({ name: 'symbolPairInfo', required: false })
+  @Get('analytics/dashboard')
+  async getDashboardAnalytics(
+    @Req() req: Request,
+    @Query() query: GetPracticalFlashcardDashboardAnalyticsDto,
+  ) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.getDashboardAnalytics(userId, query);
   }
 
   @ApiOperation({ summary: '获取单次实操闪卡训练详情' })

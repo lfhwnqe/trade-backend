@@ -10,6 +10,7 @@ import { TradeFlashcardCard } from '../trade-flashcard/trade-flashcard.types';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { GetPracticalFlashcardDashboardAnalyticsDto } from './dto/get-practical-flashcard-dashboard-analytics.dto';
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
 import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
@@ -19,8 +20,11 @@ import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcar
 import {
   PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES,
   PracticalFlashcardAttempt,
+  PracticalFlashcardAnalyticsAttemptSample,
+  PracticalFlashcardAnalyticsGroup,
   PracticalFlashcardCandle,
   PracticalFlashcardCard,
+  PracticalFlashcardDashboardAnalytics,
   PracticalFlashcardExitReason,
   PracticalFlashcardInterval,
   PracticalFlashcardRunningStats,
@@ -323,7 +327,38 @@ export class PracticalFlashcardService {
   ) {
     const attempt = await this.getAttemptOrThrow(userId, attemptId);
     if (attempt.status === 'RESOLVED') {
-      return { success: true, data: { attempt, runningStats: await this.getRunningStats(userId) } };
+      const hasField = (field: keyof ResolvePracticalFlashcardAttemptDto) =>
+        Object.prototype.hasOwnProperty.call(dto, field);
+      const orderFlowAnalysisUsed = hasField('orderFlowAnalysisUsed')
+        ? dto.orderFlowAnalysisUsed
+        : attempt.orderFlowAnalysisUsed;
+      const updated: PracticalFlashcardAttempt = {
+        ...attempt,
+        drawingSnapshot: hasField('drawingSnapshot') ? dto.drawingSnapshot ?? attempt.drawingSnapshot : attempt.drawingSnapshot,
+        marketStructureAnalysisCorrect: hasField('marketStructureAnalysisCorrect')
+          ? dto.marketStructureAnalysisCorrect
+          : attempt.marketStructureAnalysisCorrect,
+        priceActionAnalysisCorrect: hasField('priceActionAnalysisCorrect')
+          ? dto.priceActionAnalysisCorrect
+          : attempt.priceActionAnalysisCorrect,
+        orderFlowAnalysisUsed,
+        orderFlowAnalysisCorrect: orderFlowAnalysisUsed
+          ? hasField('orderFlowAnalysisCorrect')
+            ? dto.orderFlowAnalysisCorrect
+            : attempt.orderFlowAnalysisCorrect
+          : undefined,
+        riskRewardSetupCorrect: hasField('riskRewardSetupCorrect')
+          ? dto.riskRewardSetupCorrect
+          : attempt.riskRewardSetupCorrect,
+        mistakeReasons: hasField('mistakeReasons')
+          ? dto.mistakeReasons?.map((item) => item.trim()).filter(Boolean)
+          : attempt.mistakeReasons,
+        notes: hasField('notes') ? dto.notes?.trim() || undefined : attempt.notes,
+        summary: hasField('summary') ? dto.summary?.trim() || undefined : attempt.summary,
+        updatedAt: new Date().toISOString(),
+      };
+      await this.db.put({ TableName: this.tableName, Item: updated });
+      return { success: true, data: { attempt: updated, runningStats: await this.getRunningStats(userId) } };
     }
     if (!attempt.tradeDirection || attempt.tradeOpenedCandleIndex === undefined) {
       throw new BadRequestException('Confirm a trade before resolving the attempt');
@@ -398,6 +433,70 @@ export class PracticalFlashcardService {
 
   async getAttempt(userId: string, attemptId: string) {
     return { success: true, data: await this.getAttemptOrThrow(userId, attemptId) };
+  }
+
+  async getDashboardAnalytics(userId: string, dto: GetPracticalFlashcardDashboardAnalyticsDto) {
+    const allAttempts = await this.listAllAttempts(userId);
+    const cards = await this.listAllCards(userId);
+    const cardById = new Map(cards.map((card) => [card.cardId, card]));
+    const fromTime = dto.from ? this.safeParseTimestamp(dto.from) : null;
+    const toTime = dto.to ? this.safeParseTimestamp(dto.to) : null;
+    const symbolFilter = dto.symbolPairInfo ? this.normalizeSymbol(dto.symbolPairInfo) : undefined;
+
+    const resolved = allAttempts.filter((attempt) => {
+      if (attempt.status !== 'RESOLVED') return false;
+      const context = this.resolveAttemptAnalyticsContext(attempt, cardById.get(attempt.targetCardId));
+      if (dto.playbookType && context.playbookType !== dto.playbookType) return false;
+      if (symbolFilter && this.normalizeSymbol(context.symbolPairInfo || '') !== symbolFilter) return false;
+      const resolvedAt = this.safeParseTimestamp(attempt.resolvedAt || attempt.updatedAt);
+      if (fromTime !== null && resolvedAt < fromTime) return false;
+      if (toTime !== null && resolvedAt > toTime) return false;
+      return true;
+    });
+
+    const runningStats = this.calculateRunningStats(resolved, resolved);
+    const sorted = [...resolved].sort(
+      (a, b) =>
+        this.safeParseTimestamp(b.resolvedAt || b.updatedAt) -
+        this.safeParseTimestamp(a.resolvedAt || a.updatedAt),
+    );
+    const dashboard: PracticalFlashcardDashboardAnalytics = {
+      ...runningStats,
+      filters: {
+        ...(dto.from ? { from: dto.from } : {}),
+        ...(dto.to ? { to: dto.to } : {}),
+        ...(dto.playbookType ? { playbookType: dto.playbookType } : {}),
+        ...(dto.symbolPairInfo ? { symbolPairInfo: dto.symbolPairInfo } : {}),
+      },
+      analysisDimensions: this.buildAnalysisDimensionStats(resolved),
+      playbookStats: this.buildGroupedAttemptStats(
+        resolved,
+        (attempt) => this.resolveAttemptAnalyticsContext(attempt, cardById.get(attempt.targetCardId)).playbookType,
+        (key) => key,
+      ),
+      symbolStats: this.buildGroupedAttemptStats(
+        resolved,
+        (attempt) => this.resolveAttemptAnalyticsContext(attempt, cardById.get(attempt.targetCardId)).symbolPairInfo,
+        (key) => key,
+      ),
+      cardStats: this.buildGroupedAttemptStats(
+        resolved,
+        (attempt) => attempt.targetCardId,
+        (key) => {
+          const card = cardById.get(key);
+          const symbol = card?.symbolPairInfo || '未知币对';
+          const playbook = card?.playbookType || '未知剧本';
+          return `${symbol} / ${playbook} / ${key.slice(0, 8)}`;
+        },
+      ).slice(0, 10),
+      recentAttempts: sorted.slice(0, 10).map((attempt) => this.toAnalyticsAttemptSample(attempt, cardById.get(attempt.targetCardId))),
+      recentWrongAttempts: sorted
+        .filter((attempt) => attempt.isWin === false)
+        .slice(0, 10)
+        .map((attempt) => this.toAnalyticsAttemptSample(attempt, cardById.get(attempt.targetCardId))),
+    };
+
+    return { success: true, data: dashboard };
   }
 
   private async createAttemptForCard(
@@ -689,6 +788,13 @@ export class PracticalFlashcardService {
   private async getRunningStats(userId: string): Promise<PracticalFlashcardRunningStats> {
     const attempts = await this.listAllAttempts(userId);
     const resolved = attempts.filter((attempt) => attempt.status === 'RESOLVED');
+    return this.calculateRunningStats(attempts, resolved);
+  }
+
+  private calculateRunningStats(
+    attempts: PracticalFlashcardAttempt[],
+    resolved: PracticalFlashcardAttempt[],
+  ): PracticalFlashcardRunningStats {
     const wins = resolved.filter((attempt) => attempt.isWin === true).length;
     const realizedValues = resolved
       .map((attempt) => attempt.realizedR)
@@ -708,6 +814,108 @@ export class PracticalFlashcardService {
         ? plannedValues.reduce((sum, value) => sum + value, 0) / plannedValues.length
         : null,
       orderFlowRevealRate: resolved.length ? revealCount / resolved.length : null,
+    };
+  }
+
+  private buildGroupedAttemptStats(
+    attempts: PracticalFlashcardAttempt[],
+    getKey: (attempt: PracticalFlashcardAttempt) => string | undefined,
+    getLabel: (key: string) => string,
+  ): PracticalFlashcardAnalyticsGroup[] {
+    const groups = new Map<string, PracticalFlashcardAttempt[]>();
+    for (const attempt of attempts) {
+      const key = getKey(attempt) || 'UNKNOWN';
+      const current = groups.get(key) || [];
+      current.push(attempt);
+      groups.set(key, current);
+    }
+
+    return Array.from(groups.entries())
+      .map(([key, items]) => {
+        const wins = items.filter((attempt) => attempt.isWin === true).length;
+        const realizedValues = items
+          .map((attempt) => attempt.realizedR)
+          .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const plannedValues = items
+          .map((attempt) => attempt.plannedRr)
+          .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+        const totalRealizedR = realizedValues.reduce((sum, value) => sum + value, 0);
+        return {
+          key,
+          label: getLabel(key),
+          attemptCount: items.length,
+          resolvedCount: items.length,
+          winCount: wins,
+          winRate: items.length ? wins / items.length : null,
+          avgRealizedR: realizedValues.length ? totalRealizedR / realizedValues.length : null,
+          totalRealizedR,
+          avgPlannedRr: plannedValues.length
+            ? plannedValues.reduce((sum, value) => sum + value, 0) / plannedValues.length
+            : null,
+        };
+      })
+      .sort((a, b) => b.resolvedCount - a.resolvedCount || a.label.localeCompare(b.label));
+  }
+
+  private buildAnalysisDimensionStats(attempts: PracticalFlashcardAttempt[]) {
+    return [
+      this.buildBooleanDimensionStats(attempts, 'marketStructureAnalysisCorrect', '市场结构分析'),
+      this.buildBooleanDimensionStats(attempts, 'priceActionAnalysisCorrect', '价格行为分析'),
+      this.buildBooleanDimensionStats(
+        attempts.filter((attempt) => attempt.orderFlowAnalysisUsed === true),
+        'orderFlowAnalysisCorrect',
+        '足迹图 / 订单流分析',
+      ),
+      this.buildBooleanDimensionStats(attempts, 'riskRewardSetupCorrect', '止盈止损设置'),
+    ];
+  }
+
+  private buildBooleanDimensionStats(
+    attempts: PracticalFlashcardAttempt[],
+    key: 'marketStructureAnalysisCorrect' | 'priceActionAnalysisCorrect' | 'orderFlowAnalysisCorrect' | 'riskRewardSetupCorrect',
+    label: string,
+  ) {
+    const reviewed = attempts.filter((attempt) => typeof attempt[key] === 'boolean');
+    const correctCount = reviewed.filter((attempt) => attempt[key] === true).length;
+    return {
+      key,
+      label,
+      reviewedCount: reviewed.length,
+      correctCount,
+      wrongCount: reviewed.length - correctCount,
+      correctRate: reviewed.length ? correctCount / reviewed.length : null,
+    };
+  }
+
+  private resolveAttemptAnalyticsContext(
+    attempt: PracticalFlashcardAttempt,
+    fallbackCard?: PracticalFlashcardCard,
+  ) {
+    return {
+      playbookType: attempt.cardSnapshot?.playbookType || fallbackCard?.playbookType,
+      symbolPairInfo: attempt.cardSnapshot?.symbolPairInfo || fallbackCard?.symbolPairInfo,
+      tagCodes: attempt.cardSnapshot?.tagCodes || fallbackCard?.tagCodes || [],
+      primaryInterval: attempt.cardSnapshot?.primaryInterval || fallbackCard?.primaryInterval,
+      expectedDirection: attempt.cardSnapshot?.expectedDirection || fallbackCard?.expectedDirection,
+    };
+  }
+
+  private toAnalyticsAttemptSample(
+    attempt: PracticalFlashcardAttempt,
+    fallbackCard?: PracticalFlashcardCard,
+  ): PracticalFlashcardAnalyticsAttemptSample {
+    const context = this.resolveAttemptAnalyticsContext(attempt, fallbackCard);
+    return {
+      attemptId: attempt.attemptId,
+      targetCardId: attempt.targetCardId,
+      resolvedAt: attempt.resolvedAt,
+      symbolPairInfo: context.symbolPairInfo,
+      playbookType: context.playbookType,
+      tradeDirection: attempt.tradeDirection,
+      realizedR: attempt.realizedR,
+      isWin: attempt.isWin,
+      mistakeReasons: attempt.mistakeReasons,
+      summary: attempt.summary,
     };
   }
 

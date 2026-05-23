@@ -23,20 +23,23 @@ export class ResolvePracticalFlashcardAttemptDto {
   @Min(0)
   finalCandleIndex?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  marketStructureAnalysisCorrect: boolean;
+  marketStructureAnalysisCorrect?: boolean;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  priceActionAnalysisCorrect: boolean;
+  priceActionAnalysisCorrect?: boolean;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  orderFlowAnalysisUsed: boolean;
+  orderFlowAnalysisUsed?: boolean;
 
   @ApiPropertyOptional({ description: '未使用足迹图时可不传' })
   @ValidateIf((o) => o.orderFlowAnalysisUsed === true)
@@ -44,10 +47,11 @@ export class ResolvePracticalFlashcardAttemptDto {
   @IsBoolean()
   orderFlowAnalysisCorrect?: boolean;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @Type(() => Boolean)
   @IsBoolean()
-  riskRewardSetupCorrect: boolean;
+  riskRewardSetupCorrect?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
