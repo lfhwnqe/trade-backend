@@ -13,6 +13,7 @@ import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-prac
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
 import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
+import { StartRandomPracticalFlashcardTrainingDto } from './dto/start-random-practical-flashcard-training.dto';
 import { StartPracticalFlashcardAttemptDto } from './dto/start-practical-flashcard-attempt.dto';
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import {
@@ -20,8 +21,10 @@ import {
   PracticalFlashcardAttempt,
   PracticalFlashcardCandle,
   PracticalFlashcardCard,
+  PracticalFlashcardExitReason,
   PracticalFlashcardInterval,
   PracticalFlashcardRunningStats,
+  PracticalFlashcardTrainingMode,
 } from './practical-flashcard.types';
 
 const DEFAULT_LOOKBACK_MS = 5 * 24 * 60 * 60 * 1000;
@@ -43,7 +46,7 @@ export class PracticalFlashcardService {
     this.region = this.configService.getOrThrow('AWS_REGION');
     this.tableName = this.configService.getOrThrow('FLASHCARDS_TABLE_NAME');
     this.db = DynamoDBDocument.from(new DynamoDB({ region: this.region }), {
-      marshallOptions: { convertClassInstanceToMap: true },
+      marshallOptions: { convertClassInstanceToMap: true, removeUndefinedValues: true },
     });
   }
 
@@ -221,28 +224,47 @@ export class PracticalFlashcardService {
 
   async startAttempt(userId: string, dto: StartPracticalFlashcardAttemptDto) {
     const card = await this.getCardOrThrow(userId, dto.cardId);
-    if (card.status !== 'ACTIVE') {
-      throw new BadRequestException('Only active practical flashcards can be practiced');
+    const attempt = await this.createAttemptForCard(userId, card, 'DIRECT_CARD');
+    return { success: true, data: { attemptId: attempt.attemptId, attempt, card } };
+  }
+
+  async startRandomTraining(userId: string, dto: StartRandomPracticalFlashcardTrainingDto) {
+    let candidates = (await this.listAllCards(userId)).filter((card) => {
+      if (card.status !== 'ACTIVE') return false;
+      if (!Array.isArray(card.candles) || card.candles.length === 0) return false;
+      if (dto.symbolPairInfo) {
+        const keyword = this.normalizeSymbol(dto.symbolPairInfo);
+        if (keyword && this.normalizeSymbol(card.symbolPairInfo) !== keyword) return false;
+      }
+      if (dto.playbookType && card.playbookType !== dto.playbookType) return false;
+      if (dto.tagCodes?.length) {
+        const cardTags = new Set(card.tagCodes || []);
+        if (!dto.tagCodes.every((tagCode) => cardTags.has(tagCode))) return false;
+      }
+      return true;
+    });
+    if (dto.excludeRecentlyResolved !== false && candidates.length > 1) {
+      const recentlyResolvedCardIds = new Set(
+        (await this.listAllAttempts(userId))
+          .filter((attempt) => attempt.status === 'RESOLVED')
+          .sort(
+            (a, b) =>
+              this.safeParseTimestamp(b.resolvedAt || b.updatedAt) -
+              this.safeParseTimestamp(a.resolvedAt || a.updatedAt),
+          )
+          .slice(0, 20)
+          .map((attempt) => attempt.targetCardId),
+      );
+      const freshCandidates = candidates.filter((card) => !recentlyResolvedCardIds.has(card.cardId));
+      if (freshCandidates.length) candidates = freshCandidates;
+    }
+    if (!candidates.length) {
+      throw new BadRequestException('No active practical flashcards available for random training');
     }
 
-    const now = new Date().toISOString();
-    const attemptId = uuidv4();
-    const attempt: PracticalFlashcardAttempt = {
-      id: attemptId,
-      userId,
-      cardId: this.makeAttemptKey(attemptId),
-      entityType: 'PRACTICAL_FLASHCARD_ATTEMPT',
-      attemptId,
-      targetCardId: card.cardId,
-      status: 'IN_PROGRESS',
-      currentCandleIndex: card.initialVisibleCandleIndex,
-      startedAt: now,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    await this.db.put({ TableName: this.tableName, Item: attempt });
-    return { success: true, data: { attemptId, attempt, card } };
+    const picked = candidates[Math.floor(Math.random() * candidates.length)];
+    const attempt = await this.createAttemptForCard(userId, picked, 'RANDOM_TRAINING');
+    return { success: true, data: { attemptId: attempt.attemptId, attempt, card: picked } };
   }
 
   async createAttemptTrade(
@@ -322,6 +344,16 @@ export class PracticalFlashcardService {
       isWin: dto.isWin ?? calculated.isWin,
       maxFavorableR: dto.maxFavorableR ?? calculated.maxFavorableR,
       maxAdverseR: dto.maxAdverseR ?? calculated.maxAdverseR,
+      tradeClosedCandleIndex: dto.tradeClosedCandleIndex ?? calculated.tradeClosedCandleIndex,
+      exitPrice: dto.exitPrice ?? calculated.exitPrice,
+      exitReason: dto.exitReason ?? calculated.exitReason,
+      tradeExecutionSnapshot: this.buildTradeExecutionSnapshot(
+        card.candles,
+        attempt,
+        dto.tradeClosedCandleIndex ?? calculated.tradeClosedCandleIndex,
+        dto.exitPrice ?? calculated.exitPrice,
+        dto.exitReason ?? calculated.exitReason,
+      ),
       drawingSnapshot: dto.drawingSnapshot ?? attempt.drawingSnapshot,
       marketStructureAnalysisCorrect: dto.marketStructureAnalysisCorrect,
       priceActionAnalysisCorrect: dto.priceActionAnalysisCorrect,
@@ -366,6 +398,40 @@ export class PracticalFlashcardService {
 
   async getAttempt(userId: string, attemptId: string) {
     return { success: true, data: await this.getAttemptOrThrow(userId, attemptId) };
+  }
+
+  private async createAttemptForCard(
+    userId: string,
+    card: PracticalFlashcardCard,
+    trainingMode: PracticalFlashcardTrainingMode,
+  ) {
+    if (card.status !== 'ACTIVE') {
+      throw new BadRequestException('Only active practical flashcards can be practiced');
+    }
+    if (!Array.isArray(card.candles) || card.candles.length === 0) {
+      throw new BadRequestException('Practical flashcard requires frozen candles before training');
+    }
+
+    const now = new Date().toISOString();
+    const attemptId = uuidv4();
+    const attempt: PracticalFlashcardAttempt = {
+      id: attemptId,
+      userId,
+      cardId: this.makeAttemptKey(attemptId),
+      entityType: 'PRACTICAL_FLASHCARD_ATTEMPT',
+      attemptId,
+      targetCardId: card.cardId,
+      status: 'IN_PROGRESS',
+      trainingMode,
+      cardSnapshot: this.buildCardSnapshot(card),
+      currentCandleIndex: card.initialVisibleCandleIndex,
+      startedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await this.db.put({ TableName: this.tableName, Item: attempt });
+    return attempt;
   }
 
   private async buildCardFromInput(
@@ -645,6 +711,16 @@ export class PracticalFlashcardService {
     };
   }
 
+  private buildCardSnapshot(card: PracticalFlashcardCard) {
+    return {
+      playbookType: card.playbookType,
+      tagCodes: card.tagCodes || [],
+      symbolPairInfo: card.symbolPairInfo,
+      primaryInterval: card.primaryInterval,
+      ...(card.expectedDirection ? { expectedDirection: card.expectedDirection } : {}),
+    };
+  }
+
   private async attachDictionaryTags(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
     const tagItems = await this.dictionaryService.resolveCategoryItemsByCodes(
       card.userId,
@@ -800,10 +876,12 @@ export class PracticalFlashcardService {
     const end = this.clampCandleIndex(finalCandleIndex, candles);
     const window = candles.slice(start, end + 1);
     let hit: 'TAKE_PROFIT' | 'STOP_LOSS' | null = null;
+    let hitIndex: number | undefined;
     let maxFavorableR = 0;
     let maxAdverseR = 0;
 
-    for (const candle of window) {
+    for (let offset = 0; offset < window.length; offset += 1) {
+      const candle = window[offset];
       const favorable = direction === 'LONG' ? candle.high - entryPrice : entryPrice - candle.low;
       const adverse = direction === 'LONG' ? entryPrice - candle.low : candle.high - entryPrice;
       maxFavorableR = Math.max(maxFavorableR, favorable / risk);
@@ -813,14 +891,17 @@ export class PracticalFlashcardService {
       const takeProfitHit = direction === 'LONG' ? candle.high >= takeProfitPrice : candle.low <= takeProfitPrice;
       if (stopHit && takeProfitHit) {
         hit = 'STOP_LOSS';
+        hitIndex = start + offset;
         break;
       }
       if (stopHit) {
         hit = 'STOP_LOSS';
+        hitIndex = start + offset;
         break;
       }
       if (takeProfitHit) {
         hit = 'TAKE_PROFIT';
+        hitIndex = start + offset;
         break;
       }
     }
@@ -833,12 +914,51 @@ export class PracticalFlashcardService {
         : hit === 'STOP_LOSS'
           ? -1
           : floatingR;
+    const exitReason: PracticalFlashcardExitReason =
+      hit === 'TAKE_PROFIT' ? 'TAKE_PROFIT' : hit === 'STOP_LOSS' ? 'STOP_LOSS' : 'NO_EXIT_BY_FINAL_CANDLE';
+    const tradeClosedCandleIndex = hitIndex ?? end;
+    const exitPrice = hit === 'TAKE_PROFIT' ? takeProfitPrice : hit === 'STOP_LOSS' ? stopLossPrice : lastClose;
 
     return {
       realizedR,
       isWin: realizedR > 0,
       maxFavorableR,
       maxAdverseR,
+      tradeClosedCandleIndex,
+      exitPrice,
+      exitReason,
+    };
+  }
+
+  private buildTradeExecutionSnapshot(
+    candles: PracticalFlashcardCandle[],
+    attempt: PracticalFlashcardAttempt,
+    exitCandleIndex?: number,
+    exitPrice?: number,
+    exitReason?: PracticalFlashcardExitReason,
+  ) {
+    if (
+      attempt.tradeOpenedCandleIndex === undefined ||
+      attempt.entryPrice === undefined ||
+      attempt.stopLossPrice === undefined ||
+      attempt.takeProfitPrice === undefined ||
+      !attempt.tradeDirection
+    ) {
+      return undefined;
+    }
+    const entryCandle = candles[attempt.tradeOpenedCandleIndex];
+    const exitCandle = exitCandleIndex !== undefined ? candles[exitCandleIndex] : undefined;
+    return {
+      entryCandleIndex: attempt.tradeOpenedCandleIndex,
+      entryCandleOpenTime: entryCandle?.openTime ?? 0,
+      entryPrice: attempt.entryPrice,
+      exitCandleIndex,
+      exitCandleOpenTime: exitCandle?.openTime,
+      exitPrice,
+      exitReason,
+      stopLossPrice: attempt.stopLossPrice,
+      takeProfitPrice: attempt.takeProfitPrice,
+      tradeDirection: attempt.tradeDirection,
     };
   }
 

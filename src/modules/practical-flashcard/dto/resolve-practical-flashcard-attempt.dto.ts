@@ -3,6 +3,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -12,6 +13,7 @@ import {
   Min,
   ValidateIf,
 } from 'class-validator';
+import { PRACTICAL_FLASHCARD_EXIT_REASON_VALUES, PracticalFlashcardExitReason } from '../practical-flashcard.types';
 
 export class ResolvePracticalFlashcardAttemptDto {
   @ApiPropertyOptional({ description: '最终结算 K 线 index；默认使用当前已推进到的 K 线' })
@@ -70,6 +72,24 @@ export class ResolvePracticalFlashcardAttemptDto {
   @Type(() => Number)
   @IsNumber()
   maxAdverseR?: number;
+
+  @ApiPropertyOptional({ description: '离场 K 线 index；不传时由后端按止盈止损触发点或 finalCandleIndex 推导' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  tradeClosedCandleIndex?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  exitPrice?: number;
+
+  @ApiPropertyOptional({ enum: PRACTICAL_FLASHCARD_EXIT_REASON_VALUES })
+  @IsOptional()
+  @IsIn(PRACTICAL_FLASHCARD_EXIT_REASON_VALUES)
+  exitReason?: PracticalFlashcardExitReason;
 
   @ApiPropertyOptional({ description: 'PF-M3 绘图快照' })
   @IsOptional()

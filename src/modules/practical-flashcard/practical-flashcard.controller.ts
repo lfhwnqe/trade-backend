@@ -7,6 +7,7 @@ import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-prac
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
 import { ListPracticalFlashcardCardsDto } from './dto/list-practical-flashcard-cards.dto';
 import { ResolvePracticalFlashcardAttemptDto } from './dto/resolve-practical-flashcard-attempt.dto';
+import { StartRandomPracticalFlashcardTrainingDto } from './dto/start-random-practical-flashcard-training.dto';
 import { StartPracticalFlashcardAttemptDto } from './dto/start-practical-flashcard-attempt.dto';
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import { PracticalFlashcardService } from './practical-flashcard.service';
@@ -89,6 +90,15 @@ export class PracticalFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.practicalFlashcardService.startAttempt(userId, dto);
+  }
+
+  @ApiOperation({ summary: '随机抽取一张实操闪卡并开始训练' })
+  @ApiBody({ type: StartRandomPracticalFlashcardTrainingDto })
+  @Post('training/random/start')
+  async startRandomTraining(@Req() req: Request, @Body() dto: StartRandomPracticalFlashcardTrainingDto) {
+    const userId = (req as any).user?.sub;
+    if (!userId) throw new NotFoundException('用户信息异常');
+    return this.practicalFlashcardService.startRandomTraining(userId, dto);
   }
 
   @ApiOperation({ summary: '确认实操闪卡训练交易' })

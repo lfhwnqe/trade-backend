@@ -19,6 +19,17 @@ export type PracticalFlashcardTradeDirection = (typeof PRACTICAL_FLASHCARD_TRADE
 export const PRACTICAL_FLASHCARD_ATTEMPT_STATUS_VALUES = ['IN_PROGRESS', 'RESOLVED', 'ABANDONED'] as const;
 export type PracticalFlashcardAttemptStatus = (typeof PRACTICAL_FLASHCARD_ATTEMPT_STATUS_VALUES)[number];
 
+export const PRACTICAL_FLASHCARD_TRAINING_MODE_VALUES = ['DIRECT_CARD', 'RANDOM_TRAINING'] as const;
+export type PracticalFlashcardTrainingMode = (typeof PRACTICAL_FLASHCARD_TRAINING_MODE_VALUES)[number];
+
+export const PRACTICAL_FLASHCARD_EXIT_REASON_VALUES = [
+  'TAKE_PROFIT',
+  'STOP_LOSS',
+  'MANUAL_EXIT',
+  'NO_EXIT_BY_FINAL_CANDLE',
+] as const;
+export type PracticalFlashcardExitReason = (typeof PRACTICAL_FLASHCARD_EXIT_REASON_VALUES)[number];
+
 export type PracticalFlashcardCandle = {
   openTime: number;
   closeTime: number;
@@ -70,6 +81,14 @@ export interface PracticalFlashcardAttempt {
   attemptId: string;
   targetCardId: string;
   status: PracticalFlashcardAttemptStatus;
+  trainingMode?: PracticalFlashcardTrainingMode;
+  cardSnapshot?: {
+    playbookType: string;
+    tagCodes?: string[];
+    symbolPairInfo: string;
+    primaryInterval: PracticalFlashcardInterval;
+    expectedDirection?: PracticalFlashcardDirection;
+  };
   decision?: PracticalFlashcardDirection;
   tradeOpenedCandleIndex?: number;
   tradeDirection?: PracticalFlashcardTradeDirection;
@@ -77,6 +96,9 @@ export interface PracticalFlashcardAttempt {
   stopLossPrice?: number;
   takeProfitPrice?: number;
   plannedRr?: number;
+  tradeClosedCandleIndex?: number;
+  exitPrice?: number;
+  exitReason?: PracticalFlashcardExitReason;
   preTradeMarketStructureAnalysis?: string;
   preTradePriceActionAnalysis?: string;
   preTradeOrderFlowAnalysis?: string;
@@ -87,6 +109,18 @@ export interface PracticalFlashcardAttempt {
   finalCandleIndex?: number;
   currentCandleIndex?: number;
   drawingSnapshot?: unknown;
+  tradeExecutionSnapshot?: {
+    entryCandleIndex: number;
+    entryCandleOpenTime: number;
+    entryPrice: number;
+    exitCandleIndex?: number;
+    exitCandleOpenTime?: number;
+    exitPrice?: number;
+    exitReason?: PracticalFlashcardExitReason;
+    stopLossPrice: number;
+    takeProfitPrice: number;
+    tradeDirection: PracticalFlashcardTradeDirection;
+  };
   usedOrderFlowReveal?: boolean;
   orderFlowRevealEvents?: Array<{ imageUrl: string; candleIndex: number; revealedAt: string }>;
   marketStructureAnalysisCorrect?: boolean;
