@@ -44,6 +44,7 @@ import { ListFlashcardSimulationCardHistoryDto } from './dto/list-flashcard-simu
 import { ListFlashcardSimulationAttemptsDto } from './dto/list-flashcard-simulation-attempts.dto';
 import { GetFlashcardSimulationPlaybookAnalyticsDto } from './dto/get-flashcard-simulation-playbook-analytics.dto';
 import { RateFlashcardCardDto } from './dto/rate-flashcard-card.dto';
+import { Role } from '../../base/decorators/roles.decorator';
 
 @ApiTags('Flashcard')
 @ApiBearerAuth()
@@ -77,7 +78,7 @@ export class FlashcardController {
       throw new NotFoundException('用户信息异常');
     }
 
-    return this.flashcardService.createCard(userId, dto);
+    return this.flashcardService.createCard(userId, dto, this.getPrimaryRole(req));
   }
 
   @ApiOperation({ summary: '随机抽取闪卡' })
@@ -612,7 +613,7 @@ export class FlashcardController {
       throw new NotFoundException('用户信息异常');
     }
 
-    return this.flashcardService.duplicateCard(userId, cardId, dto);
+    return this.flashcardService.duplicateCard(userId, cardId, dto, this.getPrimaryRole(req));
   }
 
   @ApiOperation({ summary: '更新闪卡信息' })
@@ -631,5 +632,15 @@ export class FlashcardController {
     }
 
     return this.flashcardService.updateCard(userId, cardId, dto);
+  }
+
+  private getPrimaryRole(req: Request) {
+    const user = (req as any).user;
+    const claims = user?.claims || user || {};
+    const groups = Array.isArray(claims['cognito:groups']) ? claims['cognito:groups'] : [];
+    const roleClaim = claims['custom:role'] || claims.role || user?.role;
+    if (groups.includes(Role.SuperAdmin) || roleClaim === Role.SuperAdmin) return Role.SuperAdmin;
+    if (groups.includes(Role.Admin) || roleClaim === Role.Admin) return Role.Admin;
+    return typeof roleClaim === 'string' ? roleClaim : undefined;
   }
 }

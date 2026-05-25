@@ -22,6 +22,7 @@ import {
   FlashcardDrillAnalyticsWindow,
   FlashcardDrillAttemptItem,
   FlashcardDrillMistakeReason,
+  FlashcardDrillSessionCardRef,
   FlashcardDrillSessionItem,
   FlashcardFavoriteItem,
   FlashcardSimulationAttemptItem,
@@ -105,7 +106,7 @@ export class FlashcardService {
     };
   }
 
-  async createCard(userId: string, dto: CreateFlashcardCardDto) {
+  async createCard(userId: string, dto: CreateFlashcardCardDto, ownerRole?: string) {
     const now = new Date().toISOString();
     const cardId = uuidv4();
 
@@ -139,6 +140,7 @@ export class FlashcardService {
     const item: FlashcardCard = {
       id: cardId,
       userId,
+      ownerRole,
       cardId,
       entityType: 'CARD',
       questionImageUrl: dto.questionImageUrl,
@@ -448,6 +450,7 @@ export class FlashcardService {
     userId: string,
     cardId: string,
     dto: DuplicateFlashcardCardDto,
+    ownerRole?: string,
   ) {
     const source = await this.getCardById(userId, cardId);
     const overrides = dto.overrides || {};
@@ -543,6 +546,7 @@ export class FlashcardService {
     const item: FlashcardCard = {
       id: nextCardId,
       userId,
+      ownerRole,
       cardId: nextCardId,
       entityType: 'CARD',
       questionImageUrl: overrides.questionImageUrl || source.questionImageUrl,
@@ -756,6 +760,11 @@ export class FlashcardService {
       score: 0,
       status: 'IN_PROGRESS',
       cardIds: cards.map((card) => card.cardId),
+      cardRefs: cards.map((card) => ({
+        userId: card.userId,
+        cardId: card.cardId,
+        scope: card.userId === userId ? 'USER' : 'SYSTEM',
+      })),
       startedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -785,7 +794,8 @@ export class FlashcardService {
     const now = new Date().toISOString();
     const session = await this.getSession(userId, sessionId);
 
-    if (!session.cardIds.includes(dto.cardId)) {
+    const cardRef = this.resolveSessionCardRef(session, dto.cardId, userId);
+    if (!cardRef) {
       throw new ResourceNotFoundException(
         `card ${dto.cardId} not in session ${sessionId}`,
         ERROR_CODES.RESOURCE_NOT_FOUND,
@@ -794,7 +804,8 @@ export class FlashcardService {
       );
     }
 
-    const card = await this.getCardById(userId, dto.cardId);
+    const isSystemCard = cardRef.scope === 'SYSTEM';
+    const card = await this.getCardById(cardRef.userId, dto.cardId);
     const expectedAction = this.resolveExpectedAction(card);
     const isCorrect = expectedAction === dto.userAction;
 
@@ -815,11 +826,11 @@ export class FlashcardService {
         existingAttempt,
       );
 
-      if (typeof dto.isFavorite === 'boolean') {
+      if (!isSystemCard && typeof dto.isFavorite === 'boolean') {
         await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
       }
 
-      if (typeof dto.note === 'string') {
+      if (!isSystemCard && typeof dto.note === 'string') {
         await this.updateCardNote(userId, dto.cardId, dto.note);
       }
 
@@ -835,8 +846,8 @@ export class FlashcardService {
         ':userAction': nextUserAction,
         ':expectedAction': expectedAction,
         ':isCorrect': nextIsCorrect,
-        ':isFavorite': dto.isFavorite === true ? true : existingAttempt.isFavorite === true,
-        ':noteSnapshot': typeof dto.note === 'string' ? dto.note.trim() || undefined : existingAttempt.noteSnapshot,
+        ':isFavorite': !isSystemCard && dto.isFavorite === true ? true : existingAttempt.isFavorite === true,
+        ':noteSnapshot': !isSystemCard && typeof dto.note === 'string' ? dto.note.trim() || undefined : existingAttempt.noteSnapshot,
         ':updatedAt': now,
       };
       if (!nextIsCorrect) {
@@ -906,16 +917,16 @@ export class FlashcardService {
       dto.mistakeReason,
     );
 
-    if (typeof dto.isFavorite === 'boolean') {
+    if (!isSystemCard && typeof dto.isFavorite === 'boolean') {
       await this.setFavorite(userId, dto.cardId, dto.isFavorite, now);
     }
 
-    if (typeof dto.note === 'string') {
+    if (!isSystemCard && typeof dto.note === 'string') {
       await this.updateCardNote(userId, dto.cardId, dto.note);
       card.notes = dto.note.trim();
     }
 
-    if (!isCorrect) {
+    if (!isSystemCard && !isCorrect) {
       await this.upsertWrongBook(userId, dto.cardId, sessionId, now);
     }
 
@@ -925,6 +936,8 @@ export class FlashcardService {
       entityType: 'ATTEMPT',
       sessionId,
       targetCardId: dto.cardId,
+      targetCardOwnerUserId: cardRef.userId,
+      targetCardScope: cardRef.scope,
       userAction: dto.userAction,
       expectedAction,
       isCorrect,
@@ -1768,10 +1781,11 @@ export class FlashcardService {
 
   async getDrillSessionDetail(userId: string, sessionId: string) {
     const session = await this.getSession(userId, sessionId);
-    const cards = await this.batchGetCardsByIds(userId, session.cardIds);
+    const cardRefs = this.resolveSessionCardRefs(session, userId);
+    const cards = await this.batchGetCardsByRefs(cardRefs);
     const cardsById = new Map(cards.map((card) => [card.cardId, card] as const));
-    const orderedCards = session.cardIds
-      .map((cardId) => cardsById.get(cardId))
+    const orderedCards = cardRefs
+      .map((ref) => cardsById.get(ref.cardId))
       .filter((card): card is FlashcardCard => Boolean(card));
 
     const attempts = await this.queryByPrefix<FlashcardDrillAttemptItem>(
@@ -1801,6 +1815,8 @@ export class FlashcardService {
           .sort((a, b) => a.answeredAt.localeCompare(b.answeredAt))
           .map((item) => ({
             cardId: item.targetCardId,
+            targetCardOwnerUserId: item.targetCardOwnerUserId,
+            targetCardScope: item.targetCardScope,
             userAction: item.userAction,
             expectedAction: item.expectedAction,
             isCorrect: item.isCorrect,
@@ -1920,9 +1936,12 @@ export class FlashcardService {
       userId,
       recentSessions.map((session) => session.sessionId),
     );
-    const referencedCards = await this.batchGetCardsByIds(
-      userId,
-      attempts.map((attempt) => attempt.targetCardId),
+    const referencedCards = await this.batchGetCardsByRefs(
+      attempts.map((attempt) => ({
+        userId: attempt.targetCardOwnerUserId || userId,
+        cardId: attempt.targetCardId,
+        scope: attempt.targetCardScope || 'USER',
+      })),
     );
     const enabledReferencedCards = referencedCards.filter((card) =>
       this.isDrillEnabled(card),
@@ -2118,7 +2137,13 @@ export class FlashcardService {
     count: number,
   ): Promise<FlashcardCard[]> {
     if (source === 'ALL') {
-      const cards = (await this.listAllCards(userId)).filter((card) =>
+      const ownCards = await this.listAllCards(userId);
+      const systemCards = await this.scanSystemDrillCards(userId);
+      const cardsByOwnerAndId = new Map<string, FlashcardCard>();
+      for (const card of [...ownCards, ...systemCards]) {
+        cardsByOwnerAndId.set(`${card.userId}:${card.cardId}`, card);
+      }
+      const cards = Array.from(cardsByOwnerAndId.values()).filter((card) =>
         this.isDrillTrainable(card),
       );
       this.shuffleInPlace(cards);
@@ -2339,6 +2364,107 @@ export class FlashcardService {
     }
 
     return cards;
+  }
+
+  private async batchGetCardsByRefs(
+    refs: FlashcardDrillSessionCardRef[],
+  ): Promise<FlashcardCard[]> {
+    if (!refs.length) {
+      return [];
+    }
+
+    const uniqueRefs = Array.from(
+      new Map(refs.map((ref) => [`${ref.userId}:${ref.cardId}`, ref])).values(),
+    );
+    const cards: FlashcardCard[] = [];
+
+    for (let i = 0; i < uniqueRefs.length; i += 100) {
+      const chunk = uniqueRefs.slice(i, i + 100);
+      const result = await this.db.batchGet({
+        RequestItems: {
+          [this.tableName]: {
+            Keys: chunk.map((ref) => ({ userId: ref.userId, cardId: ref.cardId })),
+          },
+        },
+      });
+
+      const items = (
+        (result.Responses?.[this.tableName] as FlashcardCard[] | undefined) ||
+        []
+      ).filter(
+        (item) =>
+          item.entityType === 'CARD' ||
+          (!item.entityType &&
+            !!item.questionImageUrl &&
+            !!item.answerImageUrl),
+      );
+
+      const normalizedCards = await Promise.all(
+        items.map((item) => this.attachDictionaryTags(this.normalizeCard(item))),
+      );
+      cards.push(...normalizedCards);
+    }
+
+    return cards;
+  }
+
+  private resolveSessionCardRefs(
+    session: FlashcardDrillSessionItem,
+    defaultUserId: string,
+  ): FlashcardDrillSessionCardRef[] {
+    if (Array.isArray(session.cardRefs) && session.cardRefs.length) {
+      return session.cardRefs;
+    }
+    return session.cardIds.map((cardId) => ({
+      userId: defaultUserId,
+      cardId,
+      scope: 'USER',
+    }));
+  }
+
+  private resolveSessionCardRef(
+    session: FlashcardDrillSessionItem,
+    cardId: string,
+    defaultUserId: string,
+  ) {
+    return this.resolveSessionCardRefs(session, defaultUserId).find(
+      (ref) => ref.cardId === cardId,
+    );
+  }
+
+  private async scanSystemDrillCards(currentUserId: string) {
+    const cards: FlashcardCard[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const result = await this.db.scan({
+        TableName: this.tableName,
+        FilterExpression: '#entityType = :entityType OR attribute_not_exists(#entityType)',
+        ExpressionAttributeNames: {
+          '#entityType': 'entityType',
+        },
+        ExpressionAttributeValues: {
+          ':entityType': 'CARD',
+        },
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+
+      cards.push(
+        ...((result.Items || []) as FlashcardCard[]).filter(
+          (item) =>
+            item.userId !== currentUserId &&
+            (item.entityType === 'CARD' || (!item.entityType && !!item.questionImageUrl && !!item.answerImageUrl)) &&
+            this.isSystemDrillCard(item),
+        ),
+      );
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return Promise.all(cards.map((item) => this.attachDictionaryTags(this.normalizeCard(item))));
+  }
+
+  private isSystemDrillCard(card: FlashcardCard) {
+    return !card.ownerRole || card.ownerRole === 'Admins' || card.ownerRole === 'SuperAdmins';
   }
 
   private async queryByPrefix<T extends { targetCardId: string }>(

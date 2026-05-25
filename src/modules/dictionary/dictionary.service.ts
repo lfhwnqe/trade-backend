@@ -305,12 +305,14 @@ export class DictionaryService {
   }
 
   async listItems(userId: string, dto: ListDictionaryItemsDto) {
+    let categoryOwnerUserId = userId;
     if (dto.categoryCode) {
-      await this.getCategoryByCodeOrThrow(userId, dto.categoryCode.trim());
+      const category = await this.getUsableCategoryByCodeOrThrow(userId, dto.categoryCode.trim());
+      categoryOwnerUserId = category.userId;
     }
 
     const sourceItems = dto.categoryCode
-      ? await this.listItemsByCategoryCode(userId, dto.categoryCode.trim())
+      ? await this.listItemsByCategoryCode(categoryOwnerUserId, dto.categoryCode.trim())
       : await this.listAllItems(userId);
 
     const keyword = dto.keyword?.trim().toLowerCase();
@@ -404,7 +406,7 @@ export class DictionaryService {
   }
 
   async getCategoryOptions(userId: string, categoryCode: string) {
-    const category = await this.getCategoryByCodeOrThrow(userId, categoryCode.trim());
+    const category = await this.getUsableCategoryByCodeOrThrow(userId, categoryCode.trim());
     if (category.status !== 'ACTIVE') {
       throw new ValidationException(
         'Dictionary category is disabled',
@@ -413,7 +415,7 @@ export class DictionaryService {
       );
     }
 
-    const items = await this.listItemsByCategoryCode(userId, category.code);
+    const items = await this.listItemsByCategoryCode(category.userId, category.code);
     return {
       success: true,
       data: {
@@ -643,8 +645,8 @@ export class DictionaryService {
       }>;
     }
 
-    await this.getCategoryByCodeOrThrow(userId, categoryCode);
-    const items = await this.listItemsByCategoryCode(userId, categoryCode);
+    const category = await this.getUsableCategoryByCodeOrThrow(userId, categoryCode);
+    const items = await this.listItemsByCategoryCode(category.userId, categoryCode);
     const itemMap = new Map(items.map((item) => [item.code, item]));
 
     return normalizedCodes
@@ -670,8 +672,8 @@ export class DictionaryService {
       return [] as string[];
     }
 
-    await this.getCategoryByCodeOrThrow(userId, categoryCode);
-    const items = await this.listItemsByCategoryCode(userId, categoryCode);
+    const category = await this.getUsableCategoryByCodeOrThrow(userId, categoryCode);
+    const items = await this.listItemsByCategoryCode(category.userId, categoryCode);
     const itemMap = new Map(items.map((item) => [item.code, item]));
     const missingCodes = normalizedCodes.filter((code) => !itemMap.has(code));
     if (missingCodes.length > 0) {
@@ -730,6 +732,20 @@ export class DictionaryService {
     return item;
   }
 
+  private async getUsableCategoryByCodeOrThrow(userId: string, categoryCode: string) {
+    const ownCategory = await this.findCategoryByCode(userId, categoryCode);
+    if (ownCategory) return ownCategory;
+
+    const sharedCategory = await this.findAnyCategoryByCode(categoryCode);
+    if (sharedCategory) return sharedCategory;
+
+    throw new ResourceNotFoundException(
+      'Dictionary category not found by code',
+      ERROR_CODES.RESOURCE_NOT_FOUND,
+      '字典分类不存在',
+    );
+  }
+
   private async findCategoryByCode(userId: string, categoryCode: string) {
     const code = categoryCode.trim();
     const result = await this.db.query({
@@ -744,6 +760,33 @@ export class DictionaryService {
     });
 
     return (result.Items?.[0] || undefined) as DictionaryCategoryItem | undefined;
+  }
+
+  private async findAnyCategoryByCode(categoryCode: string) {
+    const code = categoryCode.trim();
+    let lastKey: Record<string, any> | undefined;
+
+    do {
+      const result = await this.db.scan({
+        TableName: this.categoriesTableName,
+        FilterExpression: '#code = :code',
+        ExpressionAttributeNames: {
+          '#code': 'code',
+        },
+        ExpressionAttributeValues: {
+          ':code': code,
+        },
+        ExclusiveStartKey: lastKey,
+        Limit: 50,
+      });
+      const items = (result.Items || []) as DictionaryCategoryItem[];
+      const active = items.find((item) => item.status === 'ACTIVE');
+      if (active) return active;
+      if (items[0]) return items[0];
+      lastKey = result.LastEvaluatedKey;
+    } while (lastKey);
+
+    return undefined;
   }
 
   private async ensureCategoryCodeAvailable(userId: string, categoryCode: string) {

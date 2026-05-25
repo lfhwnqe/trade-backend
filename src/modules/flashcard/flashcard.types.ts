@@ -83,6 +83,7 @@ export type FlashcardCardSortOrder =
 export interface FlashcardCard {
   id: string;
   userId: string;
+  ownerRole?: string;
   cardId: string;
   prefilledRevealProgress?: number;
   prefilledHorizontalViewportPercent?: number;
@@ -128,6 +129,12 @@ export interface FlashcardCard {
   updatedAt: string;
 }
 
+export interface FlashcardDrillSessionCardRef {
+  userId: string;
+  cardId: string;
+  scope: 'USER' | 'SYSTEM';
+}
+
 export interface FlashcardDrillSessionItem {
   userId: string;
   cardId: string; // session#{sessionId}
@@ -141,6 +148,7 @@ export interface FlashcardDrillSessionItem {
   score: number;
   status: 'IN_PROGRESS' | 'COMPLETED' | 'ABANDONED';
   cardIds: string[];
+  cardRefs?: FlashcardDrillSessionCardRef[];
   startedAt: string;
   endedAt?: string;
   createdAt: string;
@@ -153,6 +161,8 @@ export interface FlashcardDrillAttemptItem {
   entityType: 'ATTEMPT';
   sessionId: string;
   targetCardId: string;
+  targetCardOwnerUserId?: string;
+  targetCardScope?: 'USER' | 'SYSTEM';
   userAction: FlashcardAction;
   expectedAction: FlashcardAction;
   isCorrect: boolean;

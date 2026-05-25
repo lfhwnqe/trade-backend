@@ -4,6 +4,7 @@ const mockDb = {
   update: jest.fn(),
   delete: jest.fn(),
   query: jest.fn(),
+  scan: jest.fn(),
   batchGet: jest.fn(),
 };
 
@@ -69,6 +70,7 @@ describe('FlashcardService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (uuidv4 as jest.Mock).mockReturnValue('uuid-1');
+    mockDb.scan.mockResolvedValue({ Items: [] });
   });
 
   it('should exclude cards rated 3 or below from random drill cards', async () => {
@@ -185,6 +187,52 @@ describe('FlashcardService', () => {
         Item: expect.objectContaining({
           cardIds: expect.not.arrayContaining(['card-low']),
           total: 2,
+        }),
+      }),
+    );
+  });
+
+  it('should include admin system cards when a normal user starts an ALL drill session', async () => {
+    const service = makeService();
+    mockDb.query.mockResolvedValueOnce({ Items: [] });
+    mockDb.scan.mockResolvedValueOnce({
+      Items: [
+        {
+          userId: 'admin-1',
+          ownerRole: 'Admins',
+          cardId: 'admin-card-1',
+          entityType: 'CARD',
+          questionImageUrl: 'q-admin',
+          answerImageUrl: 'a-admin',
+          expectedAction: 'LONG',
+          createdAt: '2026-05-25T00:00:00.000Z',
+          updatedAt: '2026-05-25T00:00:00.000Z',
+        },
+      ],
+    });
+    mockDb.put.mockResolvedValueOnce({});
+
+    const result = await service.startSession('user-1', {
+      source: 'ALL',
+      count: 20,
+    } as any);
+
+    expect(result.success).toBe(true);
+    expect(result.data.count).toBe(1);
+    expect(result.data.cards[0].cardId).toBe('admin-card-1');
+    expect(mockDb.put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Item: expect.objectContaining({
+          userId: 'user-1',
+          cardIds: ['admin-card-1'],
+          cardRefs: [
+            {
+              userId: 'admin-1',
+              cardId: 'admin-card-1',
+              scope: 'SYSTEM',
+            },
+          ],
+          total: 1,
         }),
       }),
     );

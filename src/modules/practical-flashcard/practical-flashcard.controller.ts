@@ -1,6 +1,8 @@
-import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, NotFoundException, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Request } from 'express';
+import { Role, Roles } from '../../base/decorators/roles.decorator';
+import { RolesGuard } from '../../base/guards/roles.guard';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
@@ -23,16 +25,20 @@ export class PracticalFlashcardController {
   @ApiOperation({ summary: '创建实操闪卡并冻结 Binance 历史行情快照' })
   @ApiBody({ type: CreatePracticalFlashcardCardDto })
   @ApiResponse({ status: 200, description: '创建成功并返回实操闪卡' })
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Post('cards')
   async createCard(@Req() req: Request, @Body() dto: CreatePracticalFlashcardCardDto) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    return this.practicalFlashcardService.createCard(userId, dto);
+    return this.practicalFlashcardService.createCard(userId, dto, this.getPrimaryRole(req));
   }
 
   @ApiOperation({ summary: '从已完成交易闪卡派生实操闪卡' })
   @ApiParam({ name: 'tradeFlashcardId', description: '交易闪卡 ID' })
   @ApiBody({ type: CreatePracticalFlashcardFromTradeFlashcardDto })
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Post('cards/from-trade-flashcard/:tradeFlashcardId')
   async createFromTradeFlashcard(
     @Req() req: Request,
@@ -41,7 +47,7 @@ export class PracticalFlashcardController {
   ) {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
-    return this.practicalFlashcardService.createFromTradeFlashcard(userId, tradeFlashcardId, dto);
+    return this.practicalFlashcardService.createFromTradeFlashcard(userId, tradeFlashcardId, dto, this.getPrimaryRole(req));
   }
 
   @ApiOperation({ summary: '分页查询实操闪卡' })
@@ -50,6 +56,8 @@ export class PracticalFlashcardController {
   @ApiQuery({ name: 'status', required: false, enum: ['ACTIVE', 'DISABLED'] })
   @ApiQuery({ name: 'symbolPairInfo', required: false })
   @ApiQuery({ name: 'playbookType', required: false })
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Get('cards')
   async listCards(@Req() req: Request, @Query() query: ListPracticalFlashcardCardsDto) {
     const userId = (req as any).user?.sub;
@@ -84,6 +92,8 @@ export class PracticalFlashcardController {
   @ApiOperation({ summary: '更新实操闪卡非行情字段' })
   @ApiParam({ name: 'cardId', description: '实操闪卡 ID' })
   @ApiBody({ type: UpdatePracticalFlashcardCardDto })
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Patch('cards/:cardId')
   async updateCard(@Req() req: Request, @Param('cardId') cardId: string, @Body() dto: UpdatePracticalFlashcardCardDto) {
     const userId = (req as any).user?.sub;
@@ -93,6 +103,8 @@ export class PracticalFlashcardController {
 
   @ApiOperation({ summary: '删除实操闪卡' })
   @ApiParam({ name: 'cardId', description: '实操闪卡 ID' })
+  @UseGuards(RolesGuard)
+  @Roles(Role.Admin, Role.SuperAdmin)
   @Delete('cards/:cardId')
   async deleteCard(@Req() req: Request, @Param('cardId') cardId: string) {
     const userId = (req as any).user?.sub;
@@ -190,5 +202,15 @@ export class PracticalFlashcardController {
     const userId = (req as any).user?.sub;
     if (!userId) throw new NotFoundException('用户信息异常');
     return this.practicalFlashcardService.getAttempt(userId, attemptId);
+  }
+
+  private getPrimaryRole(req: Request) {
+    const user = (req as any).user;
+    const claims = user?.claims || user || {};
+    const groups = Array.isArray(claims['cognito:groups']) ? claims['cognito:groups'] : [];
+    const roleClaim = claims['custom:role'] || claims.role || user?.role;
+    if (groups.includes(Role.SuperAdmin) || roleClaim === Role.SuperAdmin) return Role.SuperAdmin;
+    if (groups.includes(Role.Admin) || roleClaim === Role.Admin) return Role.Admin;
+    return typeof roleClaim === 'string' ? roleClaim : undefined;
   }
 }

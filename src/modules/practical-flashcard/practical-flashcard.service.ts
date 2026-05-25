@@ -58,8 +58,8 @@ export class PracticalFlashcardService {
     });
   }
 
-  async createCard(userId: string, dto: CreatePracticalFlashcardCardDto) {
-    const item = await this.buildCardFromInput(userId, dto);
+  async createCard(userId: string, dto: CreatePracticalFlashcardCardDto, ownerRole?: string) {
+    const item = await this.buildCardFromInput(userId, dto, ownerRole);
     await this.db.put({ TableName: this.tableName, Item: item });
     return { success: true, data: await this.attachDictionaryTags(item) };
   }
@@ -68,6 +68,7 @@ export class PracticalFlashcardService {
     userId: string,
     tradeFlashcardId: string,
     dto: CreatePracticalFlashcardFromTradeFlashcardDto,
+    ownerRole?: string,
   ) {
     const source = await this.getTradeFlashcardOrThrow(userId, tradeFlashcardId);
     if (source.lifecycleStatus !== 'COMPLETED') {
@@ -81,27 +82,31 @@ export class PracticalFlashcardService {
       throw new BadRequestException('source trade flashcard requires symbolPairInfo, entryTimeInfo and playbookType');
     }
 
-    const item = await this.buildCardFromInput(userId, {
-      venue: 'BINANCE_UM_FUTURES',
-      symbolPairInfo,
-      entryTimeInfo,
-      exitTimeInfo: dto.exitTimeInfo,
-      primaryInterval: dto.primaryInterval,
-      timeZone: dto.timeZone,
-      snapshotStartTime: dto.snapshotStartTime,
-      snapshotEndTime: dto.snapshotEndTime,
-      standardEntryPrice: dto.standardEntryPrice,
-      standardStopLossPrice: dto.standardStopLossPrice,
-      standardTakeProfitPrice: dto.standardTakeProfitPrice,
-      playbookType,
-      tagCodes: source.tagCodes,
-      orderFlowImageUrls: ((source as unknown as { orderFlowImageUrls?: string[] }).orderFlowImageUrls || [])
-        .map((item) => item.trim())
-        .filter(Boolean),
-      orderFlowRemark: (source as unknown as { orderFlowRemark?: string }).orderFlowRemark,
-      notes: [source.notes, source.summary].filter(Boolean).join('\n\n') || undefined,
-      sourceTradeFlashcardId: tradeFlashcardId,
-    });
+    const item = await this.buildCardFromInput(
+      userId,
+      {
+        venue: 'BINANCE_UM_FUTURES',
+        symbolPairInfo,
+        entryTimeInfo,
+        exitTimeInfo: dto.exitTimeInfo,
+        primaryInterval: dto.primaryInterval,
+        timeZone: dto.timeZone,
+        snapshotStartTime: dto.snapshotStartTime,
+        snapshotEndTime: dto.snapshotEndTime,
+        standardEntryPrice: dto.standardEntryPrice,
+        standardStopLossPrice: dto.standardStopLossPrice,
+        standardTakeProfitPrice: dto.standardTakeProfitPrice,
+        playbookType,
+        tagCodes: source.tagCodes,
+        orderFlowImageUrls: ((source as unknown as { orderFlowImageUrls?: string[] }).orderFlowImageUrls || [])
+          .map((item) => item.trim())
+          .filter(Boolean),
+        orderFlowRemark: (source as unknown as { orderFlowRemark?: string }).orderFlowRemark,
+        notes: [source.notes, source.summary].filter(Boolean).join('\n\n') || undefined,
+        sourceTradeFlashcardId: tradeFlashcardId,
+      },
+      ownerRole,
+    );
 
     await this.db.put({ TableName: this.tableName, Item: item });
     return { success: true, data: await this.attachDictionaryTags(item) };
@@ -136,11 +141,11 @@ export class PracticalFlashcardService {
   }
 
   async getCard(userId: string, cardId: string) {
-    return { success: true, data: await this.getCardOrThrow(userId, cardId) };
+    return { success: true, data: await this.getAccessibleCardOrThrow(userId, cardId) };
   }
 
   async getCandlesBefore(userId: string, cardId: string, dto: GetPracticalFlashcardCandlesBeforeDto) {
-    const card = await this.getCardOrThrow(userId, cardId);
+    const card = await this.getAccessibleCardOrThrow(userId, cardId);
     const beforeOpenTime = Number(dto.beforeOpenTime);
     if (!Number.isFinite(beforeOpenTime)) {
       throw new BadRequestException('beforeOpenTime must be a valid timestamp');
@@ -264,13 +269,13 @@ export class PracticalFlashcardService {
   }
 
   async startAttempt(userId: string, dto: StartPracticalFlashcardAttemptDto) {
-    const card = await this.getCardOrThrow(userId, dto.cardId);
+    const card = await this.getAccessibleCardOrThrow(userId, dto.cardId);
     const attempt = await this.createAttemptForCard(userId, card, 'DIRECT_CARD');
     return { success: true, data: { attemptId: attempt.attemptId, attempt, card } };
   }
 
   async startRandomTraining(userId: string, dto: StartRandomPracticalFlashcardTrainingDto) {
-    let candidates = (await this.listAllCards(userId)).filter((card) => {
+    let candidates = (await this.listTrainingCardsForUser(userId)).filter((card) => {
       if (card.status !== 'ACTIVE') return false;
       if (!Array.isArray(card.candles) || card.candles.length === 0) return false;
       if (dto.symbolPairInfo) {
@@ -321,7 +326,7 @@ export class PracticalFlashcardService {
       throw new BadRequestException('This attempt already has a confirmed trade');
     }
 
-    const card = await this.getCardOrThrow(userId, attempt.targetCardId);
+    const card = await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId);
     const currentCandleIndex = this.clampCandleIndex(dto.currentCandleIndex, card.candles);
     const candle = card.candles[currentCandleIndex];
     if (!candle) {
@@ -401,7 +406,7 @@ export class PracticalFlashcardService {
       throw new BadRequestException('Confirm a trade before resolving the attempt');
     }
 
-    const card = await this.getCardOrThrow(userId, attempt.targetCardId);
+    const card = await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId);
     const fallbackFinalIndex = attempt.currentCandleIndex ?? card.resultCandleIndex ?? card.candles.length - 1;
     const finalCandleIndex = this.clampCandleIndex(dto.finalCandleIndex ?? fallbackFinalIndex, card.candles);
     const calculated = this.calculateTradeOutcome(card.candles, attempt, finalCandleIndex);
@@ -563,6 +568,7 @@ export class PracticalFlashcardService {
       entityType: 'PRACTICAL_FLASHCARD_ATTEMPT',
       attemptId,
       targetCardId: card.cardId,
+      targetCardOwnerUserId: card.userId,
       status: 'IN_PROGRESS',
       trainingMode,
       cardSnapshot: this.buildCardSnapshot(card),
@@ -579,6 +585,7 @@ export class PracticalFlashcardService {
   private async buildCardFromInput(
     userId: string,
     dto: CreatePracticalFlashcardCardDto & { sourceTradeFlashcardId?: string },
+    ownerRole?: string,
   ): Promise<PracticalFlashcardCard> {
     const primaryInterval = dto.primaryInterval || '15m';
     const normalizedSymbol = this.assertSupportedBinanceUmSymbol(dto.venue, dto.symbolPairInfo);
@@ -622,6 +629,7 @@ export class PracticalFlashcardService {
     return {
       id: cardId,
       userId,
+      ownerRole,
       cardId,
       entityType: 'PRACTICAL_FLASHCARD',
       status: 'ACTIVE',
@@ -762,6 +770,16 @@ export class PracticalFlashcardService {
     return this.attachDictionaryTags(item);
   }
 
+  private async getAccessibleCardOrThrow(userId: string, cardId: string) {
+    try {
+      return await this.getCardOrThrow(userId, cardId);
+    } catch (error) {
+      const systemCard = await this.findSystemTrainingCardById(cardId);
+      if (systemCard) return systemCard;
+      throw error;
+    }
+  }
+
   private async getTradeFlashcardOrThrow(userId: string, cardId: string) {
     const result = await this.db.get({ TableName: this.tableName, Key: { userId, cardId } });
     const item = result.Item as TradeFlashcardCard | undefined;
@@ -791,6 +809,59 @@ export class PracticalFlashcardService {
     } while (lastEvaluatedKey);
 
     return Promise.all(cards.map((item) => this.attachDictionaryTags(item)));
+  }
+
+  private async listTrainingCardsForUser(userId: string) {
+    const ownCards = await this.listAllCards(userId);
+    const cardsByOwnerAndId = new Map(ownCards.map((card) => [`${card.userId}:${card.cardId}`, card]));
+    const systemCards = await this.scanSystemTrainingCards();
+    for (const card of systemCards) {
+      const key = `${card.userId}:${card.cardId}`;
+      if (!cardsByOwnerAndId.has(key)) cardsByOwnerAndId.set(key, card);
+    }
+    return Array.from(cardsByOwnerAndId.values());
+  }
+
+  private async findSystemTrainingCardById(cardId: string) {
+    const cards = await this.scanSystemTrainingCards(cardId);
+    return cards.find((card) => card.cardId === cardId);
+  }
+
+  private async scanSystemTrainingCards(cardId?: string) {
+    const cards: PracticalFlashcardCard[] = [];
+    let lastEvaluatedKey: Record<string, unknown> | undefined;
+    do {
+      const expressionAttributeNames: Record<string, string> = { '#entityType': 'entityType' };
+      const expressionAttributeValues: Record<string, unknown> = {
+        ':entityType': 'PRACTICAL_FLASHCARD',
+      };
+      const filters = ['#entityType = :entityType'];
+      if (cardId) {
+        expressionAttributeNames['#cardId'] = 'cardId';
+        expressionAttributeValues[':cardId'] = cardId;
+        filters.push('#cardId = :cardId');
+      }
+
+      const result = await this.db.scan({
+        TableName: this.tableName,
+        FilterExpression: filters.join(' AND '),
+        ExpressionAttributeNames: expressionAttributeNames,
+        ExpressionAttributeValues: expressionAttributeValues,
+        ExclusiveStartKey: lastEvaluatedKey,
+        Limit: 200,
+      });
+      cards.push(
+        ...((result.Items || []) as PracticalFlashcardCard[]).filter((item) => this.isSystemTrainingCard(item)),
+      );
+      lastEvaluatedKey = result.LastEvaluatedKey;
+    } while (lastEvaluatedKey);
+
+    return Promise.all(cards.map((item) => this.attachDictionaryTags(item)));
+  }
+
+  private isSystemTrainingCard(card: PracticalFlashcardCard) {
+    if (card.entityType !== 'PRACTICAL_FLASHCARD') return false;
+    return !card.ownerRole || card.ownerRole === 'Admins' || card.ownerRole === 'SuperAdmins';
   }
 
   private async listAllAttempts(userId: string) {
