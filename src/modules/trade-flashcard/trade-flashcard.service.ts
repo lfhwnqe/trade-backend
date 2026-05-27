@@ -18,6 +18,7 @@ import {
   TradeFlashcardCard,
   TradeFlashcardCardSortBy,
   TradeFlashcardCardSortOrder,
+  TradeFlashcardPlaybookCondition,
 } from './trade-flashcard.types';
 
 const PRE_ENTRY_IMAGE_LIMIT = 10;
@@ -94,6 +95,15 @@ export class TradeFlashcardService {
         dto.playbookType ? [dto.playbookType] : undefined,
       )
     )[0];
+    const normalizedPossiblePlaybookTypes = await this.dictionaryService.assertCategoryCodesExist(
+      userId,
+      'playbook_type',
+      dto.possiblePlaybookTypes,
+    );
+    const playbookConditions = this.normalizePlaybookConditions(
+      dto.playbookConditions,
+      normalizedPossiblePlaybookTypes,
+    );
 
     const entryImageUrls = this.normalizeImageUrls(dto.entryImageUrls);
     const finalTrendImageUrl = dto.finalTrendImageUrl?.trim() || dto.postEntryImageUrl?.trim() || undefined;
@@ -117,6 +127,12 @@ export class TradeFlashcardService {
       marketTimeInfo: dto.marketTimeInfo?.trim() || undefined,
       symbolPairInfo: dto.symbolPairInfo?.trim() || undefined,
       playbookType: normalizedPlaybookType,
+      marketStructure: dto.marketStructure?.trim() || undefined,
+      possiblePlaybookTypes: normalizedPossiblePlaybookTypes.length ? normalizedPossiblePlaybookTypes : undefined,
+      playbookConditions,
+      firstSignal: dto.firstSignal?.trim() || undefined,
+      secondSignalConfirmation: dto.secondSignalConfirmation?.trim() || undefined,
+      stopLossSetting: dto.stopLossSetting?.trim() || undefined,
       tagCodes: normalizedTagCodes,
       notes: dto.notes?.trim() || undefined,
       summary: dto.summary?.trim() || undefined,
@@ -193,6 +209,20 @@ export class TradeFlashcardService {
           )
         )[0]
       : existing.playbookType;
+    const possiblePlaybookTypesChanged = dto.possiblePlaybookTypes !== undefined;
+    const normalizedPossiblePlaybookTypes = possiblePlaybookTypesChanged
+      ? await this.dictionaryService.assertCategoryCodesExist(
+          userId,
+          'playbook_type',
+          dto.possiblePlaybookTypes,
+        )
+      : existing.possiblePlaybookTypes || [];
+    const playbookConditions = dto.playbookConditions !== undefined || possiblePlaybookTypesChanged
+      ? this.normalizePlaybookConditions(
+          dto.playbookConditions !== undefined ? dto.playbookConditions : existing.playbookConditions,
+          normalizedPossiblePlaybookTypes,
+        )
+      : existing.playbookConditions;
     const nextPreEntryImageUrls = this.resolveNextPreEntryImageUrls(existing, dto);
 
     const updated: TradeFlashcardCard = {
@@ -233,6 +263,22 @@ export class TradeFlashcardService {
           ? dto.symbolPairInfo.trim() || undefined
           : existing.symbolPairInfo,
       playbookType: normalizedPlaybookType,
+      marketStructure:
+        dto.marketStructure !== undefined
+          ? dto.marketStructure.trim() || undefined
+          : existing.marketStructure,
+      possiblePlaybookTypes: normalizedPossiblePlaybookTypes.length ? normalizedPossiblePlaybookTypes : undefined,
+      playbookConditions,
+      firstSignal:
+        dto.firstSignal !== undefined ? dto.firstSignal.trim() || undefined : existing.firstSignal,
+      secondSignalConfirmation:
+        dto.secondSignalConfirmation !== undefined
+          ? dto.secondSignalConfirmation.trim() || undefined
+          : existing.secondSignalConfirmation,
+      stopLossSetting:
+        dto.stopLossSetting !== undefined
+          ? dto.stopLossSetting.trim() || undefined
+          : existing.stopLossSetting,
       tagCodes: normalizedTagCodes,
       notes: dto.notes !== undefined ? dto.notes.trim() || undefined : existing.notes,
       summary: dto.summary !== undefined ? dto.summary.trim() || undefined : existing.summary,
@@ -272,7 +318,8 @@ export class TradeFlashcardService {
 
     const marketTimeInfo = dto.marketTimeInfo?.trim() || card.entryTimeInfo?.trim() || card.marketTimeInfo?.trim();
     const symbolPairInfo = dto.symbolPairInfo?.trim() || card.symbolPairInfo?.trim();
-    const playbookType = dto.playbookType?.trim() || card.playbookType?.trim();
+    const fallbackPossiblePlaybookType = card.possiblePlaybookTypes?.length === 1 ? card.possiblePlaybookTypes[0]?.trim() : undefined;
+    const playbookType = dto.playbookType?.trim() || card.playbookType?.trim() || fallbackPossiblePlaybookType;
 
     if (!marketTimeInfo || !symbolPairInfo || !playbookType) {
       throw new BadRequestException('marketTimeInfo, symbolPairInfo and playbookType are required for conversion');
@@ -379,6 +426,8 @@ export class TradeFlashcardService {
       entryImageUrls: this.normalizeImageUrls(card.entryImageUrls),
       finalTrendImageUrl,
       lifecycleStatus: this.resolveLifecycleStatus(finalTrendImageUrl),
+      possiblePlaybookTypes: this.normalizeCodes(card.possiblePlaybookTypes),
+      playbookConditions: this.normalizeStoredPlaybookConditions(card.playbookConditions, card.possiblePlaybookTypes),
     };
     delete normalized.progressImageUrls;
 
@@ -422,6 +471,56 @@ export class TradeFlashcardService {
       return dto.postEntryImageUrl.trim() || undefined;
     }
     return existing.finalTrendImageUrl || existing.postEntryImageUrl;
+  }
+
+  private normalizeCodes(codes?: string[]) {
+    const normalized = Array.from(
+      new Set((codes || []).map((item) => `${item}`.trim()).filter(Boolean)),
+    );
+    return normalized.length ? normalized : undefined;
+  }
+
+  private normalizePlaybookConditions(
+    conditions: TradeFlashcardPlaybookCondition[] | undefined,
+    possiblePlaybookTypes: string[],
+  ) {
+    const possibleSet = new Set(possiblePlaybookTypes);
+    const normalized: TradeFlashcardPlaybookCondition[] = [];
+
+    for (const item of conditions || []) {
+      const playbookType = `${item?.playbookType || ''}`.trim();
+      const condition = `${item?.condition || ''}`.trim();
+      if (!playbookType && !condition) continue;
+      if (!possibleSet.has(playbookType)) {
+        throw new BadRequestException('playbookConditions contains a playbookType outside possiblePlaybookTypes');
+      }
+      if (!condition) {
+        throw new BadRequestException('playbookConditions condition is required');
+      }
+      normalized.push({ playbookType, condition });
+    }
+
+    const conditionMap = new Map(normalized.map((item) => [item.playbookType, item.condition]));
+    const missing = possiblePlaybookTypes.filter((playbookType) => !conditionMap.get(playbookType));
+    if (missing.length) {
+      throw new BadRequestException(`playbookConditions is required for: ${missing.join(', ')}`);
+    }
+
+    return normalized.length ? normalized : undefined;
+  }
+
+  private normalizeStoredPlaybookConditions(
+    conditions: TradeFlashcardPlaybookCondition[] | undefined,
+    possiblePlaybookTypes?: string[],
+  ) {
+    const possibleSet = new Set(this.normalizeCodes(possiblePlaybookTypes) || []);
+    const normalized = (conditions || [])
+      .map((item) => ({
+        playbookType: `${item?.playbookType || ''}`.trim(),
+        condition: `${item?.condition || ''}`.trim(),
+      }))
+      .filter((item) => item.playbookType && item.condition && (!possibleSet.size || possibleSet.has(item.playbookType)));
+    return normalized.length ? normalized : undefined;
   }
 
   private sortCards(

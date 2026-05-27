@@ -22,6 +22,11 @@ export type TradeFlashcardCardSortBy = (typeof TRADE_FLASHCARD_CARD_SORT_BY_VALU
 export const TRADE_FLASHCARD_CARD_SORT_ORDER_VALUES = ['asc', 'desc'] as const;
 export type TradeFlashcardCardSortOrder = (typeof TRADE_FLASHCARD_CARD_SORT_ORDER_VALUES)[number];
 
+export interface TradeFlashcardPlaybookCondition {
+  playbookType: string;
+  condition: string;
+}
+
 export interface TradeFlashcardCard {
   id: string;
   userId: string;
@@ -41,6 +46,12 @@ export interface TradeFlashcardCard {
   marketTimeInfo?: string;
   symbolPairInfo?: string;
   playbookType?: string;
+  marketStructure?: string;
+  possiblePlaybookTypes?: string[];
+  playbookConditions?: TradeFlashcardPlaybookCondition[];
+  firstSignal?: string;
+  secondSignalConfirmation?: string;
+  stopLossSetting?: string;
   notes?: string;
   summary?: string;
   convertedToFlashcardAt?: string;

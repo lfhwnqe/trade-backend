@@ -1,11 +1,24 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf, ValidateNested } from 'class-validator';
 import {
   TRADE_FLASHCARD_PROCESS_RESULT_VALUES,
   TRADE_FLASHCARD_TYPE_VALUES,
   TradeFlashcardProcessResult,
   TradeFlashcardType,
 } from '../trade-flashcard.types';
+
+class TradeFlashcardPlaybookConditionDto {
+  @ApiPropertyOptional({ example: 'range_breakout' })
+  @IsString()
+  @MaxLength(100)
+  playbookType: string;
+
+  @ApiPropertyOptional({ example: '动量 K 线强势突破并收盘在区间外' })
+  @IsString()
+  @MaxLength(1000)
+  condition: string;
+}
 
 export class UpdateTradeFlashcardCardDto {
   @ApiPropertyOptional({ enum: TRADE_FLASHCARD_TYPE_VALUES, example: 'SIM_TRADE' })
@@ -81,6 +94,45 @@ export class UpdateTradeFlashcardCardDto {
   @IsString()
   @MaxLength(100)
   playbookType?: string;
+
+  @ApiPropertyOptional({ example: '4H 阻力区多次测试，15m 接近区间上沿。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  marketStructure?: string;
+
+  @ApiPropertyOptional({ description: '可能出现的剧本编码（来自 playbook_type 分类）', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(10)
+  possiblePlaybookTypes?: string[];
+
+  @ApiPropertyOptional({ type: [TradeFlashcardPlaybookConditionDto], description: '每个可能剧本对应的出现条件' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => TradeFlashcardPlaybookConditionDto)
+  playbookConditions?: TradeFlashcardPlaybookConditionDto[];
+
+  @ApiPropertyOptional({ example: '区间上沿出现看空 delta 反转，作为预警但不入场。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  firstSignal?: string;
+
+  @ApiPropertyOptional({ example: '回到第一次测试位置后再次出现同方向收盘确认。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  secondSignalConfirmation?: string;
+
+  @ApiPropertyOptional({ example: '止损放在两次确认高点之外，计划 RR 2.1。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  stopLossSetting?: string;
 
   @ApiPropertyOptional({ enum: TRADE_FLASHCARD_PROCESS_RESULT_VALUES, example: 'FAIL' })
   @IsOptional()
