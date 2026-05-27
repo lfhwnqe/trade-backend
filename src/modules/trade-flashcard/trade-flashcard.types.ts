@@ -56,6 +56,8 @@ export interface TradeFlashcardCard {
   summary?: string;
   convertedToFlashcardAt?: string;
   convertedFlashcardId?: string;
+  convertedToPracticalFlashcardAt?: string;
+  convertedPracticalFlashcardId?: string;
   tagCodes?: string[];
   tagItems?: Array<{ code: string; label: string; color?: string; status?: string }>;
   createdAt: string;

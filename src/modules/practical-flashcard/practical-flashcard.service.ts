@@ -74,6 +74,9 @@ export class PracticalFlashcardService {
     if (source.lifecycleStatus !== 'COMPLETED') {
       throw new BadRequestException('Only completed trade flashcards can be converted to practical flashcards');
     }
+    if (source.convertedToPracticalFlashcardAt || source.convertedPracticalFlashcardId) {
+      throw new BadRequestException('This trade flashcard has already been converted to a practical flashcard');
+    }
 
     const symbolPairInfo = source.symbolPairInfo?.trim();
     const entryTimeInfo = source.entryTimeInfo?.trim() || source.marketTimeInfo?.trim();
@@ -108,7 +111,17 @@ export class PracticalFlashcardService {
       ownerRole,
     );
 
+    const convertedAt = new Date().toISOString();
     await this.db.put({ TableName: this.tableName, Item: item });
+    await this.db.put({
+      TableName: this.tableName,
+      Item: {
+        ...source,
+        convertedToPracticalFlashcardAt: convertedAt,
+        convertedPracticalFlashcardId: item.cardId,
+        updatedAt: convertedAt,
+      },
+    });
     return { success: true, data: await this.attachDictionaryTags(item) };
   }
 
