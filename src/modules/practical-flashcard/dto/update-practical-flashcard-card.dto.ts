@@ -11,6 +11,7 @@ export class UpdatePracticalFlashcardCardDto extends PartialType(
     'expectedDirection',
     'entryTimeInfo',
     'exitTimeInfo',
+    'primaryInterval',
     'timeZone',
     'standardEntryPrice',
     'standardStopLossPrice',

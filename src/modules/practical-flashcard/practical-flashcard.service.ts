@@ -20,6 +20,7 @@ import { StartPracticalFlashcardAttemptDto } from './dto/start-practical-flashca
 import { UpdatePracticalFlashcardCardDto } from './dto/update-practical-flashcard-card.dto';
 import {
   PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES,
+  PRACTICAL_FLASHCARD_INTERVAL_VALUES,
   PracticalFlashcardAttempt,
   PracticalFlashcardAnalyticsAttemptSample,
   PracticalFlashcardAnalyticsGroup,
@@ -35,9 +36,14 @@ import {
 const DEFAULT_LOOKBACK_MS = 5 * 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 2 * 60 * 60 * 1000;
 const BINANCE_LIMIT = 1000;
+const BINANCE_FETCH_RETRY_COUNT = 2;
+const BINANCE_FETCH_TIMEOUT_MS = 10000;
 const INTERVAL_MS: Record<PracticalFlashcardInterval, number> = {
+  '1m': 1 * 60 * 1000,
+  '2m': 2 * 60 * 1000,
   '15m': 15 * 60 * 1000,
 };
+type BinanceNativeInterval = '1m' | '15m';
 const DEFAULT_TIME_ZONE = 'Asia/Shanghai';
 const PRACTICAL_ATTEMPT_PREFIX = 'practical-attempt#';
 
@@ -154,7 +160,7 @@ export class PracticalFlashcardService {
   }
 
   async getCard(userId: string, cardId: string) {
-    return { success: true, data: await this.getAccessibleCardOrThrow(userId, cardId) };
+    return { success: true, data: await this.hydrateCardForResponse(await this.getAccessibleCardOrThrow(userId, cardId)) };
   }
 
   async getCandlesBefore(userId: string, cardId: string, dto: GetPracticalFlashcardCandlesBeforeDto) {
@@ -164,18 +170,26 @@ export class PracticalFlashcardService {
       throw new BadRequestException('beforeOpenTime must be a valid timestamp');
     }
     const firstSavedOpenTime = card.candles?.[0]?.openTime;
-    if (!firstSavedOpenTime || beforeOpenTime > firstSavedOpenTime) {
-      throw new BadRequestException('beforeOpenTime must be at or before the saved snapshot start');
+    if (firstSavedOpenTime) {
+      if (beforeOpenTime > firstSavedOpenTime) {
+        throw new BadRequestException('beforeOpenTime must be at or before the saved snapshot start');
+      }
+    } else {
+      const snapshotEndTime = this.safeParseTimestamp(card.snapshotEndTime);
+      if (!snapshotEndTime || beforeOpenTime > snapshotEndTime) {
+        throw new BadRequestException('beforeOpenTime must be inside the saved snapshot range');
+      }
     }
 
-    const intervalMs = INTERVAL_MS[card.primaryInterval || '15m'];
+    const primaryInterval = this.resolveCardInterval(card);
+    const intervalMs = INTERVAL_MS[primaryInterval];
     const parsedLimit = Number(dto.limit || 500);
     const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 500, 1), BINANCE_LIMIT);
     const endTime = beforeOpenTime - 1;
     const startTime = Math.max(0, beforeOpenTime - intervalMs * limit);
     const candles = await this.fetchCandles(
       card.symbolPairInfo,
-      card.primaryInterval || '15m',
+      primaryInterval,
       startTime,
       endTime,
       { allowEmpty: true },
@@ -225,20 +239,24 @@ export class PracticalFlashcardService {
     if (!nextExitTimeInfo) {
       throw new BadRequestException('exitTimeInfo is required');
     }
+    const nextPrimaryInterval = hasField('primaryInterval')
+      ? this.assertPrimaryInterval(dto.primaryInterval)
+      : this.resolveCardInterval(existing);
 
     const shouldRefreshCandles =
       nextEntryTimeInfo !== existing.entryTimeInfo ||
       nextExitTimeInfo !== existing.exitTimeInfo ||
+      nextPrimaryInterval !== this.resolveCardInterval(existing) ||
       (hasField('timeZone') && !existing.timeZone) ||
       nextTimeZone !== this.normalizeTimeZone(existing.timeZone);
     const refreshedSnapshot = shouldRefreshCandles
-      ? await this.buildSnapshotForTimeRange(existing, nextEntryTimeInfo, nextExitTimeInfo, nextTimeZone)
+      ? await this.buildSnapshotForTimeRange(existing, nextEntryTimeInfo, nextExitTimeInfo, nextTimeZone, nextPrimaryInterval)
       : {
           entryTimeInfo: existing.entryTimeInfo,
           exitTimeInfo: existing.exitTimeInfo,
           snapshotStartTime: existing.snapshotStartTime,
           snapshotEndTime: existing.snapshotEndTime,
-          candles: existing.candles,
+          candles: [],
           initialVisibleCandleIndex: existing.initialVisibleCandleIndex,
           resultCandleIndex: existing.resultCandleIndex,
         };
@@ -246,6 +264,7 @@ export class PracticalFlashcardService {
     const updated: PracticalFlashcardCard = {
       ...existing,
       status: hasField('status') ? dto.status || existing.status : existing.status,
+      primaryInterval: nextPrimaryInterval,
       timeZone: nextTimeZone,
       entryTimeInfo: refreshedSnapshot.entryTimeInfo,
       exitTimeInfo: refreshedSnapshot.exitTimeInfo,
@@ -282,7 +301,7 @@ export class PracticalFlashcardService {
   }
 
   async startAttempt(userId: string, dto: StartPracticalFlashcardAttemptDto) {
-    const card = await this.getAccessibleCardOrThrow(userId, dto.cardId);
+    const card = await this.hydrateCardCandles(await this.getAccessibleCardOrThrow(userId, dto.cardId));
     const attempt = await this.createAttemptForCard(userId, card, 'DIRECT_CARD');
     return { success: true, data: { attemptId: attempt.attemptId, attempt, card } };
   }
@@ -290,7 +309,9 @@ export class PracticalFlashcardService {
   async startRandomTraining(userId: string, dto: StartRandomPracticalFlashcardTrainingDto) {
     let candidates = (await this.listTrainingCardsForUser(userId)).filter((card) => {
       if (card.status !== 'ACTIVE') return false;
-      if (!Array.isArray(card.candles) || card.candles.length === 0) return false;
+      if ((!Array.isArray(card.candles) || card.candles.length === 0) && !this.shouldFetchCandlesOnDemand(card)) {
+        return false;
+      }
       if (dto.symbolPairInfo) {
         const keyword = this.normalizeSymbol(dto.symbolPairInfo);
         if (keyword && this.normalizeSymbol(card.symbolPairInfo) !== keyword) return false;
@@ -339,7 +360,7 @@ export class PracticalFlashcardService {
       throw new BadRequestException('This attempt already has a confirmed trade');
     }
 
-    const card = await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId);
+    const card = await this.hydrateCardCandles(await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId));
     const currentCandleIndex = this.clampCandleIndex(dto.currentCandleIndex, card.candles);
     const candle = card.candles[currentCandleIndex];
     if (!candle) {
@@ -419,7 +440,7 @@ export class PracticalFlashcardService {
       throw new BadRequestException('Confirm a trade before resolving the attempt');
     }
 
-    const card = await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId);
+    const card = await this.hydrateCardCandles(await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId));
     const fallbackFinalIndex = attempt.currentCandleIndex ?? card.resultCandleIndex ?? card.candles.length - 1;
     const finalCandleIndex = this.clampCandleIndex(dto.finalCandleIndex ?? fallbackFinalIndex, card.candles);
     const calculated = this.calculateTradeOutcome(card.candles, attempt, finalCandleIndex);
@@ -568,7 +589,8 @@ export class PracticalFlashcardService {
     if (card.status !== 'ACTIVE') {
       throw new BadRequestException('Only active practical flashcards can be practiced');
     }
-    if (!Array.isArray(card.candles) || card.candles.length === 0) {
+    const runtimeCard = await this.hydrateCardCandles(card);
+    if (!Array.isArray(runtimeCard.candles) || runtimeCard.candles.length === 0) {
       throw new BadRequestException('Practical flashcard requires frozen candles before training');
     }
 
@@ -580,12 +602,12 @@ export class PracticalFlashcardService {
       cardId: this.makeAttemptKey(attemptId),
       entityType: 'PRACTICAL_FLASHCARD_ATTEMPT',
       attemptId,
-      targetCardId: card.cardId,
-      targetCardOwnerUserId: card.userId,
+      targetCardId: runtimeCard.cardId,
+      targetCardOwnerUserId: runtimeCard.userId,
       status: 'IN_PROGRESS',
       trainingMode,
-      cardSnapshot: this.buildCardSnapshot(card),
-      currentCandleIndex: card.initialVisibleCandleIndex,
+      cardSnapshot: this.buildCardSnapshot(runtimeCard),
+      currentCandleIndex: runtimeCard.initialVisibleCandleIndex,
       startedAt: now,
       createdAt: now,
       updatedAt: now,
@@ -600,7 +622,7 @@ export class PracticalFlashcardService {
     dto: CreatePracticalFlashcardCardDto & { sourceTradeFlashcardId?: string },
     ownerRole?: string,
   ): Promise<PracticalFlashcardCard> {
-    const primaryInterval = dto.primaryInterval || '15m';
+    const primaryInterval = this.assertPrimaryInterval(dto.primaryInterval);
     const normalizedSymbol = this.assertSupportedBinanceUmSymbol(dto.venue, dto.symbolPairInfo);
     const timeZone = this.normalizeTimeZone(dto.timeZone);
     const entryTime = this.parseTime(dto.entryTimeInfo, 'entryTimeInfo', timeZone);
@@ -654,7 +676,7 @@ export class PracticalFlashcardService {
       exitTimeInfo: dto.exitTimeInfo.trim(),
       snapshotStartTime: snapshotStartTime.toISOString(),
       snapshotEndTime: snapshotEndTime.toISOString(),
-      candles,
+      candles: this.shouldStoreCandles(primaryInterval) ? candles : [],
       initialVisibleCandleIndex: this.resolveCandleIndex(candles, entryTime.getTime()),
       resultCandleIndex: this.resolveCandleIndex(candles, exitTime.getTime()),
       expectedDirection: dto.expectedDirection,
@@ -680,17 +702,58 @@ export class PracticalFlashcardService {
     endTime: number,
     options: { allowEmpty?: boolean } = {},
   ): Promise<PracticalFlashcardCandle[]> {
+    if (interval === '2m') {
+      const oneMinuteCandles = await this.fetchNativeBinanceCandles(symbolPairInfo, '1m', startTime, endTime, options);
+      return this.aggregateCandles(oneMinuteCandles, INTERVAL_MS['2m']);
+    }
+    return this.fetchNativeBinanceCandles(symbolPairInfo, interval, startTime, endTime, options);
+  }
+
+  private async fetchNativeBinanceCandles(
+    symbolPairInfo: string,
+    interval: BinanceNativeInterval,
+    startTime: number,
+    endTime: number,
+    options: { allowEmpty?: boolean } = {},
+  ): Promise<PracticalFlashcardCandle[]> {
     const baseUrl = 'https://fapi.binance.com';
     const path = '/fapi/v1/klines';
-    const params = new URLSearchParams({
-      symbol: this.normalizeSymbol(symbolPairInfo),
-      interval,
-      startTime: String(startTime),
-      endTime: String(endTime),
-      limit: String(BINANCE_LIMIT),
-    });
-    const url = `${baseUrl}${path}?${params.toString()}`;
-    const res = await fetch(url, { method: 'GET' });
+    const items: PracticalFlashcardCandle[] = [];
+    const intervalMs = interval === '1m' ? 60 * 1000 : INTERVAL_MS['15m'];
+    let cursorStartTime = startTime;
+
+    while (cursorStartTime <= endTime) {
+      const params = new URLSearchParams({
+        symbol: this.normalizeSymbol(symbolPairInfo),
+        interval,
+        startTime: String(cursorStartTime),
+        endTime: String(endTime),
+        limit: String(BINANCE_LIMIT),
+      });
+      const url = `${baseUrl}${path}?${params.toString()}`;
+      const raw = await this.fetchBinanceKlineRows(url);
+      if (raw.length === 0) break;
+      const candles = raw.map((item) => this.mapBinanceKlineRow(item));
+      items.push(...candles);
+      const lastOpenTime = candles[candles.length - 1]?.openTime;
+      if (!lastOpenTime || lastOpenTime < cursorStartTime) break;
+      cursorStartTime = lastOpenTime + intervalMs;
+      if (candles.length < BINANCE_LIMIT) break;
+    }
+
+    const uniqueItems = Array.from(new Map(items.map((item) => [item.openTime, item])).values())
+      .filter((item) => item.openTime >= startTime && item.openTime <= endTime)
+      .sort((a, b) => a.openTime - b.openTime);
+
+    if (uniqueItems.length === 0) {
+      if (options.allowEmpty) return [];
+      throw new BadRequestException('No candles returned for the requested snapshot range');
+    }
+    return uniqueItems;
+  }
+
+  private async fetchBinanceKlineRows(url: string): Promise<unknown[]> {
+    const res = await this.fetchBinanceWithRetry(url);
     const text = await res.text();
     if (!res.ok) {
       throw new ValidationException(
@@ -701,33 +764,92 @@ export class PracticalFlashcardService {
       );
     }
 
-    let raw: unknown;
     try {
-      raw = JSON.parse(text);
+      const raw = JSON.parse(text);
+      if (Array.isArray(raw)) return raw;
     } catch {
-      throw new ValidationException(
-        'Invalid Binance klines response',
-        ERROR_CODES.VALIDATION_INVALID_VALUE,
-        'Binance 行情返回格式异常',
-      );
+      // handled below
     }
-    if (!Array.isArray(raw) || raw.length === 0) {
-      if (options.allowEmpty) return [];
-      throw new BadRequestException('No candles returned for the requested snapshot range');
+    throw new ValidationException(
+      'Invalid Binance klines response',
+      ERROR_CODES.VALIDATION_INVALID_VALUE,
+      'Binance 行情返回格式异常',
+    );
+  }
+
+  private async fetchBinanceWithRetry(url: string): Promise<Response> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= BINANCE_FETCH_RETRY_COUNT; attempt += 1) {
+      try {
+        return await fetch(url, { method: 'GET', signal: AbortSignal.timeout(BINANCE_FETCH_TIMEOUT_MS) });
+      } catch (error) {
+        lastError = error;
+        if (attempt < BINANCE_FETCH_RETRY_COUNT) {
+          await this.sleep(200 * (attempt + 1));
+        }
+      }
+    }
+    throw new ValidationException(
+      `Binance public klines API network error: ${this.formatFetchError(lastError)}`,
+      ERROR_CODES.VALIDATION_INVALID_VALUE,
+      'Binance 行情快照拉取失败，请稍后重试',
+      { cause: this.formatFetchError(lastError) },
+    );
+  }
+
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private formatFetchError(error: unknown) {
+    if (error instanceof Error) {
+      const cause = (error as Error & { cause?: unknown }).cause;
+      return cause instanceof Error ? `${error.message}: ${cause.message}` : error.message;
+    }
+    return String(error);
+  }
+
+  private mapBinanceKlineRow(item: unknown): PracticalFlashcardCandle {
+    const row = item as unknown[];
+    return {
+      openTime: Number(row[0]),
+      open: Number(row[1]),
+      high: Number(row[2]),
+      low: Number(row[3]),
+      close: Number(row[4]),
+      volume: Number(row[5]),
+      closeTime: Number(row[6]),
+    };
+  }
+
+  private aggregateCandles(candles: PracticalFlashcardCandle[], intervalMs: number): PracticalFlashcardCandle[] {
+    const grouped = new Map<number, PracticalFlashcardCandle[]>();
+    for (const candle of candles) {
+      const bucketOpenTime = Math.floor(candle.openTime / intervalMs) * intervalMs;
+      const group = grouped.get(bucketOpenTime);
+      if (group) {
+        group.push(candle);
+      } else {
+        grouped.set(bucketOpenTime, [candle]);
+      }
     }
 
-    return raw.map((item) => {
-      const row = item as unknown[];
-      return {
-        openTime: Number(row[0]),
-        open: Number(row[1]),
-        high: Number(row[2]),
-        low: Number(row[3]),
-        close: Number(row[4]),
-        volume: Number(row[5]),
-        closeTime: Number(row[6]),
-      };
-    });
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([openTime, group]) => {
+        const sorted = group.sort((a, b) => a.openTime - b.openTime);
+        const first = sorted[0];
+        const last = sorted[sorted.length - 1];
+        return {
+          openTime,
+          closeTime: last.closeTime,
+          open: first.open,
+          high: Math.max(...sorted.map((item) => item.high)),
+          low: Math.min(...sorted.map((item) => item.low)),
+          close: last.close,
+          volume: sorted.reduce((sum, item) => sum + (item.volume || 0), 0),
+        };
+      });
   }
 
   private async buildSnapshotForTimeRange(
@@ -735,6 +857,7 @@ export class PracticalFlashcardService {
     entryTimeInfo: string,
     exitTimeInfo: string,
     timeZone: string,
+    primaryInterval: PracticalFlashcardInterval,
   ) {
     const normalizedSymbol = this.assertSupportedBinanceUmSymbol(existing.venue, existing.symbolPairInfo);
     const normalizedTimeZone = this.normalizeTimeZone(timeZone);
@@ -748,7 +871,7 @@ export class PracticalFlashcardService {
     const snapshotEndTime = new Date(exitTime.getTime() + DEFAULT_LOOKAHEAD_MS);
     const candles = await this.fetchCandles(
       normalizedSymbol,
-      existing.primaryInterval || '15m',
+      primaryInterval,
       snapshotStartTime.getTime(),
       snapshotEndTime.getTime(),
     );
@@ -757,10 +880,11 @@ export class PracticalFlashcardService {
     return {
       entryTimeInfo: entryTimeInfo.trim(),
       exitTimeInfo: exitTimeInfo.trim(),
+      primaryInterval,
       timeZone: normalizedTimeZone,
       snapshotStartTime: snapshotStartTime.toISOString(),
       snapshotEndTime: snapshotEndTime.toISOString(),
-      candles,
+      candles: this.shouldStoreCandles(primaryInterval) ? candles : [],
       initialVisibleCandleIndex: this.resolveCandleIndex(candles, entryTime.getTime()),
       resultCandleIndex: this.resolveCandleIndex(candles, exitTime.getTime()),
     };
@@ -1024,7 +1148,7 @@ export class PracticalFlashcardService {
       playbookType: attempt.cardSnapshot?.playbookType || fallbackCard?.playbookType,
       symbolPairInfo: attempt.cardSnapshot?.symbolPairInfo || fallbackCard?.symbolPairInfo,
       tagCodes: attempt.cardSnapshot?.tagCodes || fallbackCard?.tagCodes || [],
-      primaryInterval: attempt.cardSnapshot?.primaryInterval || fallbackCard?.primaryInterval,
+      primaryInterval: attempt.cardSnapshot?.primaryInterval || (fallbackCard ? this.resolveCardInterval(fallbackCard) : undefined),
       expectedDirection: attempt.cardSnapshot?.expectedDirection || fallbackCard?.expectedDirection,
     };
   }
@@ -1053,7 +1177,7 @@ export class PracticalFlashcardService {
       playbookType: card.playbookType,
       tagCodes: card.tagCodes || [],
       symbolPairInfo: card.symbolPairInfo,
-      primaryInterval: card.primaryInterval,
+      primaryInterval: this.resolveCardInterval(card),
       ...(card.expectedDirection ? { expectedDirection: card.expectedDirection } : {}),
     };
   }
@@ -1064,7 +1188,56 @@ export class PracticalFlashcardService {
       'flashcard_tag',
       card.tagCodes,
     );
-    return { ...card, tagItems };
+    return { ...card, primaryInterval: this.resolveCardInterval(card), tagItems };
+  }
+
+  private async hydrateCardForResponse(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
+    return this.attachDictionaryTags(await this.hydrateCardCandles(card));
+  }
+
+  private async hydrateCardCandles(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
+    if (Array.isArray(card.candles) && card.candles.length > 0) {
+      return { ...card, primaryInterval: this.resolveCardInterval(card) };
+    }
+    if (!this.shouldFetchCandlesOnDemand(card)) {
+      return { ...card, primaryInterval: this.resolveCardInterval(card), candles: card.candles || [] };
+    }
+    const primaryInterval = this.resolveCardInterval(card);
+    const snapshotStartTime = this.safeParseTimestamp(card.snapshotStartTime);
+    const snapshotEndTime = this.safeParseTimestamp(card.snapshotEndTime);
+    const candles = await this.fetchCandles(
+      card.symbolPairInfo,
+      primaryInterval,
+      snapshotStartTime,
+      snapshotEndTime,
+    );
+    return { ...card, primaryInterval, candles };
+  }
+
+  private shouldFetchCandlesOnDemand(card: PracticalFlashcardCard) {
+    return (
+      Boolean(card.symbolPairInfo) &&
+      this.safeParseTimestamp(card.snapshotStartTime) > 0 &&
+      this.safeParseTimestamp(card.snapshotEndTime) > 0
+    );
+  }
+
+  private shouldStoreCandles(_interval: PracticalFlashcardInterval) {
+    return false;
+  }
+
+  private assertPrimaryInterval(value: PracticalFlashcardInterval | undefined): PracticalFlashcardInterval {
+    if (!value || !PRACTICAL_FLASHCARD_INTERVAL_VALUES.includes(value)) {
+      throw new BadRequestException('primaryInterval must be 1m, 2m or 15m');
+    }
+    return value;
+  }
+
+  private resolveCardInterval(card: Pick<PracticalFlashcardCard, 'primaryInterval'>): PracticalFlashcardInterval {
+    if (PRACTICAL_FLASHCARD_INTERVAL_VALUES.includes(card.primaryInterval)) {
+      return card.primaryInterval;
+    }
+    return '15m';
   }
 
   private parseTime(value: string, fieldName: string, timeZone = DEFAULT_TIME_ZONE) {

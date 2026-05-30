@@ -42,11 +42,11 @@ export class CreatePracticalFlashcardCardDto {
   @MaxLength(100)
   exitTimeInfo: string;
 
-  @ApiPropertyOptional({ enum: PRACTICAL_FLASHCARD_INTERVAL_VALUES, default: '15m' })
-  @IsOptional()
+  @ApiProperty({ enum: PRACTICAL_FLASHCARD_INTERVAL_VALUES, example: '15m' })
   @IsString()
+  @IsNotEmpty()
   @IsIn(PRACTICAL_FLASHCARD_INTERVAL_VALUES)
-  primaryInterval?: PracticalFlashcardInterval;
+  primaryInterval: PracticalFlashcardInterval;
 
   @ApiPropertyOptional({ example: 'Asia/Shanghai', description: '用户浏览器 IANA 时区，用于解析无时区时间字符串' })
   @IsOptional()

@@ -4,7 +4,7 @@ export type PracticalFlashcardVenue = (typeof PRACTICAL_FLASHCARD_VENUE_VALUES)[
 export const PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES = ['BTCUSDT', 'BTCUSDC', 'ETHUSDT', 'ETHUSDC'] as const;
 export type PracticalFlashcardBinanceUmSymbol = (typeof PRACTICAL_FLASHCARD_BINANCE_UM_SYMBOL_VALUES)[number];
 
-export const PRACTICAL_FLASHCARD_INTERVAL_VALUES = ['15m'] as const;
+export const PRACTICAL_FLASHCARD_INTERVAL_VALUES = ['1m', '2m', '15m'] as const;
 export type PracticalFlashcardInterval = (typeof PRACTICAL_FLASHCARD_INTERVAL_VALUES)[number];
 
 export const PRACTICAL_FLASHCARD_STATUS_VALUES = ['ACTIVE', 'DISABLED'] as const;
