@@ -10,6 +10,7 @@ import { TradeFlashcardCard } from '../trade-flashcard/trade-flashcard.types';
 import { CreatePracticalFlashcardAttemptTradeDto } from './dto/create-practical-flashcard-attempt-trade.dto';
 import { CreatePracticalFlashcardCardDto } from './dto/create-practical-flashcard-card.dto';
 import { CreatePracticalFlashcardFromTradeFlashcardDto } from './dto/create-practical-flashcard-from-trade-flashcard.dto';
+import { GetPracticalFlashcardCardDto } from './dto/get-practical-flashcard-card.dto';
 import { GetPracticalFlashcardCandlesBeforeDto } from './dto/get-practical-flashcard-candles-before.dto';
 import { GetPracticalFlashcardDashboardAnalyticsDto } from './dto/get-practical-flashcard-dashboard-analytics.dto';
 import { ListPracticalFlashcardAttemptsDto } from './dto/list-practical-flashcard-attempts.dto';
@@ -159,8 +160,9 @@ export class PracticalFlashcardService {
     };
   }
 
-  async getCard(userId: string, cardId: string) {
-    return { success: true, data: await this.hydrateCardForResponse(await this.getAccessibleCardOrThrow(userId, cardId)) };
+  async getCard(userId: string, cardId: string, dto: GetPracticalFlashcardCardDto = {}) {
+    const replayInterval = dto.replayInterval ? this.assertPrimaryInterval(dto.replayInterval) : undefined;
+    return { success: true, data: await this.hydrateCardForResponse(await this.getAccessibleCardOrThrow(userId, cardId), replayInterval) };
   }
 
   async getCandlesBefore(userId: string, cardId: string, dto: GetPracticalFlashcardCandlesBeforeDto) {
@@ -181,15 +183,15 @@ export class PracticalFlashcardService {
       }
     }
 
-    const primaryInterval = this.resolveCardInterval(card);
-    const intervalMs = INTERVAL_MS[primaryInterval];
+    const replayInterval = dto.replayInterval ? this.assertPrimaryInterval(dto.replayInterval) : this.resolveCardInterval(card);
+    const intervalMs = INTERVAL_MS[replayInterval];
     const parsedLimit = Number(dto.limit || 500);
     const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : 500, 1), BINANCE_LIMIT);
     const endTime = beforeOpenTime - 1;
     const startTime = Math.max(0, beforeOpenTime - intervalMs * limit);
     const candles = await this.fetchCandles(
       card.symbolPairInfo,
-      primaryInterval,
+      replayInterval,
       startTime,
       endTime,
       { allowEmpty: true },
@@ -360,7 +362,12 @@ export class PracticalFlashcardService {
       throw new BadRequestException('This attempt already has a confirmed trade');
     }
 
-    const card = await this.hydrateCardCandles(await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId));
+    const replayInterval = dto.replayInterval ? this.assertPrimaryInterval(dto.replayInterval) : (attempt.replayInterval || attempt.cardSnapshot?.primaryInterval);
+    const card = await this.hydrateCardCandles(
+      await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId),
+      replayInterval,
+    );
+    const tradeExecutionInterval = replayInterval || this.resolveCardInterval(card);
     const currentCandleIndex = this.clampCandleIndex(dto.currentCandleIndex, card.candles);
     const candle = card.candles[currentCandleIndex];
     if (!candle) {
@@ -379,6 +386,8 @@ export class PracticalFlashcardService {
       ...attempt,
       decision: dto.direction,
       tradeDirection: dto.direction,
+      replayInterval: tradeExecutionInterval,
+      tradeExecutionInterval,
       tradeOpenedCandleIndex: currentCandleIndex,
       currentCandleIndex,
       entryPrice,
@@ -440,7 +449,11 @@ export class PracticalFlashcardService {
       throw new BadRequestException('Confirm a trade before resolving the attempt');
     }
 
-    const card = await this.hydrateCardCandles(await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId));
+    const tradeExecutionInterval = attempt.tradeExecutionInterval || attempt.replayInterval || attempt.cardSnapshot?.primaryInterval;
+    const card = await this.hydrateCardCandles(
+      await this.getCardOrThrow(attempt.targetCardOwnerUserId || userId, attempt.targetCardId),
+      tradeExecutionInterval,
+    );
     const fallbackFinalIndex = attempt.currentCandleIndex ?? card.resultCandleIndex ?? card.candles.length - 1;
     const finalCandleIndex = this.clampCandleIndex(dto.finalCandleIndex ?? fallbackFinalIndex, card.candles);
     const calculated = this.calculateTradeOutcome(card.candles, attempt, finalCandleIndex);
@@ -449,6 +462,8 @@ export class PracticalFlashcardService {
     const updated: PracticalFlashcardAttempt = {
       ...attempt,
       status: 'RESOLVED',
+      replayInterval: attempt.replayInterval || tradeExecutionInterval || this.resolveCardInterval(card),
+      tradeExecutionInterval: tradeExecutionInterval || this.resolveCardInterval(card),
       finalCandleIndex,
       currentCandleIndex: finalCandleIndex,
       realizedR: dto.realizedR ?? calculated.realizedR,
@@ -461,6 +476,7 @@ export class PracticalFlashcardService {
       tradeExecutionSnapshot: this.buildTradeExecutionSnapshot(
         card.candles,
         attempt,
+        tradeExecutionInterval || this.resolveCardInterval(card),
         dto.tradeClosedCandleIndex ?? calculated.tradeClosedCandleIndex,
         dto.exitPrice ?? calculated.exitPrice,
         dto.exitReason ?? calculated.exitReason,
@@ -607,6 +623,7 @@ export class PracticalFlashcardService {
       status: 'IN_PROGRESS',
       trainingMode,
       cardSnapshot: this.buildCardSnapshot(runtimeCard),
+      replayInterval: this.resolveCardInterval(runtimeCard),
       currentCandleIndex: runtimeCard.initialVisibleCandleIndex,
       startedAt: now,
       createdAt: now,
@@ -1191,27 +1208,43 @@ export class PracticalFlashcardService {
     return { ...card, primaryInterval: this.resolveCardInterval(card), tagItems };
   }
 
-  private async hydrateCardForResponse(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
-    return this.attachDictionaryTags(await this.hydrateCardCandles(card));
+  private async hydrateCardForResponse(
+    card: PracticalFlashcardCard,
+    replayInterval?: PracticalFlashcardInterval,
+  ): Promise<PracticalFlashcardCard> {
+    return this.attachDictionaryTags(await this.hydrateCardCandles(card, replayInterval));
   }
 
-  private async hydrateCardCandles(card: PracticalFlashcardCard): Promise<PracticalFlashcardCard> {
-    if (Array.isArray(card.candles) && card.candles.length > 0) {
-      return { ...card, primaryInterval: this.resolveCardInterval(card) };
+  private async hydrateCardCandles(
+    card: PracticalFlashcardCard,
+    replayInterval?: PracticalFlashcardInterval,
+  ): Promise<PracticalFlashcardCard> {
+    const primaryInterval = this.resolveCardInterval(card);
+    const requestedInterval = replayInterval ? this.assertPrimaryInterval(replayInterval) : primaryInterval;
+    if (Array.isArray(card.candles) && card.candles.length > 0 && requestedInterval === primaryInterval) {
+      return { ...card, primaryInterval };
     }
     if (!this.shouldFetchCandlesOnDemand(card)) {
-      return { ...card, primaryInterval: this.resolveCardInterval(card), candles: card.candles || [] };
+      return { ...card, primaryInterval, candles: card.candles || [] };
     }
-    const primaryInterval = this.resolveCardInterval(card);
     const snapshotStartTime = this.safeParseTimestamp(card.snapshotStartTime);
     const snapshotEndTime = this.safeParseTimestamp(card.snapshotEndTime);
     const candles = await this.fetchCandles(
       card.symbolPairInfo,
-      primaryInterval,
+      requestedInterval,
       snapshotStartTime,
       snapshotEndTime,
     );
-    return { ...card, primaryInterval, candles };
+    const timeZone = this.normalizeTimeZone(card.timeZone);
+    const entryTimestamp = this.parseTime(card.entryTimeInfo, 'entryTimeInfo', timeZone).getTime();
+    const exitTimestamp = this.parseTime(card.exitTimeInfo, 'exitTimeInfo', timeZone).getTime();
+    return {
+      ...card,
+      primaryInterval,
+      candles,
+      initialVisibleCandleIndex: this.resolveCandleIndex(candles, entryTimestamp),
+      resultCandleIndex: this.resolveCandleIndex(candles, exitTimestamp),
+    };
   }
 
   private shouldFetchCandlesOnDemand(card: PracticalFlashcardCard) {
@@ -1443,6 +1476,7 @@ export class PracticalFlashcardService {
   private buildTradeExecutionSnapshot(
     candles: PracticalFlashcardCandle[],
     attempt: PracticalFlashcardAttempt,
+    interval: PracticalFlashcardInterval,
     exitCandleIndex?: number,
     exitPrice?: number,
     exitReason?: PracticalFlashcardExitReason,
@@ -1459,6 +1493,7 @@ export class PracticalFlashcardService {
     const entryCandle = candles[attempt.tradeOpenedCandleIndex];
     const exitCandle = exitCandleIndex !== undefined ? candles[exitCandleIndex] : undefined;
     return {
+      interval,
       entryCandleIndex: attempt.tradeOpenedCandleIndex,
       entryCandleOpenTime: entryCandle?.openTime ?? 0,
       entryPrice: attempt.entryPrice,
