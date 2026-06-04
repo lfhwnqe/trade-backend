@@ -13,6 +13,7 @@ import { TradeFlashcardModule } from './modules/trade-flashcard/trade-flashcard.
 import { DictionaryModule } from './modules/dictionary/dictionary.module';
 import { MistakeModule } from './modules/mistake/mistake.module';
 import { PracticalFlashcardModule } from './modules/practical-flashcard/practical-flashcard.module';
+import { ImageRecognitionFlashcardModule } from './modules/image-recognition-flashcard/image-recognition-flashcard.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { PracticalFlashcardModule } from './modules/practical-flashcard/practica
     DictionaryModule,
     MistakeModule,
     PracticalFlashcardModule,
+    ImageRecognitionFlashcardModule,
     // RAGModule,
   ],
 })
