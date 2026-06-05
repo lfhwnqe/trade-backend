@@ -14,6 +14,7 @@ import { DictionaryModule } from './modules/dictionary/dictionary.module';
 import { MistakeModule } from './modules/mistake/mistake.module';
 import { PracticalFlashcardModule } from './modules/practical-flashcard/practical-flashcard.module';
 import { ImageRecognitionFlashcardModule } from './modules/image-recognition-flashcard/image-recognition-flashcard.module';
+import { TradingViewTrainingRecordModule } from './modules/tradingview-training-record/tradingview-training-record.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { ImageRecognitionFlashcardModule } from './modules/image-recognition-fla
     MistakeModule,
     PracticalFlashcardModule,
     ImageRecognitionFlashcardModule,
+    TradingViewTrainingRecordModule,
     // RAGModule,
   ],
 })
