@@ -284,6 +284,8 @@ export class TradingViewTrainingRecordService {
     const winCount = records.filter((item) => item.tradeResult === 'WIN').length;
     const lossCount = records.filter((item) => item.tradeResult === 'LOSS').length;
     const breakevenCount = records.filter((item) => item.tradeResult === 'BREAKEVEN').length;
+    const notEnteredCount = records.filter((item) => item.tradeResult === 'NOT_ENTERED').length;
+    const notExitedCount = records.filter((item) => item.tradeResult === 'NOT_EXITED').length;
     const decisiveCount = winCount + lossCount;
     const ratingSum = records.reduce((sum, item) => sum + item.entryConfidenceRating, 0);
     return {
@@ -291,6 +293,8 @@ export class TradingViewTrainingRecordService {
       winCount,
       lossCount,
       breakevenCount,
+      notEnteredCount,
+      notExitedCount,
       decisiveCount,
       winRate: decisiveCount > 0 ? winCount / decisiveCount : null,
       avgEntryConfidenceRating: totalCount > 0 ? ratingSum / totalCount : null,

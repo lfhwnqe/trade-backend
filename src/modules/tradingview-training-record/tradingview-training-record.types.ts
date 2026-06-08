@@ -1,4 +1,4 @@
-export const TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES = ['WIN', 'LOSS', 'BREAKEVEN'] as const;
+export const TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES = ['WIN', 'LOSS', 'BREAKEVEN', 'NOT_ENTERED', 'NOT_EXITED'] as const;
 export type TradingViewTrainingRecordResult = (typeof TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES)[number];
 
 export const TRADINGVIEW_TRAINING_RECORD_STATUS_VALUES = ['ACTIVE', 'DELETED'] as const;
@@ -46,6 +46,8 @@ export interface TradingViewTrainingRecordAnalyticsSummary {
   winCount: number;
   lossCount: number;
   breakevenCount: number;
+  notEnteredCount: number;
+  notExitedCount: number;
   decisiveCount: number;
   winRate: number | null;
   avgEntryConfidenceRating: number | null;

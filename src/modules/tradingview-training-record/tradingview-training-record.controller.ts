@@ -7,6 +7,7 @@ import { GetTradingViewTrainingRecordUploadUrlDto } from './dto/get-tradingview-
 import { ListTradingViewTrainingRecordsDto } from './dto/list-tradingview-training-records.dto';
 import { UpdateTradingViewTrainingRecordDto } from './dto/update-tradingview-training-record.dto';
 import { TradingViewTrainingRecordService } from './tradingview-training-record.service';
+import { TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES } from './tradingview-training-record.types';
 
 @ApiTags('TradingViewTrainingRecord')
 @ApiBearerAuth()
@@ -38,7 +39,7 @@ export class TradingViewTrainingRecordController {
   @ApiQuery({ name: 'cursor', required: false })
   @ApiQuery({ name: 'playbookType', required: false })
   @ApiQuery({ name: 'symbolPair', required: false })
-  @ApiQuery({ name: 'tradeResult', required: false, enum: ['WIN', 'LOSS', 'BREAKEVEN'] })
+  @ApiQuery({ name: 'tradeResult', required: false, enum: TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES })
   @ApiQuery({ name: 'entryConfidenceRating', required: false, enum: [1, 2, 3, 4, 5] })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
