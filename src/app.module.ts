@@ -15,6 +15,7 @@ import { MistakeModule } from './modules/mistake/mistake.module';
 import { PracticalFlashcardModule } from './modules/practical-flashcard/practical-flashcard.module';
 import { ImageRecognitionFlashcardModule } from './modules/image-recognition-flashcard/image-recognition-flashcard.module';
 import { TradingViewTrainingRecordModule } from './modules/tradingview-training-record/tradingview-training-record.module';
+import { PlaybookTemplateModule } from './modules/playbook-template/playbook-template.module';
 // import { RAGModule } from './modules/rag/rag.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { TradingViewTrainingRecordModule } from './modules/tradingview-training-
     PracticalFlashcardModule,
     ImageRecognitionFlashcardModule,
     TradingViewTrainingRecordModule,
+    PlaybookTemplateModule,
     // RAGModule,
   ],
 })
