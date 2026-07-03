@@ -16,6 +16,7 @@ import { UpdateTradingViewTrainingRecordDto } from './dto/update-tradingview-tra
 import {
   TradingViewTrainingRecord,
   TradingViewTrainingRecordAnalyticsSummary,
+  TradingViewTrainingRecordImageItem,
   TradingViewTrainingRecordSortBy,
   TradingViewTrainingRecordSortOrder,
 } from './tradingview-training-record.types';
@@ -38,7 +39,7 @@ export class TradingViewTrainingRecordService {
     this.bucketName = this.configService.getOrThrow('IMAGE_BUCKET_NAME');
     this.cloudfrontDomain = this.configService.get('CLOUDFRONT_DOMAIN_NAME');
     this.db = DynamoDBDocument.from(new DynamoDB({ region: this.region }), {
-      marshallOptions: { convertClassInstanceToMap: true },
+      marshallOptions: { convertClassInstanceToMap: true, removeUndefinedValues: true },
     });
     this.s3 = new S3Client({ region: this.region });
   }
@@ -46,7 +47,7 @@ export class TradingViewTrainingRecordService {
   async getUploadUrl(userId: string, dto: GetTradingViewTrainingRecordUploadUrlDto) {
     const ext = this.resolveFileExtension(dto.fileName, dto.contentType);
     const date = new Date().toISOString().slice(0, 10);
-    const key = `tradingview-training-records/${userId}/${date}/${uuidv4()}.${ext}`;
+    const key = `tradingview-training-records/${userId}/${date}/${dto.scope}/${uuidv4()}.${ext}`;
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: key,
@@ -67,8 +68,13 @@ export class TradingViewTrainingRecordService {
   async createRecord(userId: string, dto: CreateTradingViewTrainingRecordDto) {
     const playbookType = await this.resolvePlaybookType(userId, dto.playbookType);
     const symbolPair = this.normalizeSymbol(dto.symbolPair);
-    const imageUrl = dto.imageUrl?.trim();
-    if (!imageUrl) throw new BadRequestException('imageUrl is required');
+    const analysisStartImages = this.normalizeImageItems(dto.analysisStartImages);
+    const postAnalysisTrendImages = this.normalizeImageItems(dto.postAnalysisTrendImages);
+    const pendingOrderImages = this.normalizeImageItems(dto.pendingOrderImages);
+    const exitImages = this.normalizeImageItems(dto.exitImages);
+    const postExitTrendImages = this.normalizeImageItems(dto.postExitTrendImages);
+    this.assertRequiredImageGroups({ analysisStartImages, pendingOrderImages, exitImages });
+    const primaryImage = analysisStartImages[0];
 
     const now = new Date().toISOString();
     const recordId = uuidv4();
@@ -79,8 +85,13 @@ export class TradingViewTrainingRecordService {
       recordId,
       entityType: 'TRADINGVIEW_TRAINING_RECORD',
       symbolPair: symbolPair || undefined,
-      imageUrl,
-      imageKey: dto.imageKey?.trim() || undefined,
+      analysisStartImages,
+      postAnalysisTrendImages,
+      pendingOrderImages,
+      exitImages,
+      postExitTrendImages,
+      imageUrl: dto.imageUrl?.trim() || primaryImage.imageUrl,
+      imageKey: dto.imageKey?.trim() || primaryImage.imageKey,
       tradeResult: dto.tradeResult,
       playbookType,
       entryConfidenceRating: dto.entryConfidenceRating,
@@ -123,14 +134,41 @@ export class TradingViewTrainingRecordService {
       ? await this.resolvePlaybookType(userId, dto.playbookType)
       : existing.playbookType;
     const symbolPair = dto.symbolPair !== undefined ? this.normalizeSymbol(dto.symbolPair) : existing.symbolPair;
-    const imageUrl = dto.imageUrl !== undefined ? dto.imageUrl.trim() || undefined : existing.imageUrl;
+    const imageGroupsTouched = this.hasImageGroupUpdate(dto);
+    const analysisStartImages = dto.analysisStartImages !== undefined
+      ? this.normalizeImageItems(dto.analysisStartImages)
+      : existing.analysisStartImages;
+    const postAnalysisTrendImages = dto.postAnalysisTrendImages !== undefined
+      ? this.normalizeImageItems(dto.postAnalysisTrendImages)
+      : existing.postAnalysisTrendImages;
+    const pendingOrderImages = dto.pendingOrderImages !== undefined
+      ? this.normalizeImageItems(dto.pendingOrderImages)
+      : existing.pendingOrderImages;
+    const exitImages = dto.exitImages !== undefined
+      ? this.normalizeImageItems(dto.exitImages)
+      : existing.exitImages;
+    const postExitTrendImages = dto.postExitTrendImages !== undefined
+      ? this.normalizeImageItems(dto.postExitTrendImages)
+      : existing.postExitTrendImages;
+    if (imageGroupsTouched) {
+      this.assertRequiredImageGroups({ analysisStartImages, pendingOrderImages, exitImages });
+    }
+    const primaryImage = analysisStartImages?.[0];
+    const imageUrl = dto.imageUrl !== undefined
+      ? dto.imageUrl.trim() || undefined
+      : primaryImage?.imageUrl || existing.imageUrl;
     if (!imageUrl) throw new BadRequestException('imageUrl is required');
 
     const updated: TradingViewTrainingRecord = {
       ...existing,
       symbolPair: symbolPair || undefined,
+      analysisStartImages,
+      postAnalysisTrendImages,
+      pendingOrderImages,
+      exitImages,
+      postExitTrendImages,
       imageUrl,
-      imageKey: dto.imageKey !== undefined ? dto.imageKey.trim() || undefined : existing.imageKey,
+      imageKey: dto.imageKey !== undefined ? dto.imageKey.trim() || undefined : primaryImage?.imageKey || existing.imageKey,
       tradeResult: dto.tradeResult || existing.tradeResult,
       playbookType,
       entryConfidenceRating: dto.entryConfidenceRating || existing.entryConfidenceRating,
@@ -219,6 +257,11 @@ export class TradingViewTrainingRecordService {
           'recordId',
           '#entityType',
           'symbolPair',
+          'analysisStartImages',
+          'postAnalysisTrendImages',
+          'pendingOrderImages',
+          'exitImages',
+          'postExitTrendImages',
           'imageUrl',
           'imageKey',
           'tradeResult',
@@ -272,7 +315,7 @@ export class TradingViewTrainingRecordService {
       if (fromTs > 0 && recordTs < fromTs) return false;
       if (toTs > 0 && recordTs > toTs) return false;
       if (keyword) {
-        const haystack = `${record.notes || ''} ${record.symbolPair || ''} ${record.playbookType}`.toLowerCase();
+        const haystack = `${record.notes || ''} ${record.symbolPair || ''} ${record.playbookType} ${this.collectImageRemarks(record)}`.toLowerCase();
         if (!haystack.includes(keyword)) return false;
       }
       return true;
@@ -329,13 +372,70 @@ export class TradingViewTrainingRecordService {
   }
 
   private normalizeRecord(record: TradingViewTrainingRecord): TradingViewTrainingRecord {
+    const analysisStartImages = this.normalizeImageItems(record.analysisStartImages);
+    const postAnalysisTrendImages = this.normalizeImageItems(record.postAnalysisTrendImages);
+    const pendingOrderImages = this.normalizeImageItems(record.pendingOrderImages);
+    const exitImages = this.normalizeImageItems(record.exitImages);
+    const postExitTrendImages = this.normalizeImageItems(record.postExitTrendImages);
+    const legacyImageUrl = record.imageUrl?.trim();
+    const legacyImageKey = record.imageKey?.trim();
     return {
       ...record,
       cardId: record.cardId || record.recordId,
       recordId: record.recordId || record.cardId,
       symbolPair: this.normalizeSymbol(record.symbolPair) || undefined,
+      analysisStartImages: analysisStartImages.length ? analysisStartImages : undefined,
+      postAnalysisTrendImages: postAnalysisTrendImages.length ? postAnalysisTrendImages : undefined,
+      pendingOrderImages: pendingOrderImages.length ? pendingOrderImages : undefined,
+      exitImages: exitImages.length ? exitImages : undefined,
+      postExitTrendImages: postExitTrendImages.length ? postExitTrendImages : undefined,
+      imageUrl: legacyImageUrl || analysisStartImages[0]?.imageUrl,
+      imageKey: legacyImageKey || analysisStartImages[0]?.imageKey,
       status: record.status || 'ACTIVE',
     };
+  }
+
+  private normalizeImageItems(items?: TradingViewTrainingRecordImageItem[] | null): TradingViewTrainingRecordImageItem[] {
+    if (!Array.isArray(items)) return [];
+    return items.reduce<TradingViewTrainingRecordImageItem[]>((normalizedItems, item) => {
+      const imageUrl = item?.imageUrl?.trim();
+      if (!imageUrl) return normalizedItems;
+      const normalizedItem: TradingViewTrainingRecordImageItem = { imageUrl };
+      const imageKey = item?.imageKey?.trim();
+      const remark = item?.remark?.trim();
+      if (imageKey) normalizedItem.imageKey = imageKey;
+      if (remark) normalizedItem.remark = remark;
+      normalizedItems.push(normalizedItem);
+      return normalizedItems;
+    }, []);
+  }
+
+  private assertRequiredImageGroups(groups: {
+    analysisStartImages?: TradingViewTrainingRecordImageItem[];
+    pendingOrderImages?: TradingViewTrainingRecordImageItem[];
+    exitImages?: TradingViewTrainingRecordImageItem[];
+  }) {
+    if (!groups.analysisStartImages?.length) throw new BadRequestException('analysisStartImages is required');
+    if (!groups.pendingOrderImages?.length) throw new BadRequestException('pendingOrderImages is required');
+    if (!groups.exitImages?.length) throw new BadRequestException('exitImages is required');
+  }
+
+  private hasImageGroupUpdate(dto: UpdateTradingViewTrainingRecordDto) {
+    return dto.analysisStartImages !== undefined
+      || dto.postAnalysisTrendImages !== undefined
+      || dto.pendingOrderImages !== undefined
+      || dto.exitImages !== undefined
+      || dto.postExitTrendImages !== undefined;
+  }
+
+  private collectImageRemarks(record: TradingViewTrainingRecord) {
+    return [
+      ...(record.analysisStartImages || []),
+      ...(record.postAnalysisTrendImages || []),
+      ...(record.pendingOrderImages || []),
+      ...(record.exitImages || []),
+      ...(record.postExitTrendImages || []),
+    ].map((item) => item.remark || '').join(' ');
   }
 
   private normalizeSymbol(value?: string) {

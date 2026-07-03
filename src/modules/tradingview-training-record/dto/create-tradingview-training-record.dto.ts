@@ -1,9 +1,42 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, IsUrl, Max, MaxLength, Min } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMinSize,
+  IsArray,
+  IsDateString,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Max,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import {
   TRADINGVIEW_TRAINING_RECORD_RESULT_VALUES,
   TradingViewTrainingRecordResult,
 } from '../tradingview-training-record.types';
+
+export class TradingViewTrainingRecordImageItemDto {
+  @ApiProperty({ example: 'https://cdn.example.com/tradingview-training-records/u1/2026-07-03/analysis-start/record.png' })
+  @IsString()
+  @IsUrl()
+  imageUrl: string;
+
+  @ApiPropertyOptional({ example: 'tradingview-training-records/u1/2026-07-03/analysis-start/record.png' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  imageKey?: string;
+
+  @ApiPropertyOptional({ example: '分析开始时，价格在区间上沿附近等待二次确认。' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  remark?: string;
+}
 
 export class CreateTradingViewTrainingRecordDto {
   @ApiPropertyOptional({ example: 'BTCUSDC' })
@@ -12,10 +45,46 @@ export class CreateTradingViewTrainingRecordDto {
   @MaxLength(40)
   symbolPair?: string;
 
-  @ApiProperty({ example: 'https://cdn.example.com/tradingview-training-records/u1/2026-06-05/record.png' })
+  @ApiProperty({ type: [TradingViewTrainingRecordImageItemDto], description: '分析开始时图片，至少 1 张' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => TradingViewTrainingRecordImageItemDto)
+  analysisStartImages: TradingViewTrainingRecordImageItemDto[];
+
+  @ApiPropertyOptional({ type: [TradingViewTrainingRecordImageItemDto], description: '分析后走势图片，可为空，可多张' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TradingViewTrainingRecordImageItemDto)
+  postAnalysisTrendImages?: TradingViewTrainingRecordImageItemDto[];
+
+  @ApiProperty({ type: [TradingViewTrainingRecordImageItemDto], description: '挂单图片，至少 1 张' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => TradingViewTrainingRecordImageItemDto)
+  pendingOrderImages: TradingViewTrainingRecordImageItemDto[];
+
+  @ApiProperty({ type: [TradingViewTrainingRecordImageItemDto], description: '离场时图片，至少 1 张' })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => TradingViewTrainingRecordImageItemDto)
+  exitImages: TradingViewTrainingRecordImageItemDto[];
+
+  @ApiPropertyOptional({ type: [TradingViewTrainingRecordImageItemDto], description: '离场后走势图片，可为空，可多张' })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TradingViewTrainingRecordImageItemDto)
+  postExitTrendImages?: TradingViewTrainingRecordImageItemDto[];
+
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/tradingview-training-records/u1/2026-06-05/record.png', description: '历史兼容单图字段' })
+  @IsOptional()
   @IsString()
   @IsUrl()
-  imageUrl: string;
+  imageUrl?: string;
 
   @ApiPropertyOptional({ example: 'tradingview-training-records/u1/2026-06-05/record.png' })
   @IsOptional()

@@ -4,7 +4,14 @@ export type TradingViewTrainingRecordResult = (typeof TRADINGVIEW_TRAINING_RECOR
 export const TRADINGVIEW_TRAINING_RECORD_STATUS_VALUES = ['ACTIVE', 'DELETED'] as const;
 export type TradingViewTrainingRecordStatus = (typeof TRADINGVIEW_TRAINING_RECORD_STATUS_VALUES)[number];
 
-export const TRADINGVIEW_TRAINING_RECORD_IMAGE_SCOPE_VALUES = ['training-image'] as const;
+export const TRADINGVIEW_TRAINING_RECORD_IMAGE_SCOPE_VALUES = [
+  'analysis-start',
+  'post-analysis-trend',
+  'pending-order',
+  'exit',
+  'post-exit-trend',
+  'training-image',
+] as const;
 export type TradingViewTrainingRecordImageScope = (typeof TRADINGVIEW_TRAINING_RECORD_IMAGE_SCOPE_VALUES)[number];
 
 export const TRADINGVIEW_TRAINING_RECORD_SORT_BY_VALUES = ['CREATED_AT', 'UPDATED_AT'] as const;
@@ -20,6 +27,12 @@ export interface TradingViewTrainingRecordPlaybookItem {
   status?: string;
 }
 
+export interface TradingViewTrainingRecordImageItem {
+  imageUrl: string;
+  imageKey?: string;
+  remark?: string;
+}
+
 export interface TradingViewTrainingRecord {
   id: string;
   userId: string;
@@ -27,7 +40,12 @@ export interface TradingViewTrainingRecord {
   recordId: string;
   entityType: 'TRADINGVIEW_TRAINING_RECORD';
   symbolPair?: string;
-  imageUrl: string;
+  analysisStartImages?: TradingViewTrainingRecordImageItem[];
+  postAnalysisTrendImages?: TradingViewTrainingRecordImageItem[];
+  pendingOrderImages?: TradingViewTrainingRecordImageItem[];
+  exitImages?: TradingViewTrainingRecordImageItem[];
+  postExitTrendImages?: TradingViewTrainingRecordImageItem[];
+  imageUrl?: string;
   imageKey?: string;
   tradeResult: TradingViewTrainingRecordResult;
   playbookType: string;
