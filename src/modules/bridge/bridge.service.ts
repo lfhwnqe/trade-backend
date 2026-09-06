@@ -162,6 +162,93 @@ export class BridgeService {
         };
     } while (startKey);
   }
+  async history(userId: string, query: Record<string, string>) {
+    const {
+      status = 'all',
+      hookId = '',
+      days = '7',
+      limit: rawLimit = '20',
+      cursor,
+    } = query;
+    if (
+      ![status, hookId, days, rawLimit].every(
+        (value) => typeof value === 'string',
+      ) ||
+      !['all', 'unread', 'read'].includes(status) ||
+      !['7', '30', '90', 'all'].includes(days) ||
+      !/^\d+$/.test(rawLimit) ||
+      Number(rawLimit) < 1 ||
+      Number(rawLimit) > 100 ||
+      (hookId && !/^[a-f0-9-]{36}$/.test(hookId))
+    )
+      throw new BadRequestException('Invalid history filters');
+    const limit = Number(rawLimit);
+    const scope = JSON.stringify([userId, status, hookId, days]);
+    let since =
+      days === 'all'
+        ? '1970-01-01T00:00:00.000Z'
+        : new Date(Date.now() - Number(days) * 86400000).toISOString();
+    let key: Record<string, any> | undefined;
+    if (cursor) {
+      try {
+        if (typeof cursor !== 'string' || cursor.length > 4096)
+          throw new Error();
+        const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString());
+        key = decoded.key;
+        if (
+          decoded.scope !== scope ||
+          !key ||
+          key.userId !== userId ||
+          Object.keys(key).sort().join(',') !== 'receivedAt,taskId,userId' ||
+          typeof key.receivedAt !== 'string' ||
+          typeof decoded.since !== 'string' ||
+          !Number.isFinite(Date.parse(decoded.since))
+        )
+          throw new Error();
+        taskId(key.taskId);
+        since = decoded.since;
+      } catch {
+        throw new BadRequestException('Invalid history cursor');
+      }
+    }
+    const items: Omit<
+      BridgeTask,
+      'fingerprint' | 'unreadUser' | 'receivedOrder'
+    >[] = [];
+    for (let pageNo = 0; pageNo < 5; pageNo++) {
+      const page = await this.db.query({
+        TableName: this.table,
+        IndexName: 'user-received-index',
+        KeyConditionExpression: 'userId = :u AND receivedAt >= :since',
+        ExpressionAttributeValues: { ':u': userId, ':since': since },
+        ScanIndexForward: false,
+        Limit: limit - items.length,
+        ExclusiveStartKey: key,
+      });
+      const rows = await Promise.all(
+        (page.Items || []).map((item) => this.get(userId, item.taskId)),
+      );
+      for (const item of rows) {
+        if (
+          item &&
+          (status === 'all' || item.status === status) &&
+          (!hookId || item.hookId === hookId)
+        )
+          items.push(this.publicTask(item));
+      }
+      key = page.LastEvaluatedKey;
+      if (!key || items.length >= limit) break;
+    }
+    return {
+      items,
+      nextCursor: key
+        ? Buffer.from(JSON.stringify({ key, scope, since })).toString(
+            'base64url',
+          )
+        : null,
+    };
+  }
+
   async markRead(userId: string, id: string) {
     const key = { userId, taskId: taskId(id) };
     try {

@@ -235,6 +235,49 @@ describe('Bridge notifications', () => {
       readAt: 'original',
     });
   });
+  it('history includes old read and unread records using the receivedAt index', async () => {
+    db.query.mockResolvedValue({
+      Items: [{ taskId: id }, { taskId: 'b'.repeat(64) }],
+    });
+    db.get
+      .mockResolvedValueOnce({
+        Item: {
+          taskId: id,
+          userId: owner,
+          status: 'read',
+          receivedAt: '2026-09-06T00:00:00Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        Item: {
+          taskId: 'b'.repeat(64),
+          userId: owner,
+          status: 'unread',
+          receivedAt: '2026-09-05T00:00:00Z',
+        },
+      });
+    const result = await service.history(owner, { days: 'all' });
+    expect(result.items.map((item) => item.status)).toEqual(['read', 'unread']);
+    expect(db.query.mock.calls[0][0]).toMatchObject({
+      IndexName: 'user-received-index',
+      ScanIndexForward: false,
+      ExpressionAttributeValues: { ':u': owner },
+    });
+    expect(db.update).not.toHaveBeenCalled();
+  });
+  it('history rejects cross-user cursors before accessing storage', async () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        scope: JSON.stringify([other, 'all', '', '7']),
+        key: { userId: other, taskId: id, receivedAt: '2026-09-06' },
+        since: '2026-09-01',
+      }),
+    ).toString('base64url');
+    await expect(service.history(owner, { cursor })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(db.query).not.toHaveBeenCalled();
+  });
   it('does not acknowledge a task outside the owner partition', async () => {
     db.update.mockRejectedValue(conditionFailure);
     db.get.mockResolvedValue({});

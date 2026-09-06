@@ -22,6 +22,7 @@ type Hook = {
   secretHash: string;
   createdAt: string;
   revokedAt?: string;
+  webhookPath?: string;
 };
 
 @Injectable()
@@ -85,6 +86,7 @@ export class BridgeHooksService {
       secretHash: this.hash(secret),
       createdAt: new Date().toISOString(),
     };
+    hook.webhookPath = this.reveal(hook, secret).webhookPath;
     await this.db.put({
       TableName: this.table,
       Item: hook,
@@ -162,8 +164,12 @@ export class BridgeHooksService {
         TableName: this.table,
         Key: { hookId: this.validId(hookId) },
         ConditionExpression: 'userId = :u AND attribute_not_exists(revokedAt)',
-        UpdateExpression: 'SET secretHash = :hash',
-        ExpressionAttributeValues: { ':u': userId, ':hash': this.hash(secret) },
+        UpdateExpression: 'SET secretHash = :hash, webhookPath = :path',
+        ExpressionAttributeValues: {
+          ':u': userId,
+          ':hash': this.hash(secret),
+          ':path': `/webhook/bridge/bh_${hookId}.${secret}`,
+        },
         ReturnValues: 'ALL_NEW',
       });
       return this.reveal(result.Attributes as Hook, secret);
@@ -173,6 +179,34 @@ export class BridgeHooksService {
       throw error;
     }
   }
+  async restoreUrl(userId: string, hookId: string, body: unknown) {
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      Array.isArray(body) ||
+      Object.keys(body).some((key) => key !== 'url')
+    )
+      throw new BadRequestException('Only url is accepted');
+    const url = (body as { url?: unknown }).url;
+    if (typeof url !== 'string' || url.length > 2048)
+      throw new BadRequestException('Invalid URL');
+    let path: string;
+    try {
+      path = url.startsWith('/') ? url : new URL(url).pathname;
+    } catch {
+      throw new BadRequestException('Invalid URL');
+    }
+    const match =
+      /\/webhook\/bridge\/(bh_[a-f0-9-]{36}\.[A-Za-z0-9_-]{43})$/.exec(path);
+    const existing = await this.get(hookId);
+    if (!existing || existing.userId !== userId)
+      throw new NotFoundException('Hook not found');
+    if (!match || !match[1].startsWith(`bh_${hookId}.`))
+      throw new BadRequestException('URL does not match this hook');
+    await this.authenticate(match[1]);
+    return this.publicHook(await this.get(hookId));
+  }
+
   async authenticate(token: string) {
     const match = /^bh_([a-f0-9-]{36})\.([A-Za-z0-9_-]{43})$/.exec(token || '');
     if (!match) throw new ForbiddenException('Invalid Bridge hook');
@@ -187,6 +221,27 @@ export class BridgeHooksService {
       )
     )
       throw new ForbiddenException('Invalid Bridge hook');
+    if (!hook.webhookPath) {
+      try {
+        await this.db.update({
+          TableName: this.table,
+          Key: { hookId: hook.hookId },
+          ConditionExpression:
+            'secretHash = :hash AND attribute_not_exists(revokedAt)',
+          UpdateExpression: 'SET webhookPath = :path',
+          ExpressionAttributeValues: {
+            ':hash': hook.secretHash,
+            ':path': `/webhook/bridge/${token}`,
+          },
+        });
+      } catch (error: any) {
+        if (error.name === 'ConditionalCheckFailedException')
+          throw new ForbiddenException(
+            'Bridge hook changed; use the current URL',
+          );
+        throw error;
+      }
+    }
     return { hookId: hook.hookId, userId: hook.userId };
   }
 }

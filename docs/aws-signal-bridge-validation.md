@@ -22,7 +22,7 @@
 1. 在 `trade-backend` 根目录用现有部署脚本发布最新 Lambda 和 CDK（生产命令 `yarn deploy:prod` 会先 build:lambda，再部署 CDK）。直接在 cdk 目录部署不会重新构建 Lambda，可能仍上传旧代码。
 2. 确认 CDK 新增 `BRIDGE_HOOKS_TABLE_NAME` 与 `BRIDGE_TABLE_NAME`，分别包含 user-created-index 与 unread-received-index；环境变量和表权限由 CDK 注入。
 3. 部署本次前端，确保 `NEXT_PUBLIC_API_BASE_URL` 是对应后端地址，包含 stage 前缀。
-4. 用启用状态的 Admin / SuperAdmin 登录，进入“开发者工具 → Webhook Bridge”，输入名称并创建，复制一次性完整 Hook URL。无需选择交易记录或 Telegram 群。旧交易 webhook URL/token 不适用于独立 Bridge。
+4. 用启用状态的 Admin / SuperAdmin 登录，进入“开发者工具 → Webhook Bridge”，输入名称并创建，复制完整 Hook URL（刷新后仍可在管理页查看）。无需选择交易记录或 Telegram 群。旧交易 webhook URL/token 不适用于独立 Bridge。
 5. 同一账户在 API Token 页面创建或复用未撤销 tc_ Token。已有 trade:read / trade:write 足够。
 6. 只需将新 Hook URL 和 API Token 提供给测试者；API base 可从 Hook URL 提取。API Token 无权创建、列出、重新生成或停用 hook。
 
@@ -108,7 +108,7 @@ curl --fail-with-body -sS -X POST \
 
 - `/trade/devtools/bridge` 可创建、列出自己的 hook；API Token 页面可跳转该页。
 - 创建成功直接显示可复制的完整 URL，带正确 API stage；不出现 tradeShortId、交易选择或 Telegram 绑定。
-- 刷新后不显示旧凭据；重新生成 URL 时显示新 URL，旧 URL 投递返回 403。
+- URL 持久回显版本以文末增量验收为准；重新生成 URL 时旧 URL 投递返回 403。
 - 停用后列表展示“已停用”，该 URL 投递返回 403，之前接收的任务仍可查询/标已读。
 - 另一账户不能管理该 hook；API Token 调用 hook 管理接口被拒绝。
 - 网络失败显示错误，不显示“创建成功”；不将凭据保存到 localStorage 或文档。
@@ -202,3 +202,17 @@ yarn test --runInBand src/modules/bridge/bridge.service.spec.ts src/modules/brid
 与上次结果对比：GET /bridge/tasks 已返回 200，本次不再出现先前路由权限 401；不追溯判定旧版本故障根因。接收请求样本耗时分别为 1371 ms / 1062 ms，不代表持续延迟或冷启动保证。
 
 验证边界：这是直接调用线上 AWS API 的实测，未从 TradingView UI 触发真实告警；未覆盖跨用户、角色降级、撤销真实凭据、hook 旋转/停用、并发、多页分页及故障注入。
+
+## Hook URL 回显与通知历史增量（待执行验证）
+
+本节是主链通过后的新改动，未执行新 build/测试或部署，不沿用上文通过结论。
+
+1. 部署最新后端/CDK和前端，等待通知表 user-received-index ACTIVE。索引使用既有 receivedAt，不需要补写旧记录。
+2. 管理页新建 hook 后刷新，确认完整 URL 仍可查看/复制；重新生成后刷新显示新 URL，旧地址失效。停用 hook 保留已保存 URL 和历史通知。
+3. 对旧 hook，粘贴原 Hook URL 点击“保存已有 URL”，刷新后仍显示同一地址；错误凭据/其他账户/已停用 hook 不可恢复。旧 hook 下一次有效投递也应自动补存 URL。测试使用专用 hook。
+4. 打开“Bridge 通知记录”，默认显示近7天已读和未读通知，按接收时间倒序。确认此前测试的已读通知和实际 SOL 告警记录可查询到。
+5. 分别验证近7/30/90天、全部时间、已读/未读、Hook ID筛选。切换条件后回到第一页；上一页/下一页不混用其他条件的 cursor。稀疏筛选可能产生空页且有下一页，仍可继续。
+6. 详情应展示完整 payload、任务ID、Hook ID、接收与已读时间。查看后再用消费API确认未读状态不变。
+7. 另一账户的 cursor / hook 不可跨账户访问；API Token 调用通知历史和恢复URL管理接口应拒绝。
+
+本增量保存 webhookPath 以支持回显，不再是仅哈希存储；只通过所属用户登录管理接口返回，不写入验证记录或通知 payload。

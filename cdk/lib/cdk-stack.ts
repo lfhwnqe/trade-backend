@@ -263,6 +263,12 @@ export class TradingStack extends cdk.Stack {
       pointInTimeRecovery: true,
     });
     bridgeTable.addGlobalSecondaryIndex({
+      indexName: 'user-received-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'receivedAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    bridgeTable.addGlobalSecondaryIndex({
       indexName: 'unread-received-index',
       partitionKey: { name: 'unreadUser', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'receivedOrder', type: dynamodb.AttributeType.STRING },

@@ -17,14 +17,14 @@ describe('Independent Bridge hooks', () => {
     };
     (service as any).db = db;
   });
-  it('issues a URL once and stores only a credential digest without trade linkage', async () => {
+  it('stores a recoverable URL for owner management without trade linkage', async () => {
     const created = await service.create('owner', { name: 'BTC alerts' });
     const stored = db.put.mock.calls[0][0].Item;
     expect(stored).not.toHaveProperty('tradeShortId');
     expect(stored).not.toHaveProperty('triggerToken');
     expect(created).not.toHaveProperty('secretHash');
     const token = created.webhookPath.split('/').pop();
-    expect(JSON.stringify(stored)).not.toContain(token);
+    expect(stored.webhookPath).toBe(created.webhookPath);
     db.get.mockResolvedValue({ Item: stored });
     await expect(service.authenticate(token)).resolves.toEqual({
       userId: 'owner',
@@ -63,13 +63,13 @@ describe('Independent Bridge hooks', () => {
       service.authenticate(rotated.webhookPath.split('/').pop()),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
-  it('lists only the owner hooks without returning credentials', async () => {
+  it('lists only the owner hooks with a recoverable URL but no digest', async () => {
     const created = await service.create('owner', { name: 'alerts' });
     db.query.mockResolvedValue({ Items: [{ hookId: created.hookId }] });
     db.get.mockResolvedValue({ Item: db.put.mock.calls[0][0].Item });
     const result = await service.list('owner');
     expect(result.items[0]).not.toHaveProperty('secretHash');
-    expect(result.items[0]).not.toHaveProperty('webhookPath');
+    expect(result.items[0].webhookPath).toBe(created.webhookPath);
     expect(db.query.mock.calls[0][0].ExpressionAttributeValues).toEqual({
       ':u': 'owner',
     });
@@ -87,5 +87,29 @@ describe('Independent Bridge hooks', () => {
     expect(db.update.mock.calls[1][0].ExpressionAttributeValues[':u']).toBe(
       'other',
     );
+  });
+  it('restores an old URL without changing the hook credential', async () => {
+    const created = await service.create('owner', { name: 'legacy' });
+    const stored = { ...db.put.mock.calls[0][0].Item };
+    delete stored.webhookPath;
+    const hash = stored.secretHash;
+    db.get.mockImplementation(async () => ({ Item: stored }));
+    db.update.mockImplementation(async (input: any) => {
+      stored.webhookPath = input.ExpressionAttributeValues[':path'];
+      return {};
+    });
+    const restored = await service.restoreUrl('owner', created.hookId, {
+      url: 'https://example.com/prod' + created.webhookPath,
+    });
+    expect(restored.webhookPath).toBe(created.webhookPath);
+    expect(stored.secretHash).toBe(hash);
+    expect(db.update.mock.calls[0][0].ConditionExpression).toContain(
+      'secretHash = :hash',
+    );
+    await expect(
+      service.restoreUrl('other', created.hookId, {
+        url: 'https://example.com' + created.webhookPath,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

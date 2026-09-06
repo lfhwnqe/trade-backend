@@ -51,6 +51,21 @@ export class BridgeController {
   rotateHook(@Req() req: any, @Param('hookId') id: string) {
     return this.hooks.rotate(req.user.sub, id);
   }
+  @Post('hooks/:hookId/restore-url')
+  @HttpCode(200)
+  @Header('Cache-Control', 'no-store')
+  restoreHookUrl(
+    @Req() req: any,
+    @Param('hookId') id: string,
+    @Body() body: unknown,
+  ) {
+    return this.hooks.restoreUrl(req.user.sub, id, body);
+  }
+  @Get('notifications')
+  @Header('Cache-Control', 'no-store')
+  history(@Req() req: any, @Query() query: Record<string, string>) {
+    return this.bridge.history(req.user.sub, query);
+  }
   @Get('tasks')
   @ApiOperation({ summary: '查询当前用户未读通知任务' })
   unread(

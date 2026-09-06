@@ -214,12 +214,10 @@ describe('Bridge consumer route boundaries', () => {
       const middleware = new AuthMiddleware(
         {} as any,
         {
-          authenticateToken: jest
-            .fn()
-            .mockResolvedValue({
-              userId: owner,
-              scopes: ['trade:read', 'trade:write'],
-            }),
+          authenticateToken: jest.fn().mockResolvedValue({
+            userId: owner,
+            scopes: ['trade:read', 'trade:write'],
+          }),
         } as any,
       );
       const next = jest.fn();

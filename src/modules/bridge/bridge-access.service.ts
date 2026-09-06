@@ -65,8 +65,14 @@ export class BridgeGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     if (!req.user?.sub)
       throw new ForbiddenException('Bridge identity required');
-    if (req.authType === 'apiToken' && req.route?.path?.includes('hooks'))
-      throw new ForbiddenException('Hook management requires a login session');
+    if (
+      req.authType === 'apiToken' &&
+      (req.route?.path?.includes('hooks') ||
+        req.route?.path?.includes('notifications'))
+    )
+      throw new ForbiddenException(
+        'Bridge management requires a login session',
+      );
     // Reuse existing tokens, with explicit operation mapping; no new token system.
     const required = req.method === 'GET' ? 'trade:read' : 'trade:write';
     if (req.authType === 'apiToken' && !req.scopes?.includes(required))
