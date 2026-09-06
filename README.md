@@ -163,4 +163,6 @@ SwaggerModule.setup('api/docs', app, document);
 
 ## 待实施：AWS 信号与内网分析桥接
 
-见 [AWS 信号桥接迭代计划](docs/aws-signal-bridge-plan.md)（2026-09-06）。复用当前 webhook / CDK，新增持久收件与电脑每 10 秒同步；有任务才调用本地 Codex。此项尚未实现，不代表现有告警已经能触发桌面分析。跨仓库进度见 `../trade-specs/docs/iteration-progress.md`。
+见 [AWS 信号桥接迭代计划](docs/aws-signal-bridge-plan.md)（2026-09-06）。复用当前 webhook / CDK，新增持久收件与电脑按可配置间隔（默认 60 秒）同步；有任务才调用本地 Codex。此项尚未实现，不代表现有告警已经能触发桌面分析。跨仓库进度见 `../trade-specs/docs/iteration-progress.md`。
+
+2026-09-06 Bridge 方案补充（待实现）：轮询间隔可配置，默认 60 秒；复用现有 API Token 模块鉴权，仅限 Admin / SuperAdmin，服务端按 Token 所属 userId 隔离全部任务操作。现有 Token 路由范围与角色补齐需要实现，详见 `docs/aws-signal-bridge-plan.md`（从本文目录查找该计划）。
