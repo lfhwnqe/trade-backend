@@ -160,3 +160,7 @@ SwaggerModule.setup('api/docs', app, document);
 
 - 确保您的 AWS CLI 已正确配置，并且具有部署所需资源的权限。
 - CDK 部署命令中的 `--context env=dev` 或 `--context env=prod` 用于向 CDK 应用程序传递当前环境的上下文信息，您可以在 CDK 代码中（例如 [`cdk/bin/cdk.ts`](trade-backend/cdk/bin/cdk.ts:1) 或 [`cdk/lib/cdk-stack.ts`](trade-backend/cdk/lib/cdk-stack.ts:1)）中获取此值以进行环境特定的配置。
+
+## 待实施：AWS 信号与内网分析桥接
+
+见 [AWS 信号桥接迭代计划](docs/aws-signal-bridge-plan.md)（2026-09-06）。复用当前 webhook / CDK，新增持久收件与电脑每 10 秒同步；有任务才调用本地 Codex。此项尚未实现，不代表现有告警已经能触发桌面分析。跨仓库进度见 `../trade-specs/docs/iteration-progress.md`。
