@@ -137,7 +137,18 @@ export class AuthMiddleware implements NestMiddleware {
             originalUrl.startsWith('/flashcard/cards/today-collection-summary?') ||
             originalUrl.startsWith('flashcard/cards/today-collection-summary?'));
 
-        if (!isTradeRoute && !isApiTokenAllowedFlashcardRoute) {
+        // Match only consumer operations. Hook management stays cookie-only.
+        const bridgePaths = [path, originalUrl.split('?')[0]].map((value) => {
+          const normalized = value.startsWith('/') ? value : '/' + value;
+          const stage = process.env.APP_ENV;
+          return stage && normalized.startsWith('/' + stage + '/')
+            ? normalized.slice(stage.length + 1) : normalized;
+        });
+        const isBridgeRoute = bridgePaths.some((value) =>
+          (method === 'GET' && value === '/bridge/tasks') ||
+          (method === 'POST' && /^\/bridge\/tasks\/[a-f0-9]{64}\/read$/.test(value)),
+        );
+        if (!isTradeRoute && !isApiTokenAllowedFlashcardRoute && !isBridgeRoute) {
           console.log('[AuthMiddleware][apiToken] blocked route', {
             path,
             originalUrl,

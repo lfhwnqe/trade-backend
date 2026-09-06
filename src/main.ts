@@ -9,6 +9,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // 配置请求体大小限制 - 支持大型SVG文件
+  app.use('/webhook/bridge', express.json({ limit: '8kb' }), express.text({ type: 'text/plain', limit: '8kb' }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 

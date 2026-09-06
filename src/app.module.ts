@@ -1,3 +1,4 @@
+import { BridgeModule } from './modules/bridge/bridge.module';
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { CommonModule } from './modules/common/common.module';
 import { UserModule } from './modules/user/user.module';
@@ -21,6 +22,7 @@ import { PlaybookTemplateModule } from './modules/playbook-template/playbook-tem
 @Module({
   imports: [
     CommonModule,
+    BridgeModule,
     UserModule,
     TradeModule,
     ImageModule,
@@ -54,6 +56,7 @@ export class AppModule implements NestModule {
         '/svg-parser/validate',
         // Webhooks (must bypass cookie/api-token auth)
         '/webhook/telegram',
+        '/webhook/bridge/:triggerToken',
         // TradingView-friendly endpoints (no auth)
         '/webhook/trade-alert',
         '/webhook/trade-alert/:triggerToken',

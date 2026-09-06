@@ -12,6 +12,7 @@ async function bootstrap(): Promise<Handler> {
   const app = await NestFactory.create(AppModule);
 
   // Keep Lambda behavior aligned with the local Nest HTTP server.
+  app.use('/webhook/bridge', express.json({ limit: '8kb' }), express.text({ type: 'text/plain', limit: '8kb' }));
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
   app.useGlobalFilters(new HttpExceptionFilter());

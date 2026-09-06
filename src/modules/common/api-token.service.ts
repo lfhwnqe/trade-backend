@@ -255,6 +255,7 @@ export class ApiTokenService {
       const res = await this.db.get({
         TableName: this.tableName,
         Key: { tokenHash },
+        ConsistentRead: true,
       });
 
       const item = res.Item as ApiTokenRecord | undefined;

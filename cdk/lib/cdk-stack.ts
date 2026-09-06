@@ -239,6 +239,36 @@ export class TradingStack extends cdk.Stack {
       },
     );
 
+    const bridgeHooksTable = new dynamodb.Table(this, `${appName}BridgeHooksTable${envName}`, {
+      tableName: `${appName}-bridge-hooks-${envName.toLowerCase()}`,
+      partitionKey: { name: 'hookId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pointInTimeRecovery: true,
+    });
+    bridgeHooksTable.addGlobalSecondaryIndex({
+      indexName: 'user-created-index',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
+    // Sparse unread index; read notifications remain on the base table for audit.
+    const bridgeTable = new dynamodb.Table(this, `${appName}BridgeTable${envName}`, {
+      tableName: `${appName}-bridge-${envName.toLowerCase()}`,
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'taskId', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      pointInTimeRecovery: true,
+    });
+    bridgeTable.addGlobalSecondaryIndex({
+      indexName: 'unread-received-index',
+      partitionKey: { name: 'unreadUser', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'receivedOrder', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+
     // DynamoDB Table for API tokens (personal API keys)
     const apiTokensTable = new dynamodb.Table(
       this,
@@ -418,6 +448,8 @@ export class TradingStack extends cdk.Stack {
           DICTIONARY_ITEMS_TABLE_NAME: dictionaryItemsTable.tableName,
           MISTAKES_TABLE_NAME: mistakesTable.tableName,
           CONFIG_TABLE_NAME: configTable.tableName,
+          BRIDGE_HOOKS_TABLE_NAME: bridgeHooksTable.tableName,
+          BRIDGE_TABLE_NAME: bridgeTable.tableName,
           API_TOKENS_TABLE_NAME: apiTokensTable.tableName,
           TELEGRAM_BINDINGS_TABLE_NAME: telegramBindingsTable.tableName,
           WEBHOOK_HOOKS_TABLE_NAME: webhookHooksTable.tableName,
@@ -482,6 +514,8 @@ export class TradingStack extends cdk.Stack {
     mistakesTable.grantReadWriteData(fn);
     configTable.grantReadWriteData(fn);
     apiTokensTable.grantReadWriteData(fn);
+    bridgeTable.grantReadWriteData(fn);
+    bridgeHooksTable.grantReadWriteData(fn);
     telegramBindingsTable.grantReadWriteData(fn);
     webhookHooksTable.grantReadWriteData(fn);
     binanceFuturesKeysTable.grantReadWriteData(fn);
@@ -570,6 +604,8 @@ export class TradingStack extends cdk.Stack {
       description: `Name of the DynamoDB table for common config in ${appName} ${envName}`,
     });
 
+    new cdk.CfnOutput(this, 'BRIDGE_HOOKS_TABLE_NAME', { value: bridgeHooksTable.tableName });
+    new cdk.CfnOutput(this, 'BRIDGE_TABLE_NAME', { value: bridgeTable.tableName });
     new cdk.CfnOutput(this, 'API_TOKENS_TABLE_NAME', {
       value: apiTokensTable.tableName,
       description: `Name of the DynamoDB table for API tokens in ${appName} ${envName}`,

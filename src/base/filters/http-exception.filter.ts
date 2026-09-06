@@ -21,6 +21,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
+    // Express parser errors are not Nest HttpExceptions. Keep Bridge's size
+    // limit a client error instead of converting it into a generic 500.
+    if (
+      request.path.includes('/webhook/bridge/') &&
+      (exception as any).type === 'entity.too.large'
+    ) {
+      exception = new HttpException('Notification exceeds 8 KiB', HttpStatus.PAYLOAD_TOO_LARGE);
+    }
+
     const { status, errorResponse } = this.handleException(exception);
 
     // 记录错误日志
@@ -248,7 +257,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const logData = {
       timestamp: new Date().toISOString(),
       method,
-      url,
+      url: url.replace(/(\/webhook\/bridge\/)[^/?]+/, '$1[REDACTED]'),
       ip,
       userAgent,
       status,
