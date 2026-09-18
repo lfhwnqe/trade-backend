@@ -16,6 +16,11 @@ export type ImageRecognitionFlashcardCardSortBy = (typeof IMAGE_RECOGNITION_FLAS
 export const IMAGE_RECOGNITION_FLASHCARD_CARD_SORT_ORDER_VALUES = ['asc', 'desc'] as const;
 export type ImageRecognitionFlashcardCardSortOrder = (typeof IMAGE_RECOGNITION_FLASHCARD_CARD_SORT_ORDER_VALUES)[number];
 
+export interface ImageRecognitionFlashcardImage {
+  url: string;
+  key?: string;
+}
+
 export interface ImageRecognitionFlashcardCard {
   id: string;
   userId: string;
@@ -23,6 +28,7 @@ export interface ImageRecognitionFlashcardCard {
   entityType: 'IMAGE_RECOGNITION_FLASHCARD';
   imageUrl: string;
   imageKey?: string;
+  images?: ImageRecognitionFlashcardImage[];
   playbookType: string;
   playbookItem?: { code: string; label: string; color?: string; status?: string };
   sampleResult?: ImageRecognitionFlashcardSampleResult;

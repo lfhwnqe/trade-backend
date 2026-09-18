@@ -17,6 +17,7 @@ import {
   ImageRecognitionFlashcardCard,
   ImageRecognitionFlashcardCardSortBy,
   ImageRecognitionFlashcardCardSortOrder,
+  ImageRecognitionFlashcardImage,
 } from './image-recognition-flashcard.types';
 
 @Injectable()
@@ -68,8 +69,7 @@ export class ImageRecognitionFlashcardService {
 
   async createCard(userId: string, dto: CreateImageRecognitionFlashcardCardDto, ownerRole?: string) {
     const playbookType = await this.resolvePlaybookType(userId, dto.playbookType);
-    const imageUrl = dto.imageUrl?.trim();
-    if (!imageUrl) throw new BadRequestException('imageUrl is required');
+    const images = this.resolveImages(dto);
 
     const now = new Date().toISOString();
     const cardId = uuidv4();
@@ -78,8 +78,9 @@ export class ImageRecognitionFlashcardService {
       userId,
       cardId,
       entityType: 'IMAGE_RECOGNITION_FLASHCARD',
-      imageUrl,
-      imageKey: dto.imageKey?.trim() || undefined,
+      images,
+      imageUrl: images[0].url,
+      imageKey: images[0].key,
       playbookType,
       sampleResult: dto.sampleResult,
       notes: dto.notes?.trim() || undefined,
@@ -123,15 +124,13 @@ export class ImageRecognitionFlashcardService {
     const playbookType = dto.playbookType !== undefined
       ? await this.resolvePlaybookType(userId, dto.playbookType)
       : existing.playbookType;
-    const imageUrl = dto.imageUrl !== undefined
-      ? dto.imageUrl.trim() || undefined
-      : existing.imageUrl;
-    if (!imageUrl) throw new BadRequestException('imageUrl is required');
+    const images = this.resolveImages(dto, existing);
 
     const updated: ImageRecognitionFlashcardCard = {
       ...existing,
-      imageUrl,
-      imageKey: dto.imageKey !== undefined ? dto.imageKey.trim() || undefined : existing.imageKey,
+      images,
+      imageUrl: images[0].url,
+      imageKey: images[0].key,
       playbookType,
       sampleResult: dto.sampleResult !== undefined ? dto.sampleResult : existing.sampleResult,
       notes: dto.notes !== undefined ? dto.notes.trim() || undefined : existing.notes,
@@ -290,10 +289,42 @@ export class ImageRecognitionFlashcardService {
   }
 
   private normalizeCard(card: ImageRecognitionFlashcardCard): ImageRecognitionFlashcardCard {
+    const images = card.images?.length
+      ? card.images
+      : [{ url: card.imageUrl, ...(card.imageKey ? { key: card.imageKey } : {}) }];
     return {
       ...card,
+      images,
+      imageUrl: images[0].url,
+      imageKey: images[0].key,
       status: card.status || 'ACTIVE',
     };
+  }
+
+  private resolveImages(
+    dto: { images?: ImageRecognitionFlashcardImage[]; imageUrl?: string; imageKey?: string },
+    existing?: ImageRecognitionFlashcardCard,
+  ): ImageRecognitionFlashcardImage[] {
+    const previous = existing ? this.normalizeCard(existing).images! : [];
+    // 旧客户端只更新首图时保留后续图片；新客户端通过 images 整组替换。
+    const images = dto.images !== undefined ? dto.images : [
+      {
+        url: dto.imageUrl !== undefined ? dto.imageUrl : previous[0]?.url,
+        key: dto.imageKey !== undefined ? dto.imageKey
+          : dto.imageUrl !== undefined && dto.imageUrl !== previous[0]?.url ? undefined : previous[0]?.key,
+      },
+      ...previous.slice(1),
+    ];
+    if (!Array.isArray(images) || images.length < 1 || images.length > 5) {
+      throw new BadRequestException('每条闪卡需要 1–5 张图片');
+    }
+    return images.map((image) => {
+      if (!image || typeof image.url !== 'string' || !image.url.trim()) {
+        throw new BadRequestException('图片 URL 不能为空');
+      }
+      const key = image.key?.trim();
+      return { url: image.url.trim(), ...(key ? { key } : {}) };
+    });
   }
 
   private buildPlaybookStats(cards: ImageRecognitionFlashcardCard[]) {

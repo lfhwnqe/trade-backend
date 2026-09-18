@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsOptional, IsString, IsUrl, MaxLength, ValidateIf, ValidateNested } from 'class-validator';
+import { ImageRecognitionFlashcardImageDto } from './image-recognition-flashcard-image.dto';
 import {
   IMAGE_RECOGNITION_FLASHCARD_SAMPLE_RESULT_VALUES,
   IMAGE_RECOGNITION_FLASHCARD_STATUS_VALUES,
@@ -8,10 +10,20 @@ import {
 } from '../image-recognition-flashcard.types';
 
 export class CreateImageRecognitionFlashcardCardDto {
-  @ApiProperty({ example: 'https://cdn.example.com/image-recognition-flashcards/u1/2026-06-03/card.png' })
+  @ApiPropertyOptional({ example: 'https://cdn.example.com/image-recognition-flashcards/u1/2026-06-03/card.png', description: '旧版单图字段；未传 images 时必填' })
+  @ValidateIf((dto, value) => dto.images === undefined || value !== undefined)
   @IsString()
   @IsUrl()
-  imageUrl: string;
+  imageUrl?: string;
+
+  @ApiPropertyOptional({ type: [ImageRecognitionFlashcardImageDto], minItems: 1, maxItems: 5 })
+  @ValidateIf((_, value) => value !== undefined)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(5)
+  @ValidateNested({ each: true })
+  @Type(() => ImageRecognitionFlashcardImageDto)
+  images?: ImageRecognitionFlashcardImageDto[];
 
   @ApiPropertyOptional({ example: 'image-recognition-flashcards/u1/2026-06-03/card.png' })
   @IsOptional()
