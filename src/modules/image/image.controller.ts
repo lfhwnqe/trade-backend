@@ -7,11 +7,15 @@ import {
   Param,
   UseFilters,
   Delete,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ImageService } from './image.service';
 import { Request } from 'express';
-import { ALLOWED_IMAGE_TYPES, UploadImageRequest } from './types/image.types';
-import { HttpExceptionFilter } from 'src/base/filters/http-exception.filter';
+import { ALLOWED_IMAGE_TYPES } from './types/image.types';
+import { ImageBedUploadDto } from './dto/image-bed-upload.dto';
+import { AdministratorAccessService } from '../common/administrator-access.service';
+import { HttpExceptionFilter } from '../../base/filters/http-exception.filter';
 import {
   ValidationException,
   AuthenticationException,
@@ -32,31 +36,21 @@ import {
 @Controller('image')
 @UseFilters(HttpExceptionFilter)
 export class ImageController {
-  constructor(private readonly imageService: ImageService) {}
+  constructor(
+    private readonly imageService: ImageService,
+    private readonly administratorAccess: AdministratorAccessService,
+  ) {}
 
   @ApiOperation({ summary: '获取图片上传URL' })
   @ApiBody({
-    schema: {
-      properties: {
-        fileName: { type: 'string', example: 'image.jpg' },
-        fileType: { type: 'string', example: 'image/jpeg' },
-        date: { type: 'string', example: '2023-05-23' },
-      },
-    },
+    type: ImageBedUploadDto,
   })
   @ApiResponse({ status: 200, description: '返回上传URL和其他相关信息' })
   @ApiResponse({ status: 400, description: '不支持的文件类型' })
   @ApiResponse({ status: 401, description: '用户未认证' })
   @Post('upload-url')
-  async getUploadUrl(@Body() body: UploadImageRequest, @Req() req: Request) {
+  async getUploadUrl(@Body() body: ImageBedUploadDto, @Req() req: Request) {
     const { fileName, fileType, date } = body;
-
-    console.log('Image Upload URL request:', {
-      user: req['user'],
-      fileName,
-      fileType,
-      date,
-    });
 
     // 验证文件类型
     if (!ALLOWED_IMAGE_TYPES.includes(fileType)) {
@@ -70,10 +64,6 @@ export class ImageController {
 
     // 验证用户身份
     if (!req['user']?.sub) {
-      console.error('Auth error:', {
-        user: req['user'],
-        headers: req.headers,
-      });
       throw new AuthenticationException(
         'User authentication failed: missing user.sub',
         ERROR_CODES.AUTH_TOKEN_MISSING,
@@ -93,7 +83,22 @@ export class ImageController {
       role === 'SuperAdmins' ||
       groups.includes('Admins') ||
       groups.includes('SuperAdmins');
-    if (!isAdmin) {
+    const isApiToken = (req as any).authType === 'apiToken';
+    if (isApiToken) {
+      if (!(req as any).scopes?.includes('trade:write')) {
+        throw new ForbiddenException('Image-bed upload requires trade:write');
+      }
+      await this.administratorAccess.assertOwner(req['user'].sub);
+      if (!Number.isSafeInteger(body.contentLength) || body.contentLength <= 0) {
+        throw new BadRequestException('API Token 上传必须提供正整数 contentLength');
+      }
+      await this.imageService.consumeUploadQuota({
+        userId: req['user'].sub,
+        authType: 'apiToken',
+        apiTokenId: (req as any).apiTokenId,
+        contentLength: body.contentLength,
+      });
+    } else if (!isAdmin) {
       throw new AuthorizationException(
         'Only Admins/SuperAdmins can use legacy image upload endpoint',
         ERROR_CODES.AUTH_UNAUTHORIZED,
@@ -103,12 +108,18 @@ export class ImageController {
 
     const userId = req['user'].sub;
 
-    return this.imageService.generateUploadUrl(
+    const upload = await this.imageService.generateUploadUrl(
       userId,
       fileName,
       fileType,
       date,
+      body.contentLength,
     );
+    const image = await this.imageService.getImageUrl(upload.data.key);
+    return {
+      ...upload,
+      data: { ...upload.data, publicUrl: image.data.url, expiresInSec: 300 },
+    };
   }
 
   @ApiOperation({ summary: '获取图片访问URL' })

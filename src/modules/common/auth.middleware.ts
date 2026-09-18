@@ -148,7 +148,10 @@ export class AuthMiddleware implements NestMiddleware {
           (method === 'GET' && value === '/bridge/tasks') ||
           (method === 'POST' && /^\/bridge\/tasks\/[a-f0-9]{64}\/read$/.test(value)),
         );
-        if (!isTradeRoute && !isApiTokenAllowedFlashcardRoute && !isBridgeRoute) {
+        // Only the administrator image-bed upload operation is token-accessible.
+        // Its controller additionally checks scope and the owner's live role.
+        const isImageBedUpload = method === 'POST' && bridgePaths.includes('/image/upload-url');
+        if (!isTradeRoute && !isApiTokenAllowedFlashcardRoute && !isBridgeRoute && !isImageBedUpload) {
           console.log('[AuthMiddleware][apiToken] blocked route', {
             path,
             originalUrl,

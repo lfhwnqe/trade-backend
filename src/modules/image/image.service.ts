@@ -232,6 +232,7 @@ export class ImageService {
     fileName: string,
     fileType: string,
     date: string,
+    contentLength?: number,
   ): Promise<UploadUrlResponse> {
     // 兼容旧接口：走 unbound trade 路径
     return this.generateTradeUploadUrl(userId, {
@@ -240,6 +241,7 @@ export class ImageService {
       date,
       transactionId: undefined,
       source: 'legacy-image-module',
+      contentLength,
     });
   }
 
@@ -296,6 +298,9 @@ export class ImageService {
       Bucket: this.bucketName,
       Key: key,
       ContentType: fileType,
+      ...(params.source === 'legacy-image-module' && contentLength !== undefined
+        ? { ContentLength: contentLength }
+        : {}),
     });
 
     const signedUrl = await getSignedUrl(this.s3Client, command, {
@@ -317,7 +322,8 @@ export class ImageService {
    * @returns CloudFront URL
    */
   async getImageUrl(key: string): Promise<ImageUrlResponse> {
-    const cloudfrontUrl = `https://${this.cloudfrontDomain}/${key}`;
+    const path = key.split('/').map(encodeURIComponent).join('/');
+    const cloudfrontUrl = `https://${this.cloudfrontDomain}/${path}`;
 
     return {
       success: true,

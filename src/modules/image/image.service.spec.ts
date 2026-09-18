@@ -1,6 +1,7 @@
 import { ImageService } from './image.service';
 import { ConfigService } from '../common/config.service';
 import { ERROR_CODES } from '../../base/constants/error-codes';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
   getSignedUrl: jest.fn().mockResolvedValue('https://signed.example.com/upload'),
@@ -178,6 +179,28 @@ describe('ImageService.generateTradeUploadUrl', () => {
     expect(res.success).toBe(true);
     expect(res.data.key).toContain('uploads/u1/tx-123/2026-02-11/');
     expect(res.data.uploadUrl).toContain('https://signed.example.com/upload');
+  });
+
+  it('signs the image-bed PUT with the declared byte length and a 300-second expiry', async () => {
+    const svc = new ImageService(cfg);
+    const res = await svc.generateUploadUrl('u1', 'chart.png', 'image/png', '2026-09-17', 100);
+    expect(res.data.key).toMatch(/^uploads\/u1\/unbound\/2026-09-17\/\d+-chart\.png$/);
+    expect(getSignedUrl).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ input: expect.objectContaining({ Bucket: 'bucket', Key: res.data.key, ContentType: 'image/png', ContentLength: 100 }) }),
+      { expiresIn: 300 },
+    );
+  });
+
+  it('returns an unsigned CDN URL with filename characters escaped as literal key characters', async () => {
+    const svc = new ImageService(cfg);
+    const key = 'uploads/u1/unbound/2026-09-17/chart #1%20.png';
+    const { data } = await svc.getImageUrl(key);
+    const url = new URL(data.url);
+    expect(url.origin).toBe('https://cdn.example.com');
+    expect(url.search).toBe('');
+    expect(url.hash).toBe('');
+    expect(decodeURIComponent(url.pathname.slice(1))).toBe(key);
   });
 });
 
